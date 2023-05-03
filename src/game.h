@@ -55,13 +55,14 @@ enum
     T_EMPTY,
     T_EMITTER,
     T_MIRROR,
-    
+    T_DETECTOR
 };
 
 V2s obj_sprite[] = {
     v2s(7, 7),
     v2s(0, 1),
     v2s(0, 2),
+    v2s(0, 3),
 };
 
 enum
@@ -87,12 +88,11 @@ V4 colors[8] = {
 
 struct Obj
 {
-    // Color in each direction. Only one color is set for the EMITTER and it never changes.
+    // @Note: Color in each direction. All must be always zeroes/white for emitters.
     u8 color[8];
     u8 type;
     u8 dir;
-    
-    // @Todo: It might be a good idea to have a color for the object itself besides the color in each direction.
+    u8 c; // The actual color of the object. Used for emitters and detectors.
 };
 
 // The size of a square/cell is 1 unit!

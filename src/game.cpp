@@ -146,7 +146,8 @@ FUNCTION void do_editor()
             //
             ImGui::SameLine(0, ImGui::GetFrameHeight());
             const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
-            ImGui::Combo("Color", &game->selected_color, cols, IM_ARRAYSIZE(cols));
+            const char* col = cols[game->selected_color];
+            ImGui::SliderInt("Color", &game->selected_color, 0, ARRAY_COUNT(cols)-1, col);
         }
     }
     
@@ -257,7 +258,14 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
             update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
-        }
+        } break;
+        case T_DETECTOR: {
+            u8 inv_d  = (src_dir + 4) % 8;
+            objmap[test_y][test_x].color[inv_d] = mix_colors(test_o.color[inv_d], src_color);
+            objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
+            
+            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
+        } break;
     }
 }
 
@@ -270,7 +278,7 @@ FUNCTION void update_world()
     
     if (down_left && picked_obj.type == T_EMPTY && (length2(game->delta_mouse) > SQUARE(0.000002f))) {
         // Pick obj.
-        if (objmap[my][mx].type != T_EMITTER) {
+        if (objmap[my][mx].type != T_EMITTER && objmap[my][mx].type != T_DETECTOR) {
             src_mx = mx;
             src_my = my;
             picked_obj = objmap[my][mx];
@@ -311,7 +319,10 @@ FUNCTION void update_world()
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_EMITTER) {
-                update_beams(x, y, o.dir, o.color[o.dir]);
+                update_beams(x, y, o.dir, o.c);
+                
+                for (s32 i = 0; i < 8; i++)
+                    ASSERT(o.color[i] == 0);
             }
         }
     }
@@ -333,11 +344,11 @@ FUNCTION void update_editor()
                     tilemap[my][mx] = game->selected_tile_or_obj;
             } else {
                 if (tilemap[my][mx] != Tile_WALL) {
-                    u8 d = objmap[my][mx].dir;
                     objmap[my][mx].type = game->selected_tile_or_obj;
                     
-                    if (game->selected_tile_or_obj == T_EMITTER)
-                        objmap[my][mx].color[d] = (u8)game->selected_color;
+                    if (game->selected_tile_or_obj == T_EMITTER || 
+                        game->selected_tile_or_obj == T_DETECTOR)
+                        objmap[my][mx].c = (u8)game->selected_color;
                 }
             }
         }
@@ -353,21 +364,9 @@ FUNCTION void update_editor()
     // Mouse scroll change dir and update color.
     //
     if (os->mouse_scroll.y > 0) {
-        u8 old_dir_color = objmap[my][mx].color[objmap[my][mx].dir];
         objmap[my][mx].dir = (objmap[my][mx].dir + (s32)os->mouse_scroll.y) % 8;
-        
-        if (objmap[my][mx].type == T_EMITTER) {
-            MEMORY_ZERO_ARRAY(objmap[my][mx].color);
-            objmap[my][mx].color[objmap[my][mx].dir] = old_dir_color;
-        }
     } else if (os->mouse_scroll.y < 0) {
-        u8 old_dir_color = objmap[my][mx].color[objmap[my][mx].dir];
         objmap[my][mx].dir = (objmap[my][mx].dir + (s32)os->mouse_scroll.y + 8) % 8;
-        
-        if (objmap[my][mx].type == T_EMITTER) {
-            MEMORY_ZERO_ARRAY(objmap[my][mx].color);
-            objmap[my][mx].color[objmap[my][mx].dir] = old_dir_color;
-        }
     }
 }
 #endif
@@ -418,30 +417,32 @@ FUNCTION void game_update()
     }
 }
 
-FUNCTION void draw_sprite(s32 x, s32 y, s32 s, s32 t, V4 *color, f32 a)
+FUNCTION void draw_sprite(s32 x, s32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a)
 {
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
+    V2 hs  = v2(0.5f * w_scale, 0.5f * h_scale);
     f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / tex.width;
     f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / tex.height;
     f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / tex.width;
     f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / tex.height;
     
-    immediate_rect(v2((f32)x, (f32)y), v2(0.5f), v2(u0, v0), v2(u1, v1), c);
+    immediate_rect(v2((f32)x, (f32)y), hs, v2(u0, v0), v2(u1, v1), c);
 }
 
-FUNCTION void draw_spritef(f32 x, f32 y, s32 s, s32 t, V4 *color, f32 a)
+FUNCTION void draw_spritef(f32 x, f32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a)
 {
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
+    V2 hs  = v2(0.5f * w_scale, 0.5f * h_scale);
     f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / tex.width;
     f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / tex.height;
     f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / tex.width;
     f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / tex.height;
     
-    immediate_rect(v2(x, y), v2(0.5f), v2(u0, v0), v2(u1, v1), c);
+    immediate_rect(v2(x, y), hs, v2(u0, v0), v2(u1, v1), c);
 }
 
 FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.06f)
@@ -507,7 +508,17 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, u8 src_
                 draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
             }
             draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d], 0);
-        }
+        } break;
+        case T_DETECTOR: {
+            u8 inv_d  = (src_dir + 4) % 8;
+            if (src_is_emitter) {
+                u8 c = mix_colors(test_o.color[inv_d], src_color);
+                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            } else {
+                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+            }
+            draw_beams(test_x, test_y, src_dir, test_o.color[src_dir], 0);
+        } break;
     }
 }
 
@@ -521,7 +532,7 @@ FUNCTION void game_render()
             u8 t = tilemap[y][x];
             if (t == Tile_WALL) continue;
             
-            draw_sprite(x, y, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
+            draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
         }
     }
     immediate_end();
@@ -533,13 +544,33 @@ FUNCTION void game_render()
     immediate_end();
     
     immediate_begin();
+    set_texture(&tex);
+    // Draw detectors
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            V2s sprite = obj_sprite[o.type];
+            if (o.type == T_DETECTOR) {
+                u8 c = Color_WHITE;
+                for (s32 i = 0; i < 8; i++)
+                    c = mix_colors(c, o.color[i]);
+                if (c == o.c)
+                    draw_sprite(x, y, 1.1f, 1.1f, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                else
+                    draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.6f);
+            }
+        }
+    }
+    immediate_end();
+    
+    immediate_begin();
     set_texture(0);
     // Draw laser beams.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_EMITTER) {
-                draw_beams(x, y, o.dir, o.color[o.dir], 1);
+                draw_beams(x, y, o.dir, o.c, 1);
             }
         }
     }
@@ -547,16 +578,15 @@ FUNCTION void game_render()
     
     immediate_begin();
     set_texture(&tex);
-    // Draw tiles.
+    // Draw walls.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             u8 t = tilemap[y][x];
             if (t == Tile_WALL)
-                draw_sprite(x, y, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
+                draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
         }
     }
     immediate_end();
-    
     
     immediate_begin();
     set_texture(&tex);
@@ -564,17 +594,16 @@ FUNCTION void game_render()
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
+            V2s sprite = obj_sprite[o.type];
             switch (o.type) {
                 case T_EMPTY: continue; break;
                 case T_EMITTER: {
-                    V2s sprite = obj_sprite[o.type];
                     sprite.s  += o.dir;
-                    draw_sprite(x, y, sprite.s, sprite.t, &colors[o.color[o.dir]], 1.0f);
+                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                 } break;
                 case T_MIRROR: {
-                    V2s sprite = obj_sprite[o.type];
                     sprite.s  += o.dir;
-                    draw_sprite(x, y, sprite.s, sprite.t, 0, 1.0f);
+                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
                 } break;
             }
         }
@@ -585,10 +614,9 @@ FUNCTION void game_render()
         V2 mf   = game->mouse_world;
         mf      = clamp(v2(0), mf, v2(WORLD_EDGE_X-1, WORLD_EDGE_X-1));
         V2s sprite = obj_sprite[picked_obj.type];
-        draw_spritef(mf.x, mf.y, sprite.s + picked_obj.dir, sprite.t, 0, 1.0f);
+        draw_spritef(mf.x, mf.y, 1, 1, sprite.s + picked_obj.dir, sprite.t, 0, 1.0f);
     }
     immediate_end();
-    
     
 #if DEVELOPER
     // Draw debugging stuff.
