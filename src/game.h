@@ -55,6 +55,8 @@ enum
     T_EMPTY,
     T_EMITTER,
     T_MIRROR,
+    T_BENDER, // For this one: the reflected light is always compatible with Dir, but the object itself is visaully 30 degrees off of Dir.
+    T_SPLITTER,
     T_DETECTOR
 };
 
@@ -63,6 +65,8 @@ V2s obj_sprite[] = {
     v2s(0, 1),
     v2s(0, 2),
     v2s(0, 3),
+    v2s(0, 4), // Draw T_SPLITTER with (s + dir) % 4
+    v2s(0, 5),
 };
 
 enum
@@ -81,9 +85,9 @@ V4 colors[8] = {
     v4(1, 0, 0, 1),
     v4(0, 1, 0, 1),
     v4(0, 0, 1, 1),
-    v4(1, 1, 0, 1),
-    v4(1, 0, 1, 1),
-    v4(0, 1, 1, 1),
+    v4(1, 1, 0, 1), // Yellow
+    v4(1, 0, 1, 1), // Magenta
+    v4(0, 1, 1, 1), // Cyan
 };
 
 struct Obj
