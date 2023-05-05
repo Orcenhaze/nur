@@ -191,6 +191,7 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
         return cur;
     else if (cur == src)
         return src;
+    
     // primary-primary.
     else if ((cur == Color_RED && src == Color_GREEN) || (src == Color_RED && cur == Color_GREEN))
         return Color_YELLOW;
@@ -198,6 +199,7 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
         return Color_MAGENTA;
     else if ((cur == Color_GREEN && src == Color_BLUE) || (src == Color_GREEN && cur == Color_BLUE))
         return Color_CYAN;
+    
     // secondary-secondary.
     else if ((cur == Color_YELLOW && src == Color_MAGENTA) || (src == Color_YELLOW && cur == Color_MAGENTA))
         return Color_RED;
@@ -205,7 +207,8 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
         return Color_GREEN;
     else if ((cur == Color_MAGENTA && src == Color_CYAN) || (src == Color_MAGENTA && cur == Color_CYAN))
         return Color_BLUE;
-    // primary-secondary, choose primary.
+    
+    // primary-secondary, choose secondary.
     else if ((cur >= Color_YELLOW && src <= Color_BLUE))
         return cur;
     else if ((cur <= Color_BLUE && src >= Color_YELLOW))
@@ -221,10 +224,6 @@ GLOBAL s32 mx, my;
 GLOBAL s32 src_mx, src_my;
 GLOBAL Obj picked_obj;
 
-// @Debug: Splitter example doesn't work!
-// @Todo: The algorithm we have for beams works for simple cases only and needs improving!
-// We need to simulate all the lasers first without mixing, and then mix overlaps.
-//
 FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
@@ -255,19 +254,19 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 ninv_d = (inv_d + 1) % 8;
             u8 pinv_d = (inv_d - 1 + 8) % 8;
             u8 reflected_d;
-            if (test_o.dir == inv_d)
-                reflected_d = inv_d;
-            else if (test_o.dir == ninv_d)
+            // @Todo: We can be more explicit about this case
+            //if (test_o.dir == inv_d)
+            //return;
+            if (test_o.dir == ninv_d)
                 reflected_d = (ninv_d + 1) % 8;
             else if (test_o.dir == pinv_d)
                 reflected_d = (pinv_d - 1 + 8) % 8;
             else {
-                // This mirror is not facing the light source. 
+                // This mirror is not facing the light source OR directly facing the light source. 
                 return;
             }
             
             // Write the color.
-            objmap[test_y][test_x].color[inv_d] = mix_colors(test_o.color[inv_d], src_color);
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
             update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
@@ -292,7 +291,6 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
             
             // Write the color.
-            objmap[test_y][test_x].color[inv_d] = mix_colors(test_o.color[inv_d], src_color);
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
             update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
@@ -315,7 +313,6 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
             
             // Write the color.
-            objmap[test_y][test_x].color[inv_d] = mix_colors(test_o.color[inv_d], src_color);
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
             
@@ -326,7 +323,6 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         } break;
         case T_DETECTOR: {
             u8 inv_d  = (src_dir + 4) % 8;
-            objmap[test_y][test_x].color[inv_d] = mix_colors(test_o.color[inv_d], src_color);
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
@@ -520,7 +516,7 @@ FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f
     immediate_line_2d(start, end, c, thickness);
 }
 
-FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, u8 src_is_emitter)
+FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
         return;
@@ -547,7 +543,13 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, u8 src_
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
         case T_EMITTER: {
-            draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+            u8 inv_d  = (src_dir + 4) % 8;
+            if (test_o.dir == inv_d) {
+                u8 c = mix_colors(test_o.c, src_color);
+                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            } else {
+                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+            }
             return;
         } break;
         case T_MIRROR: {
@@ -555,25 +557,23 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, u8 src_
             u8 ninv_d = (inv_d + 1) % 8;
             u8 pinv_d = (inv_d - 1 + 8) % 8;
             u8 reflected_d;
-            if (test_o.dir == inv_d)
-                reflected_d = inv_d;
-            else if (test_o.dir == ninv_d)
+            // @Todo: We can be more explicit about this case
+            //if (test_o.dir == inv_d)
+            //reflected_d = inv_d;
+            if (test_o.dir == ninv_d)
                 reflected_d = (ninv_d + 1) % 8;
             else if (test_o.dir == pinv_d)
                 reflected_d = (pinv_d - 1 + 8) % 8;
             else {
-                // This mirror is not facing the light source. 
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+                // This mirror is not facing the light source OR directly facing the light source. 
+                u8 c = mix_colors(test_o.color[inv_d], src_color);
+                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
                 return;
             }
             
-            if (src_is_emitter) {
-                u8 c = mix_colors(test_o.color[inv_d], src_color);
-                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            } else {
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
-            }
-            draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d], 0);
+            u8 c = mix_colors(test_o.color[inv_d], src_color);
+            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
         } break;
         case T_BENDER: {
             u8 inv_d   = (src_dir + 4) % 8;
@@ -591,17 +591,14 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, u8 src_
                 reflected_d = (p2inv_d - 1 + 8) % 8;
             else {
                 // This mirror is not facing the light source. 
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+                u8 c = mix_colors(test_o.color[inv_d], src_color);
+                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
                 return;
             }
             
-            if (src_is_emitter) {
-                u8 c = mix_colors(test_o.color[inv_d], src_color);
-                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            } else {
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
-            }
-            draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d], 0);
+            u8 c = mix_colors(test_o.color[inv_d], src_color);
+            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
         } break;
         case T_SPLITTER: {
             u8 inv_d  = (src_dir + 4) % 8;
@@ -617,31 +614,24 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, u8 src_
                 reflected_d = (pinv_d - 1 + 8) % 8;
             else {
                 // This mirror is not facing the light source.
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+                u8 c = mix_colors(test_o.color[inv_d], src_color);
+                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
                 return;
             }
             
-            if (src_is_emitter) {
-                u8 c = mix_colors(test_o.color[inv_d], src_color);
-                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            } else {
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
-            }
+            u8 c = mix_colors(test_o.color[inv_d], src_color);
+            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
             
-            draw_beams(test_x, test_y, src_dir, test_o.color[src_dir], 0);
             if (do_reflect) {
-                draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d], 0);
+                draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
             }
         } break;
         case T_DETECTOR: {
             u8 inv_d  = (src_dir + 4) % 8;
-            if (src_is_emitter) {
-                u8 c = mix_colors(test_o.color[inv_d], src_color);
-                draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            } else {
-                draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
-            }
-            draw_beams(test_x, test_y, src_dir, test_o.color[src_dir], 0);
+            u8 c = mix_colors(test_o.color[inv_d], src_color);
+            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
         } break;
     }
 }
@@ -694,7 +684,7 @@ FUNCTION void game_render()
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_EMITTER) {
-                draw_beams(x, y, o.dir, o.c, 1);
+                draw_beams(x, y, o.dir, o.c);
             }
         }
     }
