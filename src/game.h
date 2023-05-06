@@ -1,8 +1,6 @@
 #ifndef GAME_H
 #define GAME_H
 
-#define WORLD_ORIGIN v2(-0.5f) 
-
 GLOBAL b32 game_loaded = false;
 enum
 {
@@ -48,7 +46,7 @@ enum
 
 V2s tile_sprite[] = {
     v2s(0, 0),
-    v2s(1, 0)
+    v2s(1, 0),
 };
 
 
@@ -59,7 +57,9 @@ enum
     T_MIRROR,
     T_BENDER, // For this one: the reflected light is always compatible with Dir, but the object itself is visaully 30 degrees off of Dir.
     T_SPLITTER,
-    T_DETECTOR
+    T_DETECTOR,
+    T_DOOR,
+    T_DOOR_OPEN,
 };
 
 V2s obj_sprite[] = {
@@ -69,6 +69,8 @@ V2s obj_sprite[] = {
     v2s(0, 3),
     v2s(0, 4), // Draw T_SPLITTER with (s + dir) % 4
     v2s(0, 5),
+    v2s(0, 6),
+    v2s(1, 6),
 };
 
 enum
@@ -94,11 +96,11 @@ V4 colors[8] = {
 
 struct Obj
 {
-    // @Note: Color in each direction. All must be always zeroes/white for emitters.
+    // @Note: Color in each direction. Some objs don't use this.
     u8 color[8];
     u8 type;
     u8 dir;
-    u8 c; // The actual color of the object. Used for emitters and detectors.
+    u8 c; // The actual color of the object. Used for emitters, detectors and doors.
 };
 
 // The size of a square/cell is 1 unit!

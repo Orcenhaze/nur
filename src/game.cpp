@@ -197,8 +197,8 @@ FUNCTION void game_init()
     
     load_game();
     
-	// @Todo: Rename game_loaded to something that indicates whether a save.dat file is present or not. If not present, we don't load, we don't display "continue game".
-	// Instead, we only display "new game". If we "save and quit" and there's no save.dat, i.e. we never started the game, we simply return. 
+	// @Todo: Rename game_loaded to something that indicates whether a save.dat file is present or not. If not present: we don't load, we don't display "continue game". Instead, we only display "new game". 
+    // If we "save and quit" and there's no save.dat, i.e. we never started the game, we simply return. 
 	// "new game" calls init_map() and "continue game" just loads the map from read save.dat file.
     if (!game_loaded) {
         // Init map.
@@ -209,7 +209,7 @@ FUNCTION void game_init()
             }
         }
         // Initial camera position.
-        camera = WORLD_ORIGIN + 0.5f*v2(SIZE_X, SIZE_Y);
+        camera = 0.5f*v2(SIZE_X, SIZE_Y);
     }
 }
 
@@ -297,7 +297,8 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     Obj test_o = objmap[test_y][test_x];
     
     // Advance until we hit a wall or an object.
-    while (test_o.type == T_EMPTY && tilemap[test_y][test_x] != Tile_WALL) {
+    while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) &&
+           tilemap[test_y][test_x] != Tile_WALL) {
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
         test_x += dirs[src_dir].x;
@@ -309,6 +310,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
+        case T_DOOR:
         case T_EMITTER: {
             return;
         } break;
@@ -317,9 +319,6 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 ninv_d = WRAP_D(inv_d + 1);
             u8 pinv_d = WRAP_D(inv_d - 1 );
             u8 reflected_d;
-            // @Todo: We can be more explicit about this case
-            //if (test_o.dir == inv_d)
-            //return;
             if (test_o.dir == ninv_d)
                 reflected_d = WRAP_D(ninv_d + 1);
             else if (test_o.dir == pinv_d)
@@ -402,7 +401,10 @@ FUNCTION void update_world()
     
     if (down_left && picked_obj.type == T_EMPTY && (length2(game->delta_mouse) > SQUARE(0.000002f))) {
         // Pick obj.
-        if (objmap[my][mx].type != T_EMITTER && objmap[my][mx].type != T_DETECTOR) {
+        if (objmap[my][mx].type != T_EMITTER && 
+            objmap[my][mx].type != T_DETECTOR && 
+            objmap[my][mx].type != T_DOOR &&
+            objmap[my][mx].type != T_DOOR_OPEN) {
             src_mx = mx;
             src_my = my;
             picked_obj = objmap[my][mx];
@@ -433,8 +435,7 @@ FUNCTION void update_world()
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if (o.type == T_EMPTY) continue;
-            else if (o.type != T_EMITTER) {
+            if (o.type != T_EMITTER) {
                 MEMORY_ZERO_ARRAY(objmap[y][x].color);
             }
         }
@@ -452,6 +453,37 @@ FUNCTION void update_world()
             }
         }
     }
+    
+    // @Debug: We have an edge case for this when a detector and a beam are on opposite sides of the door,
+    // the doors and the detector would flicker.
+    // Update doors
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_DETECTOR) {
+                u8 final_c = Color_WHITE;
+                for (s32 i = 0; i < 8; i++)
+                    final_c = mix_colors(final_c, o.color[i]);
+                
+                if (final_c == o.c) {
+                    // Look for compatible doors around detector and "open" them.
+                    for (s32 dy = CLAMP_LOWER(y-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y, y+1); dy++) {
+                        for (s32 dx = CLAMP_LOWER(x-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X, x+1); dx++) {
+                            if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c) 
+                                objmap[dy][dx].type = T_DOOR_OPEN;
+                        }}
+                } else {
+                    // Look for compatible doors around detector and "close" them.
+                    for (s32 dy = CLAMP_LOWER(y-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y, y+1); dy++) {
+                        for (s32 dx = CLAMP_LOWER(x-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X, x+1); dx++) {
+                            if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c)
+                                objmap[dy][dx].type = T_DOOR;
+                        }}
+                }
+            }
+        }
+    }
+    
 }
 
 #if DEVELOPER
@@ -472,7 +504,9 @@ FUNCTION void update_editor()
                     objmap[my][mx].type = game->selected_tile_or_obj;
                     
                     if (game->selected_tile_or_obj == T_EMITTER || 
-                        game->selected_tile_or_obj == T_DETECTOR)
+                        game->selected_tile_or_obj == T_DETECTOR ||
+                        game->selected_tile_or_obj == T_DOOR ||
+                        game->selected_tile_or_obj == T_DOOR_OPEN)
                         objmap[my][mx].c = (u8)game->selected_color;
                 }
             }
@@ -519,6 +553,9 @@ FUNCTION void game_update()
     if(is_down(kb[Key_SHIFT])) {
         ortho_zoom += -0.45f*os->mouse_scroll.y;
         ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
+        if (length2(os->mouse_scroll) != 0) {
+            print("Zoom %f\n", ortho_zoom);
+        }
     }
     world_to_view_matrix = look_at(v3(camera, 0),
                                    v3(camera, 0) + v3(0, 0, -1),
@@ -589,7 +626,8 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     Obj test_o  = objmap[test_y][test_x];
     
     // Advance until we hit a wall or an object.
-    while (test_o.type == T_EMPTY && tilemap[test_y][test_x] != Tile_WALL) {
+    while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) &&
+           tilemap[test_y][test_x] != Tile_WALL) { 
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y)) {
             draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
             return;
@@ -605,6 +643,10 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
+        case T_DOOR: {
+            draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
+            return;
+        } break;
         case T_EMITTER: {
             u8 inv_d  = WRAP_D(src_dir + 4);
             if (test_o.dir == inv_d) {
@@ -620,9 +662,6 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 ninv_d = WRAP_D(inv_d + 1);
             u8 pinv_d = WRAP_D(inv_d - 1);
             u8 reflected_d;
-            // @Todo: We can be more explicit about this case
-            //if (test_o.dir == inv_d)
-            //reflected_d = inv_d;
             if (test_o.dir == ninv_d)
                 reflected_d = WRAP_D(ninv_d + 1);
             else if (test_o.dir == pinv_d)
@@ -707,7 +746,8 @@ FUNCTION void game_render()
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             u8 t = tilemap[y][x];
-            if (t == Tile_WALL) continue;
+            // Skip walls, we draw them later.
+            if (t == Tile_WALL) continue; 
             
             draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
         }
@@ -717,21 +757,22 @@ FUNCTION void game_render()
     immediate_begin();
     set_texture(0);
     // Draw grid.
-    immediate_grid(WORLD_ORIGIN, NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
+    immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
     immediate_end();
     
     immediate_begin();
     set_texture(&tex);
-    // Draw detectors
+    // Draw detectors.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             V2s sprite = obj_sprite[o.type];
             if (o.type == T_DETECTOR) {
-                u8 c = Color_WHITE;
+                u8 final_c = Color_WHITE;
                 for (s32 i = 0; i < 8; i++)
-                    c = mix_colors(c, o.color[i]);
-                if (c == o.c)
+                    final_c = mix_colors(final_c, o.color[i]);
+                
+                if (final_c == o.c)
                     draw_sprite(x, y, 1.1f, 1.1f, sprite.s, sprite.t, &colors[o.c], 1.0f);
                 else
                     draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.6f);
@@ -773,7 +814,7 @@ FUNCTION void game_render()
             Obj o = objmap[y][x];
             V2s sprite = obj_sprite[o.type];
             switch (o.type) {
-                case T_EMPTY: continue; break;
+                case T_EMPTY: continue;
                 case T_EMITTER: {
                     sprite.s += o.dir;
                     draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
@@ -789,6 +830,10 @@ FUNCTION void game_render()
                 case T_SPLITTER: {
                     sprite.s = (sprite.s + o.dir) % 4;
                     draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                } break;
+                case T_DOOR:
+                case T_DOOR_OPEN: {
+                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                 } break;
             }
         }
