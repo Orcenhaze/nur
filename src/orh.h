@@ -1,4 +1,4 @@
-/* orh.h - v0.36 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.37 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.37 - added templated String8 helper function get().
 0.36 - added was_released().
 0.35 - added round, clamp, ceil, for V2.
 0.34 - Added section for helper functions and implemented ones for u32 flags.
@@ -57,7 +58,6 @@ TODO:
 [] arena_init() should take max parameter. If not passed, use the default: ARENA_MAX.
 [] Ensure zero memory after arena_temp_end().
 [] Generic serialize.
-[] template<T> get(String8 *s, T *value).
 
 */
 
@@ -939,7 +939,7 @@ inline b32 operator==(String8 lhs, String8 rhs)
 //
 // String Helper Functions
 //
-FUNCDEF inline void advance(String8 *s, u64 size);
+FUNCDEF inline void advance(String8 *s, u64 count);
 FUNCDEF        u32  get_hash(String8 s);
 FUNCDEF inline b32  is_spacing(char c);
 FUNCDEF inline b32  is_end_of_line(char c);
@@ -948,6 +948,14 @@ FUNCDEF inline b32  is_alpha(char c);
 FUNCDEF inline b32  is_numeric(char c);
 FUNCDEF inline b32  is_alphanumeric(char c);
 FUNCDEF inline b32  is_file_separator(char c);
+template<typename T>
+void get(String8 *s, T *value)
+{
+    ASSERT(sizeof(T) < s->count);
+    
+    memory_copy(value, s->data, sizeof(T));
+    advance(s, sizeof(T));
+}
 
 /////////////////////////////////////////
 //
@@ -3170,7 +3178,9 @@ void sb_append(String_Builder *builder, void *data, u64 size)
     if ((builder->length + size) > builder->capacity) {
         builder->capacity += (size + (SB_BLOCK_SIZE-1));
         builder->capacity -= (builder->capacity % SB_BLOCK_SIZE);
+        u64 len = builder->length;
         sb_reset(builder);
+        builder->length = len;
         advance(&builder->buffer, builder->length);
     }
     
@@ -3190,7 +3200,7 @@ void sb_appendf(String_Builder *builder, char *format, ...)
     
     sb_append(builder, temp, size);
 }
-String8 sb_to_string(String_Builder *builder, Arena *arena)
+String8 sb_to_string(String_Builder *builder, Arena *arena /*= 0*/)
 {
     if (builder->buffer.count)
         builder->buffer.data[0] = 0;

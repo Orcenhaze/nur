@@ -1,4 +1,46 @@
 
+FUNCTION void save_map()
+{
+    Loaded_Game *g = &game->loaded_game;
+    memory_copy(g->tile_map, tilemap, sizeof(tilemap));
+    memory_copy(g->obj_map, objmap, sizeof(objmap));
+    memory_copy(&g->cam, &camera, sizeof(camera));
+}
+
+FUNCTION void save_game()
+{
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    String_Builder sb = sb_init();
+    defer(sb_free(&sb));
+    
+    save_map();
+    sb_append(&sb, &game->loaded_game, sizeof(game->loaded_game));
+    os->write_entire_file(sprint("%Ssave.dat", os->data_folder), sb_to_string(&sb));
+}
+
+FUNCTION void reload_map()
+{
+    Loaded_Game *g = &game->loaded_game;
+    memory_copy(tilemap, g->tile_map, sizeof(tilemap));
+    memory_copy(objmap, g->obj_map, sizeof(objmap));
+    memory_copy(&camera, &g->cam, sizeof(camera));
+}
+
+FUNCTION void load_game()
+{
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    String8 file = os->read_entire_file(sprint("%Ssave.dat", os->data_folder));
+    if (!file.data) {
+        print("Couldn't load game!");
+        return;
+    }
+    defer(os->free_file_memory(file.data));
+    
+    MEMORY_COPY_STRUCT(&game->loaded_game, file.data);
+    reload_map();
+    game_loaded = true;
+}
+
 FUNCTION b32 mouse_over_ui()
 {
     b32 result = false;
@@ -9,33 +51,6 @@ FUNCTION b32 mouse_over_ui()
     return result;
 }
 
-FUNCTION void move_camera(u8 dir)
-{
-    V2 *cam = &game->camera_position;
-    switch (dir) {
-        case Dir_E: {
-            if (cam->x + SIZE_X < WORLD_EDGE_X)
-                cam->x += SIZE_X;
-        } break;
-        case Dir_N: {
-            if (cam->y + SIZE_Y < WORLD_EDGE_Y)
-                cam->y += SIZE_Y;
-        } break;
-        case Dir_W: {
-            if (cam->x - SIZE_X > 0)
-                cam->x -= SIZE_X;
-        } break;
-        case Dir_S: {
-            if (cam->y - SIZE_Y > 0)
-                cam->y -= SIZE_Y;
-        } break;
-    }
-    
-    // @Sanity:
-    game->camera_position.x = CLAMP(0, game->camera_position.x, WORLD_EDGE_X-1);
-    game->camera_position.y = CLAMP(0, game->camera_position.y, WORLD_EDGE_Y-1);
-}
-
 #if DEVELOPER
 FUNCTION void do_editor()
 {
@@ -44,6 +59,22 @@ FUNCTION void do_editor()
     b32 pressed_left  = was_pressed(mb[MouseButton_LEFT])  && mouse_over_ui();
     
     ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+    
+    //
+    // Save game.
+    {
+        if (ImGui::Button("Save Game")) {
+            save_game();
+            ImGui::SameLine(); ImGui::Text("Saved!");
+        }
+        
+        if (was_pressed(os->keyboard_buttons[Key_F3])) {
+            reload_map();
+        }
+    }
+    
+    ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
+    ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
     
     //
     // Edit tiles.
@@ -164,16 +195,45 @@ FUNCTION void game_init()
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
     }
     
-    // Init map.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            tilemap[y][x] = Tile_FLOOR;
-            objmap[y][x].type = T_EMPTY;
+    load_game();
+    
+    if (!game_loaded) {
+        // Init map.
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                tilemap[y][x] = Tile_FLOOR;
+                objmap[y][x].type = T_EMPTY;
+            }
         }
+        // Initial camera position.
+        camera = WORLD_ORIGIN + 0.5f*v2(SIZE_X, SIZE_Y);
+    }
+}
+
+FUNCTION void move_camera(u8 dir)
+{
+    switch (dir) {
+        case Dir_E: {
+            if (camera.x + SIZE_X < WORLD_EDGE_X)
+                camera.x += SIZE_X;
+        } break;
+        case Dir_N: {
+            if (camera.y + SIZE_Y < WORLD_EDGE_Y)
+                camera.y += SIZE_Y;
+        } break;
+        case Dir_W: {
+            if (camera.x - SIZE_X > 0)
+                camera.x -= SIZE_X;
+        } break;
+        case Dir_S: {
+            if (camera.y - SIZE_Y > 0)
+                camera.y -= SIZE_Y;
+        } break;
     }
     
-    // Initial camera position.
-    game->camera_position = WORLD_ORIGIN + 0.5f*v2(SIZE_X, SIZE_Y);
+    // @Sanity:
+    camera.x = CLAMP(0, camera.x, WORLD_EDGE_X-1);
+    camera.y = CLAMP(0, camera.y, WORLD_EDGE_Y-1);
 }
 
 FUNCTION b32 is_outside_map(s32 x, s32 y)
@@ -250,17 +310,17 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             return;
         } break;
         case T_MIRROR: {
-            u8 inv_d  = (src_dir + 4) % 8;
-            u8 ninv_d = (inv_d + 1) % 8;
-            u8 pinv_d = (inv_d - 1 + 8) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
+            u8 ninv_d = WRAP_D(inv_d + 1);
+            u8 pinv_d = WRAP_D(inv_d - 1 );
             u8 reflected_d;
             // @Todo: We can be more explicit about this case
             //if (test_o.dir == inv_d)
             //return;
             if (test_o.dir == ninv_d)
-                reflected_d = (ninv_d + 1) % 8;
+                reflected_d = WRAP_D(ninv_d + 1);
             else if (test_o.dir == pinv_d)
-                reflected_d = (pinv_d - 1 + 8) % 8;
+                reflected_d = WRAP_D(pinv_d - 1);
             else {
                 // This mirror is not facing the light source OR directly facing the light source. 
                 return;
@@ -272,19 +332,19 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
         } break;
         case T_BENDER: {
-            u8 inv_d   = (src_dir + 4) % 8;
-            u8 ninv_d  = (inv_d + 1) % 8;
-            u8 pinv_d  = (inv_d - 1 + 8) % 8;
-            u8 p2inv_d = (inv_d - 2 + 8) % 8;
+            u8 inv_d   = WRAP_D(src_dir + 4);
+            u8 ninv_d  = WRAP_D(inv_d + 1);
+            u8 pinv_d  = WRAP_D(inv_d - 1);
+            u8 p2inv_d = WRAP_D(inv_d - 2);
             u8 reflected_d;
             if (test_o.dir == inv_d)
                 reflected_d = ninv_d;
             else if (test_o.dir == ninv_d)
-                reflected_d = (ninv_d + 2) % 8;
+                reflected_d = WRAP_D(ninv_d + 2);
             else if (test_o.dir == pinv_d)
                 reflected_d = pinv_d;
             else if (test_o.dir == p2inv_d)
-                reflected_d = (p2inv_d - 1 + 8) % 8;
+                reflected_d = WRAP_D(p2inv_d - 1);
             else {
                 // This mirror is not facing the light source. 
                 return;
@@ -296,17 +356,17 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
         } break;
         case T_SPLITTER: {
-            u8 inv_d  = (src_dir + 4) % 8;
-            u8 ninv_d = (inv_d + 1) % 8;
-            u8 pinv_d = (inv_d - 1 + 8) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
+            u8 ninv_d = WRAP_D(inv_d + 1);
+            u8 pinv_d = WRAP_D(inv_d - 1);
             u8 reflected_d = 0;
             b32 do_reflect = true;
             if (test_o.dir == inv_d || test_o.dir == src_dir)
                 do_reflect = false;
-            else if (test_o.dir == ninv_d || test_o.dir == ((src_dir + 1) % 8))
-                reflected_d = (ninv_d + 1) % 8;
-            else if (test_o.dir == pinv_d || test_o.dir == ((src_dir - 1 + 8) % 8))
-                reflected_d = (pinv_d - 1 + 8) % 8;
+            else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
+                reflected_d = WRAP_D(ninv_d + 1);
+            else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
+                reflected_d = WRAP_D(pinv_d - 1);
             else {
                 // This mirror is not facing the light source. 
                 return;
@@ -322,7 +382,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
         } break;
         case T_DETECTOR: {
-            u8 inv_d  = (src_dir + 4) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
@@ -359,9 +419,9 @@ FUNCTION void update_world()
             case T_BENDER:
             case T_SPLITTER: {
                 if (released_left)
-                    objmap[my][mx].dir = (objmap[my][mx].dir + 1) % 8;
+                    objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + 1);
                 else if (released_right)
-                    objmap[my][mx].dir = (objmap[my][mx].dir - 1 + 8) % 8;
+                    objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir - 1);
             } break;
         }
     }
@@ -426,9 +486,9 @@ FUNCTION void update_editor()
     // Mouse scroll change dir.
     //
     if (os->mouse_scroll.y > 0) {
-        objmap[my][mx].dir = (objmap[my][mx].dir + (s32)os->mouse_scroll.y) % 8;
+        objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + (s32)os->mouse_scroll.y);
     } else if (os->mouse_scroll.y < 0) {
-        objmap[my][mx].dir = (objmap[my][mx].dir + (s32)os->mouse_scroll.y + 8) % 8;
+        objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + (s32)os->mouse_scroll.y);
     }
 }
 #endif
@@ -438,7 +498,7 @@ FUNCTION void game_update()
     Button_State *kb    = os->keyboard_buttons;
     game->delta_mouse   = os->mouse_ndc.xy - game->mouse_ndc_old;
     game->mouse_ndc_old = os->mouse_ndc.xy;
-    game->mouse_world   = unproject(v3(game->camera_position, 0), 0.0f, 
+    game->mouse_world   = unproject(v3(camera, 0), 0.0f, 
                                     os->mouse_ndc,
                                     world_to_view_matrix,
                                     view_to_proj_matrix).xy;
@@ -457,8 +517,8 @@ FUNCTION void game_update()
         ortho_zoom += -0.45f*os->mouse_scroll.y;
         ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
     }
-    world_to_view_matrix = look_at(v3(game->camera_position, 0),
-                                   v3(game->camera_position, 0) + v3(0, 0, -1),
+    world_to_view_matrix = look_at(v3(camera, 0),
+                                   v3(camera, 0) + v3(0, 0, -1),
                                    v3(0, 1, 0));
     
     V2 m = round(game->mouse_world);
@@ -543,7 +603,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
         case T_EMITTER: {
-            u8 inv_d  = (src_dir + 4) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
             if (test_o.dir == inv_d) {
                 u8 c = mix_colors(test_o.c, src_color);
                 draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
@@ -553,17 +613,17 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             return;
         } break;
         case T_MIRROR: {
-            u8 inv_d  = (src_dir + 4) % 8;
-            u8 ninv_d = (inv_d + 1) % 8;
-            u8 pinv_d = (inv_d - 1 + 8) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
+            u8 ninv_d = WRAP_D(inv_d + 1);
+            u8 pinv_d = WRAP_D(inv_d - 1);
             u8 reflected_d;
             // @Todo: We can be more explicit about this case
             //if (test_o.dir == inv_d)
             //reflected_d = inv_d;
             if (test_o.dir == ninv_d)
-                reflected_d = (ninv_d + 1) % 8;
+                reflected_d = WRAP_D(ninv_d + 1);
             else if (test_o.dir == pinv_d)
-                reflected_d = (pinv_d - 1 + 8) % 8;
+                reflected_d = WRAP_D(pinv_d - 1);
             else {
                 // This mirror is not facing the light source OR directly facing the light source. 
                 u8 c = mix_colors(test_o.color[inv_d], src_color);
@@ -576,19 +636,19 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
         } break;
         case T_BENDER: {
-            u8 inv_d   = (src_dir + 4) % 8;
-            u8 ninv_d  = (inv_d + 1) % 8;
-            u8 pinv_d  = (inv_d - 1 + 8) % 8;
-            u8 p2inv_d = (inv_d - 2 + 8) % 8;
+            u8 inv_d   = WRAP_D(src_dir + 4);
+            u8 ninv_d  = WRAP_D(inv_d + 1);
+            u8 pinv_d  = WRAP_D(inv_d - 1);
+            u8 p2inv_d = WRAP_D(inv_d - 2);
             u8 reflected_d;
             if (test_o.dir == inv_d)
                 reflected_d = ninv_d;
             else if (test_o.dir == ninv_d)
-                reflected_d = (ninv_d + 2) % 8;
+                reflected_d = WRAP_D(ninv_d + 2);
             else if (test_o.dir == pinv_d)
                 reflected_d = pinv_d;
             else if (test_o.dir == p2inv_d)
-                reflected_d = (p2inv_d - 1 + 8) % 8;
+                reflected_d = WRAP_D(p2inv_d - 1);
             else {
                 // This mirror is not facing the light source. 
                 u8 c = mix_colors(test_o.color[inv_d], src_color);
@@ -601,17 +661,17 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
         } break;
         case T_SPLITTER: {
-            u8 inv_d  = (src_dir + 4) % 8;
-            u8 ninv_d = (inv_d + 1) % 8;
-            u8 pinv_d = (inv_d - 1 + 8) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
+            u8 ninv_d = WRAP_D(inv_d + 1);
+            u8 pinv_d = WRAP_D(inv_d - 1);
             u8 reflected_d = 0;
             b32 do_reflect = true;
             if (test_o.dir == inv_d || test_o.dir == src_dir)
                 do_reflect = false;
-            else if (test_o.dir == ninv_d || test_o.dir == ((src_dir + 1) % 8))
-                reflected_d = (ninv_d + 1) % 8;
-            else if (test_o.dir == pinv_d || test_o.dir == ((src_dir - 1 + 8) % 8))
-                reflected_d = (pinv_d - 1 + 8) % 8;
+            else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
+                reflected_d = WRAP_D(ninv_d + 1);
+            else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
+                reflected_d = WRAP_D(pinv_d - 1);
             else {
                 // This mirror is not facing the light source.
                 u8 c = mix_colors(test_o.color[inv_d], src_color);
@@ -628,7 +688,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
         } break;
         case T_DETECTOR: {
-            u8 inv_d  = (src_dir + 4) % 8;
+            u8 inv_d  = WRAP_D(src_dir + 4);
             u8 c = mix_colors(test_o.color[inv_d], src_color);
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
             draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);

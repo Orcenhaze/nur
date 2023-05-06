@@ -3,6 +3,7 @@
 
 #define WORLD_ORIGIN v2(-0.5f) 
 
+GLOBAL b32 game_loaded = false;
 enum
 {
     M_LOGO,
@@ -11,6 +12,7 @@ enum
     M_EDITOR
 } GLOBAL main_mode = M_GAME;
 
+#define WRAP_D(d) (((d) + 8) % 8)
 enum
 {
     Dir_E,
@@ -110,17 +112,22 @@ struct Obj
 
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+GLOBAL V2 camera;
+
+struct Loaded_Game
+{
+    u8  tile_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+    Obj obj_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+    V2 cam;
+};
 
 struct Game_State
 {
-    // @Note: These should be in a separte struct, for serailization and de-serialization.
-    u8  tile_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-    Obj obj_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+    Loaded_Game loaded_game;
     
     V2 delta_mouse;
     V2 mouse_ndc_old;
     V2 mouse_world;
-    V2 camera_position;
     
 #if DEVELOPER
     // @Note: We want to select using one key (left mouse), so we will store the type is one variable 
