@@ -197,6 +197,9 @@ FUNCTION void game_init()
     
     load_game();
     
+	// @Todo: Rename game_loaded to something that indicates whether a save.dat file is present or not. If not present, we don't load, we don't display "continue game".
+	// Instead, we only display "new game". If we "save and quit" and there's no save.dat, i.e. we never started the game, we simply return. 
+	// "new game" calls init_map() and "continue game" just loads the map from read save.dat file.
     if (!game_loaded) {
         // Init map.
         for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
