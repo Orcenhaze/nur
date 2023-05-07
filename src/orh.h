@@ -56,7 +56,6 @@ CONVENTIONS:
 
 TODO:
 [] arena_init() should take max parameter. If not passed, use the default: ARENA_MAX.
-[] Ensure zero memory after arena_temp_end().
 [] Generic serialize.
 
 */
@@ -1041,7 +1040,7 @@ void array_reserve(Array<T> *array, s64 desired_items)
     array->capacity = desired_items;
     
     arena_reset(&array->arena);
-    array->data = PUSH_ARRAY(&array->arena, T, desired_items);
+    array->data = PUSH_ARRAY_ZERO(&array->arena, T, desired_items);
 }
 
 template<typename T>
