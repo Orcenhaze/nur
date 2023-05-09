@@ -87,6 +87,9 @@ FUNCTION void do_editor()
         ImVec4 tint_col    = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // No tint
         ImVec4 border_col  = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
         for (s32 i = 0; i < ARRAY_COUNT(tile_sprite); i++) {
+            if (i % 4 == 0)
+                ImGui::NewLine();
+            
             V2s sprite = tile_sprite[i];
             
             ImVec2 uv_min = {
@@ -138,6 +141,9 @@ FUNCTION void do_editor()
         ImVec4 tint_col    = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // No tint
         ImVec4 border_col  = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
         for (s32 i = 0; i < ARRAY_COUNT(obj_sprite); i++) {
+            if (i % 4 == 0)
+                ImGui::NewLine();
+            
             V2s sprite = obj_sprite[i];
             
             ImVec2 uv_min = {
@@ -466,6 +472,8 @@ FUNCTION void update_world()
                     final_c = mix_colors(final_c, o.color[i]);
                 
                 if (final_c == o.c) {
+					// @Todo: Instead of looking around the detector, look for compatible doors 
+					// in the entire SIZE_X*SIZE_Y region. Figure out the region of detector, then loop all cells there.
                     // Look for compatible doors around detector and "open" them.
                     for (s32 dy = CLAMP_LOWER(y-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y, y+1); dy++) {
                         for (s32 dx = CLAMP_LOWER(x-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X, x+1); dx++) {

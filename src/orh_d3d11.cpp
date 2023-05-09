@@ -490,6 +490,7 @@ FUNCTION void d3d11_viewport(FLOAT top_left_x, FLOAT top_left_y, FLOAT width, FL
 
 FUNCTION void d3d11_clear(FLOAT r, FLOAT g, FLOAT b, FLOAT a)
 {
+	// @Debug: When we minimize the game from taskbar, we call ClearRenderTargetView() with null render_target_view!
     FLOAT rgba[4] = {r, g, b, a};
     device_context->ClearRenderTargetView(render_target_view, rgba);
     device_context->ClearDepthStencilView(depth_stencil_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
