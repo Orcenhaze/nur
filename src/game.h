@@ -126,8 +126,6 @@ GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 // @Cleanup: 
 //
 GLOBAL s32 mx; GLOBAL s32 my;
-GLOBAL s32 src_mx; GLOBAL s32 src_my;
-GLOBAL Obj picked_obj;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; // Player
 GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left coords).
 GLOBAL V2 camera;

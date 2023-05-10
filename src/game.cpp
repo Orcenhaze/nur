@@ -1,9 +1,34 @@
 
+FUNCTION void update_camera()
+{
+    camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
+}
+
+FUNCTION void set_player_position(s32 x, s32 y)
+{
+    s32 room_x = SIZE_X*(x/SIZE_X);
+    s32 room_y = SIZE_Y*(y/SIZE_Y);
+    if (room_x != rx || room_y != ry) {
+        // We are in a new room.
+        rx = room_x; 
+        ry = room_y;
+        
+        // Calculate camera.
+        update_camera();
+    }
+    px = x;
+    py = y;
+}
+
 FUNCTION void save_map()
 {
     Loaded_Game *g = &game->loaded_game;
     memory_copy(g->tile_map, tilemap, sizeof(tilemap));
     memory_copy(g->obj_map, objmap, sizeof(objmap));
+    Player player;
+    player.x = px;
+    player.y = py;
+    memory_copy(&g->player, &player, sizeof(player));
 }
 
 FUNCTION void save_game()
@@ -22,15 +47,9 @@ FUNCTION void reload_map()
     Loaded_Game *g = &game->loaded_game;
     memory_copy(tilemap, g->tile_map, sizeof(tilemap));
     memory_copy(objmap, g->obj_map, sizeof(objmap));
-    
-    // @Todo: Add these to serialization.
-    /* 
-        px = , 
-        py = ;
-    // @Todo: Put this in a separate function!
-        rx = SIZE_X*(px / SIZE_X);
-        ry = SIZE_Y*(py / SIZE_Y);
-     */
+    Player player;
+    memory_copy(&player, &g->player, sizeof(player));
+    set_player_position(player.x, player.y);
 }
 
 FUNCTION void load_game()
@@ -208,7 +227,7 @@ FUNCTION void game_init()
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
     }
     
-    //load_game();
+    load_game();
     
 	// @Todo: Rename game_loaded to something that indicates whether a save.dat file is present or not. If not present: we don't load, we don't display "continue game". Instead, we only display "new game". 
     // If we "save and quit" and there's no save.dat, i.e. we never started the game, we simply return. 
@@ -230,11 +249,6 @@ FUNCTION void game_init()
         // Initial camera position.
         camera = 0.5f*v2(SIZE_X, SIZE_Y);
     }
-}
-
-FUNCTION void update_camera()
-{
-    camera = v2(rx + 0.5f*SIZE_X, ry + 0.5f*SIZE_Y);
 }
 
 #if DEVELOPER
@@ -411,24 +425,63 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     }
 }
 
+FUNCTION b32 is_obj_collides(u8 type)
+{
+    // @Todo: Could make interesting puzzles if we allow pushing things over T_DOOR_OPEN.
+    // But we can't have two objs occupying the same square!
+    switch (type) {
+        case T_EMITTER:
+        case T_MIRROR:
+        case T_BENDER:
+        case T_SPLITTER:
+        case T_DETECTOR: 
+        case T_DOOR:
+        case T_DOOR_OPEN: return true;
+        default: return false;
+    }
+}
+
 FUNCTION void move(s32 x, s32 y)
 {
     if (!x && !y) return;
     pdir = x? x<0? Dir_W : Dir_E : y<0? Dir_S : Dir_N;
-    px  += x; py += y;
-    px = CLAMP(0, px, NUM_X*SIZE_X - 1);
-    py = CLAMP(0, py, NUM_Y*SIZE_Y - 1);
+    s32 tempx = px + x; 
+    s32 tempy = py + y;
+    if (is_outside_map(tempx, tempy))
+        return;
     
-    // Calculate room.
-    s32 room_x = SIZE_X*(px/SIZE_X);
-    s32 room_y = SIZE_Y*(py/SIZE_Y);
-    if (room_x != rx || room_y != ry) {
-        rx = room_x; 
-        ry = room_y;
-        
-        // Calculate camera.
-        update_camera();
+    if (tilemap[tempy][tempx] == Tile_WALL) {
+        return;
     }
+    
+    if (objmap[tempy][tempx].type == T_EMITTER) {
+        return;
+    }
+    if (objmap[tempy][tempx].type == T_DOOR) {
+        return;
+    }
+    
+    if (objmap[tempy][tempx].type != T_DETECTOR &&
+        objmap[tempy][tempx].type != T_DOOR_OPEN) {
+        b32 collides = is_obj_collides(objmap[tempy][tempx].type);
+        if (collides) {
+            s32 nx = tempx + dirs[pdir].x;
+            s32 ny = tempy + dirs[pdir].y;
+            if (is_outside_map(nx, ny))
+                return;
+            if (tilemap[ny][nx] == Tile_WALL)
+                return;
+            
+            b32 next_collides = is_obj_collides(objmap[ny][nx].type);
+            if (next_collides) {
+                return;
+            }
+            
+            SWAP(objmap[tempy][tempx], objmap[ny][nx], Obj);
+        }
+    }
+    
+    set_player_position(tempx, tempy);
 }
 
 FUNCTION void update_world()
@@ -466,36 +519,26 @@ FUNCTION void update_world()
     
     move(accel_x, accel_y);
     
-    if (down_left && picked_obj.type == T_EMPTY && (length2(game->delta_mouse) > SQUARE(0.000002f))) {
-        // Pick obj.
-        if (objmap[my][mx].type != T_EMITTER && 
-            objmap[my][mx].type != T_DETECTOR && 
-            objmap[my][mx].type != T_DOOR &&
-            objmap[my][mx].type != T_DOOR_OPEN) {
-            src_mx = mx;
-            src_my = my;
-            picked_obj = objmap[my][mx];
-            objmap[my][mx] = {};
+    if (was_pressed(kb[Key_Q]) || was_pressed(kb[Key_E])) {
+        // Rotate objs around player.
+        for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(WORLD_EDGE_Y, py+1); dy++) {
+            for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(WORLD_EDGE_X, px+1); dx++) {
+                if (dy == py && dx == px)
+                    continue;
+                
+                switch (objmap[dy][dx].type) {
+                    case T_MIRROR:
+                    case T_BENDER:
+                    case T_SPLITTER: {
+                        if (was_pressed(kb[Key_Q])) // Rotate CCW
+                            objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                        else if (was_pressed(kb[Key_E])) // Rotate CW
+                            objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                    } break;
+                }
+            }
         }
-    } else if (released_left && picked_obj.type != T_EMPTY) {
-        // Drop obj.
-        if (objmap[my][mx].type != T_EMPTY || tilemap[my][mx] == Tile_WALL) 
-            objmap[src_my][src_mx] = picked_obj;
-        else
-            objmap[my][mx] = picked_obj;
-        picked_obj = {};
-    } else {
-        // Rotate obj.
-        switch (objmap[my][mx].type) {
-            case T_MIRROR:
-            case T_BENDER:
-            case T_SPLITTER: {
-                if (released_left)
-                    objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + 1);
-                else if (released_right)
-                    objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir - 1);
-            } break;
-        }
+        
     }
     
     // Clear colors for all objs except lasers.
@@ -521,30 +564,32 @@ FUNCTION void update_world()
         }
     }
     
-    // @Debug: We have an edge case for this when a detector and a beam are on opposite sides of the door,
-    // the doors and the detector would flicker.
     // Update doors
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_DETECTOR) {
+                s32 room_x = SIZE_X*(x/SIZE_X);
+                s32 room_y = SIZE_Y*(y/SIZE_Y);
                 u8 final_c = Color_WHITE;
                 for (s32 i = 0; i < 8; i++)
                     final_c = mix_colors(final_c, o.color[i]);
                 
                 if (final_c == o.c) {
-					// @Todo: Instead of looking around the detector, look for compatible doors 
-					// in the entire SIZE_X*SIZE_Y region. Figure out the region of detector, then loop all cells there.
                     // Look for compatible doors around detector and "open" them.
-                    for (s32 dy = CLAMP_LOWER(y-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y, y+1); dy++) {
-                        for (s32 dx = CLAMP_LOWER(x-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X, x+1); dx++) {
+                    for (s32 dy = room_y; dy <= CLAMP_UPPER(WORLD_EDGE_Y, room_y+SIZE_Y-1); dy++) {
+                        for (s32 dx = room_x; dx <= CLAMP_UPPER(WORLD_EDGE_Y, room_x+SIZE_X-1); dx++) {
+                            if (dx == x && dy == y)
+                                continue;
                             if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c) 
                                 objmap[dy][dx].type = T_DOOR_OPEN;
                         }}
                 } else {
                     // Look for compatible doors around detector and "close" them.
-                    for (s32 dy = CLAMP_LOWER(y-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y, y+1); dy++) {
-                        for (s32 dx = CLAMP_LOWER(x-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X, x+1); dx++) {
+                    for (s32 dy = room_y; dy <= CLAMP_UPPER(WORLD_EDGE_Y, room_y+SIZE_Y-1); dy++) {
+                        for (s32 dx = room_x; dx <= CLAMP_UPPER(WORLD_EDGE_Y, room_x+SIZE_X-1); dx++) {
+                            if (dx == x && dy == y)
+                                continue;
                             if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c)
                                 objmap[dy][dx].type = T_DOOR;
                         }}
@@ -915,19 +960,6 @@ FUNCTION void game_render()
     
     // Draw player.
     draw_sprite(px, py, 0.8f, 0.8f, 0 + pdir, 7, 0, 1.0f);
-    
-    // Draw picked obj.
-    if (picked_obj.type != T_EMPTY) {
-        V2 mf   = game->mouse_world;
-        mf      = clamp(v2(0), mf, v2(WORLD_EDGE_X-1, WORLD_EDGE_X-1));
-        V2s sprite = obj_sprite[picked_obj.type];
-        s32 t = sprite.t;
-        s32 s = sprite.s + picked_obj.dir;
-        if (picked_obj.type == T_SPLITTER)
-            s = s % 4;
-        
-        draw_spritef(mf.x, mf.y, 1, 1, s, t, 0, 1.0f);
-    }
     immediate_end();
     
 #if DEVELOPER
