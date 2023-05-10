@@ -103,6 +103,11 @@ struct Obj
     u8 c; // The actual color of the object. Used for emitters, detectors and doors.
 };
 
+struct Player
+{
+    s32 x, y;
+};
+
 // The size of a square/cell is 1 unit!
 //
 #define NUM_X  4   // number of rooms.
@@ -114,13 +119,28 @@ struct Obj
 
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+
+// @Note: Square coords under the cursor in the current frame.
+// src_m is used as fall back if we drop picked obj on a wrong square.
+//
+// @Cleanup: 
+//
+GLOBAL s32 mx; GLOBAL s32 my;
+GLOBAL s32 src_mx; GLOBAL s32 src_my;
+GLOBAL Obj picked_obj;
+GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; // Player
+GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left coords).
 GLOBAL V2 camera;
 
 struct Loaded_Game
 {
-    u8  tile_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
     Obj obj_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-    V2 cam;
+    u8  tile_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+    
+    // @Note: From player xy, we calculate room xy. 
+    //        And from room xy, we calculate camera xy.
+    //
+    Player player;
 };
 
 struct Game_State

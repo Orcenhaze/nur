@@ -401,7 +401,7 @@ FUNCTION void d3d11_init(HWND window)
     // Projection transform.
     {
         // @Hardcoded:
-        ortho_zoom = 4.2f;
+        ortho_zoom = 4.5f;
         f32 ar     = (f32)os->render_size.width / (f32)os->render_size.height;
         view_to_proj_matrix = orthographic_2d(-ar*ortho_zoom, ar*ortho_zoom, -ortho_zoom, ortho_zoom);
     }

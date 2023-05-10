@@ -4,7 +4,6 @@ FUNCTION void save_map()
     Loaded_Game *g = &game->loaded_game;
     memory_copy(g->tile_map, tilemap, sizeof(tilemap));
     memory_copy(g->obj_map, objmap, sizeof(objmap));
-    memory_copy(&g->cam, &camera, sizeof(camera));
 }
 
 FUNCTION void save_game()
@@ -23,7 +22,6 @@ FUNCTION void reload_map()
     Loaded_Game *g = &game->loaded_game;
     memory_copy(tilemap, g->tile_map, sizeof(tilemap));
     memory_copy(objmap, g->obj_map, sizeof(objmap));
-    memory_copy(&camera, &g->cam, sizeof(camera));
 }
 
 FUNCTION void load_game()
@@ -201,7 +199,7 @@ FUNCTION void game_init()
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
     }
     
-    load_game();
+    //load_game();
     
 	// @Todo: Rename game_loaded to something that indicates whether a save.dat file is present or not. If not present: we don't load, we don't display "continue game". Instead, we only display "new game". 
     // If we "save and quit" and there's no save.dat, i.e. we never started the game, we simply return. 
@@ -214,11 +212,23 @@ FUNCTION void game_init()
                 objmap[y][x].type = T_EMPTY;
             }
         }
+        // Initial player and room position.
+        px = 4, 
+        py = 4;
+        rx = SIZE_X*(px / SIZE_X);
+        ry = SIZE_Y*(py / SIZE_Y);
+        
         // Initial camera position.
         camera = 0.5f*v2(SIZE_X, SIZE_Y);
     }
 }
 
+FUNCTION void update_camera()
+{
+    camera = v2(rx + 0.5f*SIZE_X, ry + 0.5f*SIZE_Y);
+}
+
+#if DEVELOPER
 FUNCTION void move_camera(u8 dir)
 {
     switch (dir) {
@@ -244,6 +254,7 @@ FUNCTION void move_camera(u8 dir)
     camera.x = CLAMP(0, camera.x, WORLD_EDGE_X-1);
     camera.y = CLAMP(0, camera.y, WORLD_EDGE_Y-1);
 }
+#endif
 
 FUNCTION b32 is_outside_map(s32 x, s32 y)
 {
@@ -285,13 +296,6 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
     else
         return Color_WHITE;
 }
-
-// @Note: Square coords under the cursor in the current frame.
-// src_m is used as fall back if we drop picked obj on a wrong square.
-//
-GLOBAL s32 mx, my;
-GLOBAL s32 src_mx, src_my;
-GLOBAL Obj picked_obj;
 
 FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
@@ -398,12 +402,48 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     }
 }
 
+FUNCTION void move(s32 x, s32 y)
+{
+    pdir = x? x<0? Dir_W : Dir_E : y<0? Dir_S : Dir_N;
+    px  += x; py += y;
+    px = CLAMP(0, px, NUM_X*SIZE_X - 1);
+    py = CLAMP(0, py, NUM_Y*SIZE_Y - 1);
+    
+    // Calculate room.
+    s32 room_x = SIZE_X*(px/SIZE_X);
+    s32 room_y = SIZE_Y*(py/SIZE_Y);
+    if (room_x != rx || room_y != ry) {
+        rx = room_x; 
+        ry = room_y;
+        
+        // Calculate camera.
+        update_camera();
+    }
+}
+
 FUNCTION void update_world()
 {
+    Button_State *kb   = os->keyboard_buttons;
     Button_State *mb   = os->mouse_buttons;
     b32 down_left      = is_down(mb[MouseButton_LEFT]);
     b32 released_left  = was_released(mb[MouseButton_LEFT]);
     b32 released_right = was_released(mb[MouseButton_RIGHT]);
+    
+    // @Important:
+    // @Todo: Improve movement, support key holds.
+    //
+    if (was_pressed(kb[Key_D]) || was_pressed(kb[Key_RIGHT])) {
+        move( 1, 0);
+    }
+    else if (was_pressed(kb[Key_W]) || was_pressed(kb[Key_UP])) {
+        move( 0, 1);
+    }
+    else if (was_pressed(kb[Key_A]) || was_pressed(kb[Key_LEFT])){
+        move(-1, 0);
+    }
+    else if (was_pressed(kb[Key_S]) || was_pressed(kb[Key_DOWN])) {
+        move( 0,-1);
+    }
     
     if (down_left && picked_obj.type == T_EMPTY && (length2(game->delta_mouse) > SQUARE(0.000002f))) {
         // Pick obj.
@@ -497,7 +537,24 @@ FUNCTION void update_world()
 #if DEVELOPER
 FUNCTION void update_editor()
 {
+    Button_State *kb = os->keyboard_buttons;
     Button_State *mb = os->mouse_buttons;
+    
+    if (was_pressed(kb[Key_D]))
+        move_camera(Dir_E);
+    if (was_pressed(kb[Key_W]))
+        move_camera(Dir_N);
+    if (was_pressed(kb[Key_A]))
+        move_camera(Dir_W);
+    if (was_pressed(kb[Key_S]))
+        move_camera(Dir_S);
+    if(is_down(kb[Key_SHIFT])) {
+        ortho_zoom += -0.45f*os->mouse_scroll.y;
+        ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
+        if (length2(os->mouse_scroll) != 0) {
+            print("Zoom %f\n", ortho_zoom);
+        }
+    }
     
     // Put stuff down.
     //
@@ -547,27 +604,6 @@ FUNCTION void game_update()
                                     os->mouse_ndc,
                                     world_to_view_matrix,
                                     view_to_proj_matrix).xy;
-    //
-    // Camera movement.
-    //
-    if (was_pressed(kb[Key_D]))
-        move_camera(Dir_E);
-    if (was_pressed(kb[Key_W]))
-        move_camera(Dir_N);
-    if (was_pressed(kb[Key_A]))
-        move_camera(Dir_W);
-    if (was_pressed(kb[Key_S]))
-        move_camera(Dir_S);
-    if(is_down(kb[Key_SHIFT])) {
-        ortho_zoom += -0.45f*os->mouse_scroll.y;
-        ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
-        if (length2(os->mouse_scroll) != 0) {
-            print("Zoom %f\n", ortho_zoom);
-        }
-    }
-    world_to_view_matrix = look_at(v3(camera, 0),
-                                   v3(camera, 0) + v3(0, 0, -1),
-                                   v3(0, 1, 0));
     
     V2 m = round(game->mouse_world);
     m    = clamp(v2(0), m, v2(WORLD_EDGE_X-1, WORLD_EDGE_X-1));
@@ -577,6 +613,11 @@ FUNCTION void game_update()
 #if DEVELOPER
     if (was_pressed(kb[Key_F1]))
         main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
+    if (main_mode == M_GAME) {
+        // @Hardcoded:
+        ortho_zoom = 4.5f;
+        update_camera();
+    }
 #endif
     
     switch (main_mode) {
@@ -585,6 +626,10 @@ FUNCTION void game_update()
         case M_EDITOR: update_editor(); break; 
 #endif
     }
+    
+    world_to_view_matrix = look_at(v3(camera, 0),
+                                   v3(camera, 0) + v3(0, 0, -1),
+                                   v3(0, 1, 0));
 }
 
 FUNCTION void draw_sprite(s32 x, s32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a)
@@ -846,6 +891,9 @@ FUNCTION void game_render()
             }
         }
     }
+    
+    // Draw player.
+    draw_sprite(px, py, 0.8f, 0.8f, 0 + pdir, 7, 0, 1.0f);
     
     // Draw picked obj.
     if (picked_obj.type != T_EMPTY) {
