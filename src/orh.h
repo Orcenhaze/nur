@@ -55,6 +55,7 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
+[] We don't handle keys in order at the moment. We need to fix this!
 [] arena_init() should take max parameter. If not passed, use the default: ARENA_MAX.
 [] Generic serialize.
 

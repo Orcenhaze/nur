@@ -22,6 +22,15 @@ FUNCTION void reload_map()
     Loaded_Game *g = &game->loaded_game;
     memory_copy(tilemap, g->tile_map, sizeof(tilemap));
     memory_copy(objmap, g->obj_map, sizeof(objmap));
+    
+    // @Todo: Add these to serialization.
+    /* 
+        px = , 
+        py = ;
+    // @Todo: Put this in a separate function!
+        rx = SIZE_X*(px / SIZE_X);
+        ry = SIZE_Y*(py / SIZE_Y);
+     */
 }
 
 FUNCTION void load_game()
@@ -404,6 +413,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 
 FUNCTION void move(s32 x, s32 y)
 {
+    if (!x && !y) return;
     pdir = x? x<0? Dir_W : Dir_E : y<0? Dir_S : Dir_N;
     px  += x; py += y;
     px = CLAMP(0, px, NUM_X*SIZE_X - 1);
@@ -430,20 +440,31 @@ FUNCTION void update_world()
     b32 released_right = was_released(mb[MouseButton_RIGHT]);
     
     // @Important:
-    // @Todo: Improve movement, support key holds.
+    // @Todo: Improve movement, must rework key processing in orh.h.
     //
-    if (was_pressed(kb[Key_D]) || was_pressed(kb[Key_RIGHT])) {
-        move( 1, 0);
+    b32 right = was_pressed(kb[Key_D]) || was_pressed(kb[Key_RIGHT]);
+    b32 up    = was_pressed(kb[Key_W]) || was_pressed(kb[Key_UP]);
+    b32 left  = was_pressed(kb[Key_A]) || was_pressed(kb[Key_LEFT]);
+    b32 down  = was_pressed(kb[Key_S]) || was_pressed(kb[Key_DOWN]);
+    s32 accel_x = 0, accel_y = 0;
+    if (right) {
+        accel_x =  1;
+        accel_y =  0;
     }
-    else if (was_pressed(kb[Key_W]) || was_pressed(kb[Key_UP])) {
-        move( 0, 1);
+    else if (up) {
+        accel_x =  0;
+        accel_y =  1;
     }
-    else if (was_pressed(kb[Key_A]) || was_pressed(kb[Key_LEFT])){
-        move(-1, 0);
+    else if (left) {
+        accel_x = -1;
+        accel_y =  0;
     }
-    else if (was_pressed(kb[Key_S]) || was_pressed(kb[Key_DOWN])) {
-        move( 0,-1);
+    else if (down) {
+        accel_x =  0;
+        accel_y = -1;
     }
+    
+    move(accel_x, accel_y);
     
     if (down_left && picked_obj.type == T_EMPTY && (length2(game->delta_mouse) > SQUARE(0.000002f))) {
         // Pick obj.
