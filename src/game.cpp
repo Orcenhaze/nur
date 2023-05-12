@@ -225,8 +225,48 @@ FUNCTION b32 is_outside_map(s32 x, s32 y)
     return result;
 }
 
+#define PRINT_ARR(a, message) {\
+print(#message); \
+print("\n");\
+for (s32 i = 0; i < a.count; i++) \
+print("%v3\n", a[i]);\
+print("\n\n");\
+}
+
 FUNCTION void game_init()
 {
+#if 0
+    //
+    // @TESTING ARRAYS
+    //
+    Array<V3> arr1;
+    array_init(&arr1, 10);
+    
+    Array<V3> arr2;
+    array_init(&arr2, 2);
+    
+    array_add(&arr1, v3(1));
+    array_add(&arr1, v3(2));
+    array_add(&arr1, v3(3));
+    array_add(&arr1, v3(4));
+    
+    PRINT_ARR(arr1, "arr1 first:");
+    
+    array_copy(&arr2, arr1);
+    
+    array_add(&arr2, v3(69));
+    array_add(&arr2, v3(898));
+    
+    PRINT_ARR(arr2, "arr2 first:");
+    
+    array_copy(&arr1, arr2);
+    
+    PRINT_ARR(arr1, "arr1 AFTER22:");
+    //
+    // @TESTING
+    //
+#endif
+    
     game = PUSH_STRUCT_ZERO(&os->permanent_arena, Game_State);
     
     {

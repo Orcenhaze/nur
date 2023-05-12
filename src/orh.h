@@ -1,4 +1,4 @@
-/* orh.h - v0.37 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.38 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.38 - added more functions to dynamic array.
 0.37 - added templated String8 helper function get().
 0.36 - added was_released().
 0.35 - added round, clamp, ceil, for V2.
@@ -1015,7 +1016,7 @@ struct Array
     
     inline T& operator[](s32 index)
     {
-        ASSERT(index < capacity);
+        ASSERT((index >= 0) && (index < count));
         return data[index];
     }
 };
@@ -1045,15 +1046,30 @@ void array_reserve(Array<T> *array, s64 desired_items)
 }
 
 template<typename T>
+void array_copy(Array<T> *dst, Array<T> src)
+{
+    if (src.count > dst->capacity)
+        array_reserve(dst, src.count);
+    
+    dst->count = src.count;
+    memory_copy(dst->data, src.data, src.count * sizeof(T));
+}
+
+template<typename T>
 void array_expand(Array<T> *array)
 {
     s64 new_size = array->capacity * 2;
     if (new_size < ARRAY_SIZE_MIN) new_size = ARRAY_SIZE_MIN;
     
+    Array<T> old_array;
+    array_init(&old_array, array->count);
+    defer(array_free(&old_array));
+    array_copy(&old_array, *array);
+    
     array_reserve(array, new_size);
     
-    // @Note: Copy would go here, but it's unnecessary; array_reserve() calls arena_reset(),
-    // which only sets arena.used to zero and keeps old data the same. 
+    // Copy data.
+    array_copy(array, old_array);
 }
 
 template<typename T>
@@ -1077,6 +1093,25 @@ void array_add(Array<T> *array, T item)
     
     array->data[array->count] = item;
     array->count++;
+}
+
+template<typename T>
+void array_unordered_remove_by_index(Array<T> *array, s32 index)
+{
+    ASSERT((index >= 0) && (index < array->count));
+    
+    array->data[index] = array->data[array->count-1];
+    array->count--;
+}
+
+template<typename T>
+void array_ordered_remove_by_index(Array<T> *array, s32 index)
+{
+    ASSERT((index >= 0) && (index < array->count));
+    
+    for (s32 i = index; i < array->count-1; i++)
+        array->data[i] = array->data[i+1];
+    array->count--;
 }
 
 /////////////////////////////////////////
