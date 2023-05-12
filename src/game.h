@@ -114,20 +114,13 @@ struct Player
 #define NUM_Y  4
 #define SIZE_X 8   // size of each room (in squares).
 #define SIZE_Y 8
-#define WORLD_EDGE_X NUM_X*SIZE_X // In units! World range [0, WORLD_EDGE].
-#define WORLD_EDGE_Y NUM_Y*SIZE_X
 
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
-// @Note: Square coords under the cursor in the current frame.
-// src_m is used as fall back if we drop picked obj on a wrong square.
-//
-// @Cleanup: 
-//
 GLOBAL s32 mx; GLOBAL s32 my;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; // Player
-GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left coords).
+GLOBAL s32 rx; GLOBAL s32 ry; // Room coords (bottom left square) that the player is in.
 GLOBAL V2 camera;
 
 struct Loaded_Game

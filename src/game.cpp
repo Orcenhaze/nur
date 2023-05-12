@@ -218,6 +218,13 @@ FUNCTION void do_editor()
 }
 #endif
 
+FUNCTION b32 is_outside_map(s32 x, s32 y)
+{
+    b32 result = ((x < 0) || (x > NUM_X*SIZE_X-1) ||
+                  (y < 0) || (y > NUM_Y*SIZE_Y-1));
+    return result;
+}
+
 FUNCTION void game_init()
 {
     game = PUSH_STRUCT_ZERO(&os->permanent_arena, Game_State);
@@ -241,50 +248,108 @@ FUNCTION void game_init()
             }
         }
         // Initial player and room position.
-        px = 4, 
-        py = 4;
-        rx = SIZE_X*(px / SIZE_X);
-        ry = SIZE_Y*(py / SIZE_Y);
-        
-        // Initial camera position.
-        camera = 0.5f*v2(SIZE_X, SIZE_Y);
+        set_player_position(4, 4);
     }
+    
+    world_to_view_matrix = look_at(v3(camera, 0),
+                                   v3(camera, 0) + v3(0, 0, -1),
+                                   v3(0, 1, 0));
 }
 
 #if DEVELOPER
-FUNCTION void move_camera(u8 dir)
+FUNCTION void move_camera(s32 dir_x, s32 dir_y)
 {
-    switch (dir) {
-        case Dir_E: {
-            if (camera.x + SIZE_X < WORLD_EDGE_X)
-                camera.x += SIZE_X;
-        } break;
-        case Dir_N: {
-            if (camera.y + SIZE_Y < WORLD_EDGE_Y)
-                camera.y += SIZE_Y;
-        } break;
-        case Dir_W: {
-            if (camera.x - SIZE_X > 0)
-                camera.x -= SIZE_X;
-        } break;
-        case Dir_S: {
-            if (camera.y - SIZE_Y > 0)
-                camera.y -= SIZE_Y;
-        } break;
-    }
+    if (!dir_x && !dir_y) return;
+    s32 temp_x = camera.x + SIZE_X*dir_x;
+    s32 temp_y = camera.y + SIZE_Y*dir_y;
+    if (is_outside_map(temp_x, temp_y))
+        return;
     
-    // @Sanity:
-    camera.x = CLAMP(0, camera.x, WORLD_EDGE_X-1);
-    camera.y = CLAMP(0, camera.y, WORLD_EDGE_Y-1);
+    camera.x = temp_x;
+    camera.y = temp_y;
+}
+
+FUNCTION void swap_room(s32 dir_x, s32 dir_y)
+{
+    if (!dir_x && !dir_y) return;
+    s32 room_x = SIZE_X*((s32)camera.x/SIZE_X);
+    s32 room_y = SIZE_Y*((s32)camera.y/SIZE_Y);
+    s32 dest_x = room_x + SIZE_X*dir_x;
+    s32 dest_y = room_y + SIZE_Y*dir_y;
+    if (is_outside_map(dest_x, dest_y))
+        return;
+    
+    for (s32 y = room_y; y < room_y+SIZE_Y; y++) {
+        for (s32 x = room_x; x < room_x+SIZE_X; x++) {
+            SWAP(objmap[y][x], objmap[y + SIZE_Y*dir_y][x + SIZE_X*dir_x], Obj);
+            SWAP(tilemap[y][x], tilemap[y + SIZE_Y*dir_y][x + SIZE_X*dir_x], u8);
+        }
+    }
+}
+
+FUNCTION void flip_room_horizontally()
+{
+    s32 room_x = SIZE_X*((s32)camera.x/SIZE_X);
+    s32 room_y = SIZE_Y*((s32)camera.y/SIZE_Y);
+    s32 room_end_x = room_x+SIZE_X-1;
+    s32 room_end_y = room_y+SIZE_Y-1;
+    
+    for (s32 y = room_y; y <= room_end_y; y++) {
+        for (s32 x = room_x; x <= room_end_x; x++) {
+            // Flip directions.
+            u8 d = objmap[y][x].dir;
+            if (d == Dir_E || d == Dir_W)
+                objmap[y][x].dir = WRAP_D(d + 4);
+            else if (d == Dir_NE)
+                objmap[y][x].dir = Dir_NW;
+            else if (d == Dir_NW)
+                objmap[y][x].dir = Dir_NE;
+            else if (d == Dir_SW)
+                objmap[y][x].dir = Dir_SE;
+            else if (d == Dir_SE)
+                objmap[y][x].dir = Dir_SW;
+        }
+    }
+    for (s32 y = room_y; y <= room_end_y; y++) {
+        for (s32 x = room_x; x <= (room_x + room_end_x)/2; x++) {
+            // Flip objs and tiles.
+            SWAP(objmap[y][x], objmap[y][room_end_x - (x - room_x)], Obj);
+            SWAP(tilemap[y][x], tilemap[y][room_end_x - (x - room_x)], u8);
+        }
+    }
+}
+FUNCTION void flip_room_vertically()
+{
+    s32 room_x = SIZE_X*((s32)camera.x/SIZE_X);
+    s32 room_y = SIZE_Y*((s32)camera.y/SIZE_Y);
+    s32 room_end_x = room_x+SIZE_X-1;
+    s32 room_end_y = room_y+SIZE_Y-1;
+    
+    for (s32 y = room_y; y <= room_end_y; y++) {
+        for (s32 x = room_x; x <= room_end_x; x++) {
+            // Flip directions.
+            u8 d = objmap[y][x].dir;
+            if (d == Dir_N || d == Dir_S)
+                objmap[y][x].dir = WRAP_D(d + 4);
+            else if (d == Dir_NE)
+                objmap[y][x].dir = Dir_SE;
+            else if (d == Dir_NW)
+                objmap[y][x].dir = Dir_SW;
+            else if (d == Dir_SW)
+                objmap[y][x].dir = Dir_NW;
+            else if (d == Dir_SE)
+                objmap[y][x].dir = Dir_NE;
+        }
+    }
+    for (s32 y = room_y; y <= (room_y + room_end_y)/2; y++) {
+        for (s32 x = room_x; x <= room_end_x; x++) {
+            // Flip objs and tiles.
+            SWAP(objmap[y][x], objmap[room_end_y - (y - room_y)][x], Obj);
+            SWAP(tilemap[y][x], tilemap[room_end_y - (y - room_y)][x], u8);
+        }
+    }
 }
 #endif
-
-FUNCTION b32 is_outside_map(s32 x, s32 y)
-{
-    b32 result = ((x < 0) || (x > WORLD_EDGE_X-1) ||
-                  (y < 0) || (y > WORLD_EDGE_Y-1));
-    return result;
-}
 
 FUNCTION u8 mix_colors(u8 cur, u8 src)
 {
@@ -441,12 +506,12 @@ FUNCTION b32 is_obj_collides(u8 type)
     }
 }
 
-FUNCTION void move(s32 x, s32 y)
+FUNCTION void move(s32 dir_x, s32 dir_y)
 {
-    if (!x && !y) return;
-    pdir = x? x<0? Dir_W : Dir_E : y<0? Dir_S : Dir_N;
-    s32 tempx = px + x; 
-    s32 tempy = py + y;
+    if (!dir_x && !dir_y) return;
+    pdir = dir_x? dir_x<0? Dir_W : Dir_E : dir_y<0? Dir_S : Dir_N;
+    s32 tempx = px + dir_x; 
+    s32 tempy = py + dir_y;
     if (is_outside_map(tempx, tempy))
         return;
     
@@ -521,8 +586,8 @@ FUNCTION void update_world()
     
     if (was_pressed(kb[Key_Q]) || was_pressed(kb[Key_E])) {
         // Rotate objs around player.
-        for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(WORLD_EDGE_Y, py+1); dy++) {
-            for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(WORLD_EDGE_X, px+1); dx++) {
+        for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
+            for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
                 if (dy == py && dx == px)
                     continue;
                 
@@ -538,16 +603,12 @@ FUNCTION void update_world()
                 }
             }
         }
-        
     }
     
-    // Clear colors for all objs except lasers.
+    // Clear colors for all objs.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            if (o.type != T_EMITTER) {
-                MEMORY_ZERO_ARRAY(objmap[y][x].color);
-            }
+            MEMORY_ZERO_ARRAY(objmap[y][x].color);
         }
     }
     
@@ -569,25 +630,26 @@ FUNCTION void update_world()
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_DETECTOR) {
-                s32 room_x = SIZE_X*(x/SIZE_X);
-                s32 room_y = SIZE_Y*(y/SIZE_Y);
+                s32 room_x     = SIZE_X*(x/SIZE_X);
+                s32 room_y     = SIZE_Y*(y/SIZE_Y);
+                
                 u8 final_c = Color_WHITE;
                 for (s32 i = 0; i < 8; i++)
                     final_c = mix_colors(final_c, o.color[i]);
                 
                 if (final_c == o.c) {
-                    // Look for compatible doors around detector and "open" them.
-                    for (s32 dy = room_y; dy <= CLAMP_UPPER(WORLD_EDGE_Y, room_y+SIZE_Y-1); dy++) {
-                        for (s32 dx = room_x; dx <= CLAMP_UPPER(WORLD_EDGE_Y, room_x+SIZE_X-1); dx++) {
+                    // Open doors in room.
+                    for (s32 dy = room_y; dy < room_y+SIZE_Y; dy++) {
+                        for (s32 dx = room_x; dx < room_x+SIZE_X; dx++) {
                             if (dx == x && dy == y)
                                 continue;
                             if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c) 
                                 objmap[dy][dx].type = T_DOOR_OPEN;
                         }}
                 } else {
-                    // Look for compatible doors around detector and "close" them.
-                    for (s32 dy = room_y; dy <= CLAMP_UPPER(WORLD_EDGE_Y, room_y+SIZE_Y-1); dy++) {
-                        for (s32 dx = room_x; dx <= CLAMP_UPPER(WORLD_EDGE_Y, room_x+SIZE_X-1); dx++) {
+                    // Close doors in room.
+                    for (s32 dy = room_y; dy < room_y+SIZE_Y; dy++) {
+                        for (s32 dx = room_x; dx < room_x+SIZE_X; dx++) {
                             if (dx == x && dy == y)
                                 continue;
                             if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c)
@@ -605,15 +667,25 @@ FUNCTION void update_editor()
 {
     Button_State *kb = os->keyboard_buttons;
     Button_State *mb = os->mouse_buttons;
+    b32 shift_down = is_down(kb[Key_SHIFT]);
+    b32 right = was_pressed(kb[Key_D]) || was_pressed(kb[Key_RIGHT]);
+    b32 up    = was_pressed(kb[Key_W]) || was_pressed(kb[Key_UP]);
+    b32 left  = was_pressed(kb[Key_A]) || was_pressed(kb[Key_LEFT]);
+    b32 down  = was_pressed(kb[Key_S]) || was_pressed(kb[Key_DOWN]);
+    if (right) {
+        if (shift_down) swap_room(1, 0);
+        move_camera(1, 0);
+    } else if (up) {
+        if (shift_down) swap_room(0, 1);
+        move_camera(0, 1);
+    } else if (left) {
+        if (shift_down) swap_room(-1, 0);
+        move_camera(-1, 0);
+    } else if (down) {
+        if (shift_down) swap_room(0, -1);
+        move_camera(0, -1);
+    }
     
-    if (was_pressed(kb[Key_D]))
-        move_camera(Dir_E);
-    if (was_pressed(kb[Key_W]))
-        move_camera(Dir_N);
-    if (was_pressed(kb[Key_A]))
-        move_camera(Dir_W);
-    if (was_pressed(kb[Key_S]))
-        move_camera(Dir_S);
     if(is_down(kb[Key_SHIFT])) {
         ortho_zoom += -0.45f*os->mouse_scroll.y;
         ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
@@ -621,6 +693,13 @@ FUNCTION void update_editor()
             print("Zoom %f\n", ortho_zoom);
         }
     }
+    if (is_down(kb[Key_CONTROL]) && was_pressed(kb[Key_H])) {
+        flip_room_horizontally();
+    }
+    if (is_down(kb[Key_CONTROL]) && was_pressed(kb[Key_V])) {
+        flip_room_vertically();
+    }
+    
     
     // Put stuff down.
     //
@@ -651,6 +730,14 @@ FUNCTION void update_editor()
         }
     }
     
+    // Put player down.
+    //
+    if (is_down(mb[MouseButton_MIDDLE])) {
+        V2 cam = camera;
+        set_player_position(mx, my);
+        camera = cam;
+    }
+    
     // Mouse scroll change dir.
     //
     if (os->mouse_scroll.y > 0) {
@@ -672,7 +759,7 @@ FUNCTION void game_update()
                                     view_to_proj_matrix).xy;
     
     V2 m = round(game->mouse_world);
-    m    = clamp(v2(0), m, v2(WORLD_EDGE_X-1, WORLD_EDGE_X-1));
+    m    = clamp(v2(0), m, v2(NUM_X*SIZE_X-1, NUM_X*SIZE_X-1));
     mx   = (s32)m.x;
     my   = (s32)m.y;
     
@@ -967,7 +1054,7 @@ FUNCTION void game_render()
     immediate_begin();
     set_texture(0);
     //immediate_rect(v2(0), v2(0.2f, 0.2f), v4(1,0,1,1));
-    //immediate_rect(v2(WORLD_EDGE_X-1, 0), v2(0.2f, 0.2f), v4(1,0,1,1));
+    //immediate_rect(v2(NUM_X*SIZE_X-1, 0), v2(0.2f, 0.2f), v4(1,0,1,1));
     immediate_end();
     
     if(main_mode == M_EDITOR)
