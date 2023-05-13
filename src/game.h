@@ -1,6 +1,77 @@
 #ifndef GAME_H
 #define GAME_H
 
+////////////////////////////////
+// @Note: Game inputs.
+//
+#define MAX_BINDS_PER_INPUT 3
+
+enum
+{
+    MOVE_RIGHT,
+    MOVE_UP,
+    MOVE_LEFT,
+    MOVE_DOWN,
+    
+    ROTATE_CCW,
+    ROTATE_CW,
+};
+
+GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
+    {Key_D, Key_RIGHT},
+    {Key_W, Key_UP},
+    {Key_A, Key_LEFT},
+    {Key_S, Key_DOWN},
+    
+    {Key_Q},
+    {Key_E}
+};
+
+FUNCTION b32 input_pressed(s32 input)
+{
+    for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
+        s32 key = binds[input][i];
+        if (key == Key_NONE)
+            continue;
+        
+        if (key_pressed(key))
+            return true;
+    }
+    
+    return false;
+}
+
+FUNCTION b32 input_held(s32 input)
+{
+    for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
+        s32 key = binds[input][i];
+        if (key == Key_NONE)
+            continue;
+        
+        if (key_held(key))
+            return true;
+    }
+    
+    return false;
+}
+
+FUNCTION b32 input_released(s32 input)
+{
+    for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
+        s32 key = binds[input][i];
+        if (key == Key_NONE)
+            continue;
+        
+        if (key_released(key))
+            return true;
+    }
+    
+    return false;
+}
+
+////////////////////////////////
+////////////////////////////////
+
 GLOBAL b32 game_loaded = false;
 enum
 {
@@ -48,7 +119,6 @@ V2s tile_sprite[] = {
     v2s(0, 0),
     v2s(1, 0),
 };
-
 
 enum 
 {
@@ -122,6 +192,8 @@ GLOBAL s32 mx; GLOBAL s32 my;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; // Player
 GLOBAL s32 rx; GLOBAL s32 ry; // Room coords (bottom left square) that the player is in.
 GLOBAL V2 camera;
+
+
 
 struct Loaded_Game
 {

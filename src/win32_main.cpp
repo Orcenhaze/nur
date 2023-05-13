@@ -179,7 +179,26 @@ FUNCTION void win32_process_pending_messages()
                         else if (vkcode == VK_DOWN)    key = Key_DOWN;
                     }
                     
-                    process_button_state(&global_os.keyboard_buttons[key], is_down);
+                    Queued_Input input = {key, is_down};
+                    array_add(&global_os.inputs_to_process, input);
+                } break;
+                
+                case WM_LBUTTONDOWN:
+                case WM_LBUTTONUP: {
+                    Queued_Input input = {Key_MLEFT, (message.wParam & MK_LBUTTON)};
+                    array_add(&global_os.inputs_to_process, input);
+                } break;
+                
+                case WM_RBUTTONDOWN:
+                case WM_RBUTTONUP: {
+                    Queued_Input input = {Key_MRIGHT, (message.wParam & MK_RBUTTON)};
+                    array_add(&global_os.inputs_to_process, input);
+                } break;
+                
+                case WM_MBUTTONDOWN:
+                case WM_MBUTTONUP: {
+                    Queued_Input input = {Key_MMIDDLE, (message.wParam & MK_MBUTTON)};
+                    array_add(&global_os.inputs_to_process, input);
                 } break;
                 
                 case WM_MOUSEWHEEL: {
@@ -225,64 +244,58 @@ LRESULT CALLBACK win32_main_window_callback(HWND window, UINT message, WPARAM wp
 
 FUNCTION void win32_process_inputs(HWND window)
 {
-    // Clear half_transition_count.
-    //
-    // Keyboard buttons.
-    for(s32 i = 0; i < Key_COUNT; i++)
-        global_os.keyboard_buttons[i].half_transition_count = 0;
-    // Mouse buttons.
-    s32 win32_mouse_buttons[MouseButton_COUNT] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON};
-    for(s32 i = 0; i < MouseButton_COUNT; i++)
-    {
-        Button_State *bs = &global_os.mouse_buttons[i];
-        bs->half_transition_count = 0;
-        process_button_state(bs, GetKeyState(win32_mouse_buttons[i]) & (1 << 15));
-    }
-    
-    // @Robustness: Is it better to put this at the end of the frame and use seconds_elapsed_for_frame
-    // instead of os->dt?
-    //
-    // Update buttons' down_counter and pressed_counter.
-    //
-    // Keyboard.
-    for(s32 i = 0; i < Key_COUNT; i++)
-    {
-        if (os->keyboard_buttons[i].ended_down)
-            os->keyboard_buttons[i].down_counter += os->dt;
-        else
-            os->keyboard_buttons[i].down_counter  = 0.0f;
-        
-        os->keyboard_buttons[i].pressed_counter += os->dt;
-    }
-    // Mouse.
-    for(s32 i = 0; i < MouseButton_COUNT; i++)
-    {
-        if (os->mouse_buttons[i].ended_down)
-            os->mouse_buttons[i].down_counter += os->dt;
-        else
-            os->mouse_buttons[i].down_counter  = 0.0f;
-        
-        os->mouse_buttons[i].pressed_counter += os->dt;
-    }
+    // Clear pressed and released states.
+    MEMORY_ZERO_ARRAY(global_os.pressed);
+    MEMORY_ZERO_ARRAY(global_os.released);
     
     // Mouse position.
     POINT cursor; 
     GetCursorPos(&cursor);
     ScreenToClient(window, &cursor);
-    global_os.mouse_screen = 
-    {
+    global_os.mouse_screen = {
         (f32) cursor.x,
         ((f32)global_os.window_size.height - 1.0f) - cursor.y,
     };
-    global_os.mouse_ndc.x = 2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.x, global_os.mouse_screen.x, global_os.drawing_rect.max.x) - 1.0f;
-    global_os.mouse_ndc.y = 2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.y, global_os.mouse_screen.y, global_os.drawing_rect.max.y) - 1.0f;
-    global_os.mouse_ndc.z = 0;
+    global_os.mouse_ndc = {
+        2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.x, global_os.mouse_screen.x, global_os.drawing_rect.max.x) - 1.0f,
+        2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.y, global_os.mouse_screen.y, global_os.drawing_rect.max.y) - 1.0f,
+        0.0f
+    };
     
     // Clear mouse-wheel scroll.
     global_os.mouse_scroll = {};
     
-    // Keyboard buttons.
+    // Put input messages in queue.
+    //
     win32_process_pending_messages();
+    
+    // Process queued inputs.
+    //
+    for (s32 i = 0; i < global_os.inputs_to_process.count; i++) {
+        Queued_Input input = global_os.inputs_to_process[i];
+        if (input.down) {
+            
+            // Key already pressed, defer this press for later to preserve input order.
+            if (global_os.pressed[input.key])
+                break;
+            // Key was marked as released before we got here, so defer for later.
+            else if (global_os.released[input.key])
+                break;
+            else {
+                if (!global_os.held[input.key])
+                    global_os.pressed[input.key] = true;
+                
+                global_os.held[input.key] = true;
+                array_ordered_remove_by_index(&global_os.inputs_to_process, i);
+                i--;
+            }
+        } else {
+            global_os.released[input.key] = true;
+            global_os.held[input.key] = false;
+            array_ordered_remove_by_index(&global_os.inputs_to_process, i);
+            i--;
+        }
+    }
 }
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
@@ -367,7 +380,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.write_entire_file = win32_write_entire_file;
         global_os.free_file_memory  = win32_free_file_memory;
         
+        // Arenas.
         global_os.permanent_arena  = arena_init();
+        
+        // User Input.
+        array_init(&global_os.inputs_to_process);
     }
     
     /////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-/* orh.h - v0.38 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.39 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.39 - completely reworked key state processing and implemented move_towards().
 0.38 - added more functions to dynamic array.
 0.37 - added templated String8 helper function get().
 0.36 - added was_released().
@@ -56,9 +57,7 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
-[] We don't handle keys in order at the moment. We need to fix this!
 [] arena_init() should take max parameter. If not passed, use the default: ARENA_MAX.
-[] Generic serialize.
 
 */
 
@@ -467,6 +466,9 @@ FUNCDEF inline f32 smoother_step(f32 a, f32 t, f32 b);
 FUNCDEF inline V2  smoother_step(V2 a, f32 t, V2 b);
 FUNCDEF inline V3  smoother_step(V3 a, f32 t, V3 b);
 FUNCDEF inline V4  smoother_step(V4 a, f32 t, V4 b);
+
+FUNCDEF V2 move_towards(V2 current, V2 target, f32 max_distance);
+FUNCDEF V3 move_towards(V3 current, V3 target, f32 max_distance);
 
 FUNCDEF inline Range range(f32 min, f32 max);
 FUNCDEF inline Rect2 rect2(V2  min, V2  max);
@@ -1324,43 +1326,24 @@ enum
     Key_ESCAPE,
     Key_SPACE,
     
+    // Arrow keys.
     Key_LEFT,
     Key_UP,
     Key_RIGHT,
     Key_DOWN,
     
+    // Mouse buttons.
+    Key_MLEFT,
+    Key_MRIGHT,
+    Key_MMIDDLE,
+    
     Key_COUNT,
 };
 
-enum
+struct Queued_Input
 {
-    MouseButton_LEFT,
-    MouseButton_RIGHT,
-    MouseButton_MIDDLE,
-    
-    MouseButton_COUNT
-};
-
-struct Button_State
-{
-    // @Note: The basic encoding is from Handmade Hero.
-    
-    // Clear this value at the start of every frame BEFORE calling process_button_state().
-    s32 half_transition_count; // Per frame.
-    
-    // Preserve this value.
-    b32 ended_down;            // Across frames.
-    
-    // Represents how much time a button is down. 
-    // Increment this value at the end of every frame IFF ended_down is true ELSE clear it.
-    // down_counter += os->dt;
-    f32 down_counter;          // In seconds.
-    
-    // Represents how much time since a button was pressed && duration_until_trigger_seconds have passed.
-    // Increment this value at the end of every frame.
-    // pressed_counter += os->dt;
-    // @Todo: This should be initialized to F32_MAX.
-    f32 pressed_counter;
+    s32 key;
+    b32 down;
 };
 
 struct OS_State
@@ -1374,11 +1357,13 @@ struct OS_State
     Arena permanent_arena; // Default arena.
     
     // User Input.
-    Button_State keyboard_buttons[Key_COUNT];
-    Button_State mouse_buttons[MouseButton_COUNT];
-    V3           mouse_screen;
-    V3           mouse_ndc;
-    V2           mouse_scroll;
+    Array<Queued_Input> inputs_to_process;
+    b32 pressed [Key_COUNT];
+    b32 held    [Key_COUNT];
+    b32 released[Key_COUNT];
+    V3  mouse_screen;
+    V3  mouse_ndc;
+    V2  mouse_scroll;
     
     // Options.
     b32 vsync;
@@ -1401,12 +1386,9 @@ struct OS_State
 };
 extern OS_State *os;
 
-FUNCDEF void  process_button_state(Button_State *bs, b32 is_down_according_to_os);
-FUNCDEF b32   is_down(Button_State bs);
-FUNCDEF b32   was_pressed(Button_State bs);
-FUNCDEF b32   was_released(Button_State bs);
-FUNCDEF b32   is_down(Button_State *bs, f32 duration_until_trigger_seconds);
-FUNCDEF b32   was_pressed(Button_State *bs, f32 duration_until_trigger_seconds);
+FUNCDEF b32 key_pressed(s32 key, b32 capture = false);
+FUNCDEF b32 key_held(s32 key, b32 capture = false);
+FUNCDEF b32 key_released(s32 key, b32 capture = false);
 FUNCDEF Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim);
 FUNCDEF V3    unproject(V3 camera_position, f32 Zworld_distance_from_camera, V3 mouse_ndc, M4x4_Inverse view, M4x4_Inverse proj);
 #endif //ORH_H
@@ -2366,6 +2348,29 @@ V4 smoother_step(V4 a, f32 t, V4 b)
     return result;
 }
 
+V2 move_towards(V2 current, V2 target, f32 max_distance)
+{
+    V2 delta = target - current;
+    f32 distance = length(delta);
+    
+    if (distance <= max_distance || distance == 0.0f) 
+        return target;
+    
+    f32 ratio = max_distance / distance;
+    return current + (delta * ratio);
+}
+V3 move_towards(V3 current, V3 target, f32 max_distance)
+{
+    V3 delta = target - current;
+    f32 distance = length(delta);
+    
+    if (distance <= max_distance || distance == 0.0f) 
+        return target;
+    
+    f32 ratio = max_distance / distance;
+    return current + (delta * ratio);
+}
+
 Range range(f32 min, f32 max) 
 { 
     Range result = {min, max}; 
@@ -3266,66 +3271,25 @@ String8 sb_to_string(String_Builder *builder, Arena *arena /*= 0*/)
 //
 OS_State *os = 0;
 
-void process_button_state(Button_State *bs, b32 is_down_according_to_os)
+b32 key_pressed(s32 key, b32 capture /* = false */)
 {
-    // Check if we made a key transition. If key was down in previous frame and now it's not or vice versa... 
-    if (bs->ended_down != is_down_according_to_os) {
-        bs->ended_down = is_down_according_to_os;
-        bs->half_transition_count++;
-    }
-}
-b32 is_down(Button_State bs) 
-{ 
-    return bs.ended_down; 
-}
-b32 was_pressed(Button_State bs)
-{
-    return (bs.half_transition_count > 1) || ((bs.half_transition_count == 1) && (bs.ended_down)); 
-}
-b32 was_released(Button_State bs)
-{
-    return (bs.half_transition_count > 1) || ((bs.half_transition_count == 1) && !(bs.ended_down)); 
-}
-b32 is_down(Button_State *bs, f32 duration_until_trigger_seconds)
-{
-    // @Note: Use this function if you want to repeat an action after some seconds while holding down a button.
-    //
-    
-    ASSERT(duration_until_trigger_seconds > 0.0f);
-    
-    if (was_pressed(bs, duration_until_trigger_seconds)) 
-        return true;
-    
-    b32 result = false;
-    
-    if (bs->down_counter > duration_until_trigger_seconds) {
-        result = true;
-        bs->down_counter   -= duration_until_trigger_seconds;
-        
-        // @Note: To avoid exploiting switching between pressing and holding a button.
-        bs->pressed_counter = 0.0f;
-    }
-    
+    b32 result = os->pressed[key];
+    if (result && capture)
+        os->pressed[key] = false;
     return result;
 }
-b32 was_pressed(Button_State *bs, f32 duration_until_trigger_seconds)
+b32 key_held(s32 key, b32 capture /* = false */)
 {
-    // @Note: Use this function to prevent user from spamming a button press to do some action. 
-    // Instead, only trigger after the user presses a button AND some amount of seconds have passed. 
-    //
-    
-    ASSERT(duration_until_trigger_seconds > 0.0f);
-    
-    b32 result = false;
-    
-    if (was_pressed(*bs) && (bs->pressed_counter > duration_until_trigger_seconds)) {
-        result = true;
-        bs->pressed_counter = 0.0f;
-        
-        // @Note: To avoid exploiting switching between pressing and holding a button.
-        bs->down_counter    = 0.0f;
-    }
-    
+    b32 result = os->held[key];
+    if (result && capture)
+        os->pressed[key] = false;
+    return result;
+}
+b32 key_released(s32 key, b32 capture /* = false */)
+{
+    b32 result = os->released[key];
+    if (result && capture)
+        os->released[key] = false;
     return result;
 }
 Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim)

@@ -81,8 +81,7 @@ FUNCTION b32 mouse_over_ui()
 FUNCTION void do_editor()
 {
     ImGuiIO& io      = ImGui::GetIO();
-    Button_State *mb = os->mouse_buttons;
-    b32 pressed_left  = was_pressed(mb[MouseButton_LEFT])  && mouse_over_ui();
+    b32 pressed_left  = key_pressed(Key_MLEFT)  && mouse_over_ui();
     
     ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
     
@@ -94,7 +93,7 @@ FUNCTION void do_editor()
             ImGui::SameLine(); ImGui::Text("Saved!");
         }
         
-        if (was_pressed(os->keyboard_buttons[Key_F3])) {
+        if (key_pressed(Key_F3)) {
             reload_map();
         }
     }
@@ -589,42 +588,80 @@ FUNCTION void move(s32 dir_x, s32 dir_y)
     set_player_position(tempx, tempy);
 }
 
+#define MOVE_HOLD_TIMER 0.25f
+GLOBAL s32 last_pressed;
+GLOBAL s32 last_pressed_fallback = -1;
+GLOBAL f32 move_hold_timer;
+
 FUNCTION void update_world()
 {
-    Button_State *kb   = os->keyboard_buttons;
-    Button_State *mb   = os->mouse_buttons;
-    b32 down_left      = is_down(mb[MouseButton_LEFT]);
-    b32 released_left  = was_released(mb[MouseButton_LEFT]);
-    b32 released_right = was_released(mb[MouseButton_RIGHT]);
-    
-    // @Important:
-    // @Todo: Improve movement, must rework key processing in orh.h.
+    // @Todo: Hold A, Hold D, Let go of D... A should take priority again.
     //
-    b32 right = was_pressed(kb[Key_D]) || was_pressed(kb[Key_RIGHT]);
-    b32 up    = was_pressed(kb[Key_W]) || was_pressed(kb[Key_UP]);
-    b32 left  = was_pressed(kb[Key_A]) || was_pressed(kb[Key_LEFT]);
-    b32 down  = was_pressed(kb[Key_S]) || was_pressed(kb[Key_DOWN]);
-    s32 accel_x = 0, accel_y = 0;
-    if (right) {
-        accel_x =  1;
-        accel_y =  0;
-    }
-    else if (up) {
-        accel_x =  0;
-        accel_y =  1;
-    }
-    else if (left) {
-        accel_x = -1;
-        accel_y =  0;
-    }
-    else if (down) {
-        accel_x =  0;
-        accel_y = -1;
+    
+    if (input_pressed(MOVE_RIGHT)) {
+        move_hold_timer = 0.0f;
+        last_pressed = MOVE_RIGHT;
+        print("RR last: %d fallback: %d\n", last_pressed, last_pressed_fallback);
+    } else if (input_pressed(MOVE_UP)) {
+        move_hold_timer = 0.0f;
+        last_pressed = MOVE_UP;
+        print(" UU last: %d fallback: %d\n", last_pressed, last_pressed_fallback);
+    } else if (input_pressed(MOVE_LEFT)) {
+        move_hold_timer = 0.0f;
+        last_pressed = MOVE_LEFT;
+    } else if (input_pressed(MOVE_DOWN)) {
+        move_hold_timer = 0.0f;
+        last_pressed = MOVE_DOWN;
     }
     
-    move(accel_x, accel_y);
+    move_hold_timer = MAX(0, move_hold_timer - os->dt);
     
-    if (was_pressed(kb[Key_Q]) || was_pressed(kb[Key_E])) {
+    V2s move_dir = {};
+    if (input_held(MOVE_RIGHT) && last_pressed == MOVE_RIGHT) {
+        if (move_hold_timer <= 0) {
+            move_dir.x = 1;
+            move_hold_timer = MOVE_HOLD_TIMER;
+            if (last_pressed_fallback == -1)
+                last_pressed_fallback = last_pressed;
+        }
+    } else if (input_held(MOVE_UP) && last_pressed == MOVE_UP) {
+        if (move_hold_timer <= 0) {
+            move_dir.y = 1;
+            move_hold_timer = MOVE_HOLD_TIMER;
+            if (last_pressed_fallback == -1)
+                last_pressed_fallback = last_pressed;
+        }
+    } else if (input_held(MOVE_LEFT) && last_pressed == MOVE_LEFT) {
+        if (move_hold_timer <= 0) {
+            move_dir.x = -1;
+            move_hold_timer = MOVE_HOLD_TIMER;
+            if (last_pressed_fallback == -1)
+                last_pressed_fallback = last_pressed;
+        }
+    } else if (input_held(MOVE_DOWN) && last_pressed == MOVE_DOWN) {
+        if (move_hold_timer <= 0) {
+            move_dir.y = -1;
+            move_hold_timer = MOVE_HOLD_TIMER;
+            if (last_pressed_fallback == -1)
+                last_pressed_fallback = last_pressed;
+        }
+    }
+    
+    if (input_released(MOVE_RIGHT) || 
+        input_released(MOVE_UP)    ||
+        input_released(MOVE_LEFT)  ||
+        input_released(MOVE_DOWN)) {
+        if (last_pressed_fallback != -1)
+            last_pressed = last_pressed_fallback;
+        last_pressed_fallback = -1;
+        print("last: %d fallback: %d\n", last_pressed, last_pressed_fallback);
+    }
+    
+    // @Todo: Move queues!
+    //
+    move(move_dir.x, move_dir.y);
+    
+    if (input_pressed(ROTATE_CCW) || input_pressed(ROTATE_CW)) {
         // Rotate objs around player.
         for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
             for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
@@ -635,9 +672,9 @@ FUNCTION void update_world()
                     case T_MIRROR:
                     case T_BENDER:
                     case T_SPLITTER: {
-                        if (was_pressed(kb[Key_Q])) // Rotate CCW
+                        if (input_pressed(ROTATE_CCW)) // Rotate CCW
                             objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
-                        else if (was_pressed(kb[Key_E])) // Rotate CW
+                        else if (input_pressed(ROTATE_CW)) // Rotate CW
                             objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
                     } break;
                 }
@@ -705,38 +742,32 @@ FUNCTION void update_world()
 #if DEVELOPER
 FUNCTION void update_editor()
 {
-    Button_State *kb = os->keyboard_buttons;
-    Button_State *mb = os->mouse_buttons;
-    b32 shift_down = is_down(kb[Key_SHIFT]);
-    b32 right = was_pressed(kb[Key_D]) || was_pressed(kb[Key_RIGHT]);
-    b32 up    = was_pressed(kb[Key_W]) || was_pressed(kb[Key_UP]);
-    b32 left  = was_pressed(kb[Key_A]) || was_pressed(kb[Key_LEFT]);
-    b32 down  = was_pressed(kb[Key_S]) || was_pressed(kb[Key_DOWN]);
-    if (right) {
-        if (shift_down) swap_room(1, 0);
+    b32 shift_held = key_held(Key_SHIFT);
+    if (input_pressed(MOVE_RIGHT)) {
+        if (shift_held) swap_room(1, 0);
         move_camera(1, 0);
-    } else if (up) {
-        if (shift_down) swap_room(0, 1);
+    } else if (input_pressed(MOVE_UP)) {
+        if (shift_held) swap_room(0, 1);
         move_camera(0, 1);
-    } else if (left) {
-        if (shift_down) swap_room(-1, 0);
+    } else if (input_pressed(MOVE_LEFT)) {
+        if (shift_held) swap_room(-1, 0);
         move_camera(-1, 0);
-    } else if (down) {
-        if (shift_down) swap_room(0, -1);
+    } else if (input_pressed(MOVE_DOWN)) {
+        if (shift_held) swap_room(0, -1);
         move_camera(0, -1);
     }
     
-    if(is_down(kb[Key_SHIFT])) {
+    if(shift_held) {
         ortho_zoom += -0.45f*os->mouse_scroll.y;
         ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
         if (length2(os->mouse_scroll) != 0) {
             print("Zoom %f\n", ortho_zoom);
         }
     }
-    if (is_down(kb[Key_CONTROL]) && was_pressed(kb[Key_H])) {
+    if (key_held(Key_CONTROL) && key_pressed(Key_H)) {
         flip_room_horizontally();
     }
-    if (is_down(kb[Key_CONTROL]) && was_pressed(kb[Key_V])) {
+    if (key_held(Key_CONTROL) && key_pressed(Key_V)) {
         flip_room_vertically();
     }
     
@@ -744,7 +775,7 @@ FUNCTION void update_editor()
     // Put stuff down.
     //
     if (!mouse_over_ui()) {
-        if (is_down(mb[MouseButton_LEFT])) {
+        if (key_held(Key_MLEFT)) {
             if (game->is_tile_selected) {
                 if ((game->selected_tile_or_obj == Tile_WALL) && (objmap[my][mx].type != T_EMPTY));
                 else
@@ -761,7 +792,7 @@ FUNCTION void update_editor()
                 }
             }
         }
-        if (is_down(mb[MouseButton_RIGHT])) {
+        if (key_held(Key_MRIGHT)) {
             if (game->is_tile_selected) {
                 tilemap[my][mx] = Tile_FLOOR;
             } else {
@@ -772,7 +803,7 @@ FUNCTION void update_editor()
     
     // Put player down.
     //
-    if (is_down(mb[MouseButton_MIDDLE])) {
+    if (key_held(Key_MMIDDLE)) {
         V2 cam = camera;
         set_player_position(mx, my);
         camera = cam;
@@ -790,7 +821,6 @@ FUNCTION void update_editor()
 
 FUNCTION void game_update()
 {
-    Button_State *kb    = os->keyboard_buttons;
     game->delta_mouse   = os->mouse_ndc.xy - game->mouse_ndc_old;
     game->mouse_ndc_old = os->mouse_ndc.xy;
     game->mouse_world   = unproject(v3(camera, 0), 0.0f, 
@@ -804,7 +834,7 @@ FUNCTION void game_update()
     my   = (s32)m.y;
     
 #if DEVELOPER
-    if (was_pressed(kb[Key_F1]))
+    if (key_pressed(Key_F1))
         main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
     if (main_mode == M_GAME) {
         // @Hardcoded:
