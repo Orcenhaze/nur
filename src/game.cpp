@@ -1,6 +1,7 @@
 
 FUNCTION void update_camera()
 {
+    // @Todo: Smooth transition.
     camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
 }
 
@@ -81,7 +82,7 @@ FUNCTION b32 mouse_over_ui()
 FUNCTION void do_editor()
 {
     ImGuiIO& io      = ImGui::GetIO();
-    b32 pressed_left  = key_pressed(Key_MLEFT)  && mouse_over_ui();
+    b32 pressed_left = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse_over_ui();
     
     ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
     
@@ -210,6 +211,10 @@ FUNCTION void do_editor()
             const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
             const char* col = cols[game->selected_color];
             ImGui::SliderInt("Color", &game->selected_color, 0, ARRAY_COUNT(cols)-1, col);
+            
+            ImGui::RadioButton("NONE", &game->selected_flag, 0); ImGui::SameLine();
+            ImGui::RadioButton("LOCK CCW", &game->selected_flag, 1); ImGui::SameLine();
+            ImGui::RadioButton("LOCK CW", &game->selected_flag, 2);
         }
     }
     
@@ -434,8 +439,9 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     Obj test_o = objmap[test_y][test_x];
     
     // Advance until we hit a wall or an object.
-    while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) &&
-           tilemap[test_y][test_x] != Tile_WALL) {
+    while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) && tilemap[test_y][test_x] != Tile_WALL) {
+        if (test_x == px && test_y == py && src_color == Color_RED) 
+            dead = true;
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
         test_x += dirs[src_dir].x;
@@ -444,6 +450,10 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     }
     if (tilemap[test_y][test_x] == Tile_WALL) 
         return;
+    
+    // @Sanity:
+    if (test_x == px && test_y == py && src_color == Color_RED)
+        dead = true;
     
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
@@ -595,23 +605,36 @@ GLOBAL f32 move_hold_timer;
 
 FUNCTION void update_world()
 {
-    // @Todo: Hold A, Hold D, Let go of D... A should take priority again.
-    //
-    
     if (input_pressed(MOVE_RIGHT)) {
         move_hold_timer = 0.0f;
         last_pressed = MOVE_RIGHT;
-        print("RR last: %d fallback: %d\n", last_pressed, last_pressed_fallback);
     } else if (input_pressed(MOVE_UP)) {
         move_hold_timer = 0.0f;
         last_pressed = MOVE_UP;
-        print(" UU last: %d fallback: %d\n", last_pressed, last_pressed_fallback);
     } else if (input_pressed(MOVE_LEFT)) {
         move_hold_timer = 0.0f;
         last_pressed = MOVE_LEFT;
     } else if (input_pressed(MOVE_DOWN)) {
         move_hold_timer = 0.0f;
         last_pressed = MOVE_DOWN;
+    }
+    
+    if (input_released(MOVE_RIGHT)) {
+        if (last_pressed_fallback != MOVE_RIGHT)
+            last_pressed = last_pressed_fallback;
+        last_pressed_fallback = -1;
+    } else if (input_released(MOVE_UP)) {
+        if (last_pressed_fallback != MOVE_UP)
+            last_pressed = last_pressed_fallback;
+        last_pressed_fallback = -1;
+    } else if (input_released(MOVE_LEFT)) {
+        if (last_pressed_fallback != MOVE_LEFT)
+            last_pressed = last_pressed_fallback;
+        last_pressed_fallback = -1;
+    } else if (input_released(MOVE_DOWN)) {
+        if (last_pressed_fallback != MOVE_DOWN)
+            last_pressed = last_pressed_fallback;
+        last_pressed_fallback = -1;
     }
     
     move_hold_timer = MAX(0, move_hold_timer - os->dt);
@@ -647,16 +670,6 @@ FUNCTION void update_world()
         }
     }
     
-    if (input_released(MOVE_RIGHT) || 
-        input_released(MOVE_UP)    ||
-        input_released(MOVE_LEFT)  ||
-        input_released(MOVE_DOWN)) {
-        if (last_pressed_fallback != -1)
-            last_pressed = last_pressed_fallback;
-        last_pressed_fallback = -1;
-        print("last: %d fallback: %d\n", last_pressed, last_pressed_fallback);
-    }
-    
     // @Todo: Move queues!
     //
     move(move_dir.x, move_dir.y);
@@ -672,10 +685,17 @@ FUNCTION void update_world()
                     case T_MIRROR:
                     case T_BENDER:
                     case T_SPLITTER: {
-                        if (input_pressed(ROTATE_CCW)) // Rotate CCW
-                            objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
-                        else if (input_pressed(ROTATE_CW)) // Rotate CW
-                            objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                        if (input_pressed(ROTATE_CCW)) {
+                            if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                            else
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                        } else if (input_pressed(ROTATE_CW)) {
+                            if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                            else
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                        }
                     } break;
                 }
             }
@@ -789,6 +809,11 @@ FUNCTION void update_editor()
                         game->selected_tile_or_obj == T_DOOR ||
                         game->selected_tile_or_obj == T_DOOR_OPEN)
                         objmap[my][mx].c = (u8)game->selected_color;
+                    
+                    if (objmap[my][mx].flags == ObjFlags_NONE) {
+                        objmap[my][mx].flags = game->selected_flag;
+                        game->selected_flag = 0;
+                    }
                 }
             }
         }
@@ -799,14 +824,14 @@ FUNCTION void update_editor()
                 objmap[my][mx] = {};
             }
         }
-    }
-    
-    // Put player down.
-    //
-    if (key_held(Key_MMIDDLE)) {
-        V2 cam = camera;
-        set_player_position(mx, my);
-        camera = cam;
+        
+        // Put player down.
+        //
+        if (key_held(Key_MMIDDLE)) {
+            V2 cam = camera;
+            set_player_position(mx, my);
+            camera = cam;
+        }
     }
     
     // Mouse scroll change dir.
@@ -837,7 +862,6 @@ FUNCTION void game_update()
     if (key_pressed(Key_F1))
         main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
     if (main_mode == M_GAME) {
-        // @Hardcoded:
         ortho_zoom = 4.5f;
         update_camera();
     }
@@ -1114,9 +1138,46 @@ FUNCTION void game_render()
             }
         }
     }
+    immediate_end();
     
+    immediate_begin();
+    set_texture(0);
+    // Draw particles
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_EMPTY) continue;
+            
+            // Locked rotation particles.
+            V3 axis = {};
+            V4 color = {};
+            if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
+                axis = v3(0,0,1);
+                color = v4(0.7f, 0.8f, 0.3f, 1.0f);
+            } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
+                axis = v3(0,0,-1);
+                color = v4(0.5f, 0.2f, 0.6f, 1.0f);
+            }
+            if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
+                V2 pivot     = v2(x, y);
+                V2 p0        = pivot - v2(0.4f, 0.0f);
+                f32 duration = 3.0f;
+                
+                f32 a0        = repeat(os->time/duration, 1.0f);
+                Quaternion q0 = quaternion_from_axis_angle_turns(axis, a0);
+                V2 c0         = rotate_point_around_pivot(p0, pivot, q0);
+                V2 size       = v2(0.03f, 0.03f);
+                immediate_rect(c0, size, color);
+            }
+        }
+    }
+    immediate_end();
+    
+    immediate_begin();
+    set_texture(&tex);
     // Draw player.
-    draw_sprite(px, py, 0.8f, 0.8f, 0 + pdir, 7, 0, 1.0f);
+    s32 c = dead? Color_RED : Color_WHITE;
+    draw_sprite(px, py, 0.8f, 0.8f, 0 + pdir, 7, &colors[c], 1.0f);
     immediate_end();
     
 #if DEVELOPER

@@ -151,7 +151,27 @@ FUNCTION void win32_process_pending_messages()
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     MSG message;
     while (PeekMessage(&message, 0, 0, 0, PM_REMOVE)) {
-        if (!io.WantCaptureKeyboard) {
+#if DEVELOPER
+        if (io.WantCaptureKeyboard || io.WantCaptureMouse) {
+            TranslateMessage(&message);
+            DispatchMessage(&message);
+            
+            // @Hack: When we hold mouse button off ImGui and transition to ImGui window then release it.
+            // Our game will think it's still down. So we'll just copy the mouse state from imgui.
+            //
+            global_os.pressed[Key_MLEFT]    = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+            global_os.held[Key_MLEFT]       = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+            global_os.released[Key_MLEFT]   = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+            
+            global_os.pressed[Key_MRIGHT]   = ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+            global_os.held[Key_MRIGHT]      = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+            global_os.released[Key_MRIGHT]  = ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+            
+            global_os.pressed[Key_MMIDDLE]  = ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
+            global_os.held[Key_MMIDDLE]     = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+            global_os.released[Key_MMIDDLE] = ImGui::IsMouseReleased(ImGuiMouseButton_Middle);
+        } else {
+#endif
             switch (message.message) {
                 case WM_SYSKEYDOWN:
                 case WM_SYSKEYUP:
@@ -216,10 +236,9 @@ FUNCTION void win32_process_pending_messages()
                     DispatchMessage(&message);
                 } break;
             }
-        } else {
-            TranslateMessage(&message);
-            DispatchMessage(&message);
+#if DEVELOPER
         }
+#endif
     }
 }
 
@@ -268,6 +287,9 @@ FUNCTION void win32_process_inputs(HWND window)
     // Put input messages in queue.
     //
     win32_process_pending_messages();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    if (io.WantCaptureKeyboard || io.WantCaptureMouse)
+        return;
     
     // Process queued inputs.
     //

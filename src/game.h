@@ -6,7 +6,7 @@
 //
 #define MAX_BINDS_PER_INPUT 3
 
-enum
+enum Game_Input
 {
     MOVE_RIGHT,
     MOVE_UP,
@@ -27,13 +27,10 @@ GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
     {Key_E}
 };
 
-FUNCTION b32 input_pressed(s32 input)
+FUNCTION b32 input_pressed(Game_Input input)
 {
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
         s32 key = binds[input][i];
-        if (key == Key_NONE)
-            continue;
-        
         if (key_pressed(key))
             return true;
     }
@@ -41,13 +38,10 @@ FUNCTION b32 input_pressed(s32 input)
     return false;
 }
 
-FUNCTION b32 input_held(s32 input)
+FUNCTION b32 input_held(Game_Input input)
 {
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
         s32 key = binds[input][i];
-        if (key == Key_NONE)
-            continue;
-        
         if (key_held(key))
             return true;
     }
@@ -55,13 +49,10 @@ FUNCTION b32 input_held(s32 input)
     return false;
 }
 
-FUNCTION b32 input_released(s32 input)
+FUNCTION b32 input_released(Game_Input input)
 {
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
         s32 key = binds[input][i];
-        if (key == Key_NONE)
-            continue;
-        
         if (key_released(key))
             return true;
     }
@@ -164,10 +155,19 @@ V4 colors[8] = {
     v4(0, 1, 1, 1), // Cyan
 };
 
+enum
+{
+    ObjFlags_NONE = 0,
+    
+    ObjFlags_ONLY_ROTATE_CCW = 1 << 0,
+    ObjFlags_ONLY_ROTATE_CW  = 1 << 1,
+};
+
 struct Obj
 {
     // @Note: Color in each direction. Some objs don't use this.
     u8 color[8];
+    u8 flags;
     u8 type;
     u8 dir;
     u8 c; // The actual color of the object. Used for emitters, detectors and doors.
@@ -190,6 +190,7 @@ GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
 GLOBAL s32 mx; GLOBAL s32 my;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; // Player
+GLOBAL b32 dead = false;
 GLOBAL s32 rx; GLOBAL s32 ry; // Room coords (bottom left square) that the player is in.
 GLOBAL V2 camera;
 
@@ -221,6 +222,7 @@ struct Game_State
     b32 is_tile_selected;
     u8  selected_tile_or_obj;
     s32 selected_color;
+    s32 selected_flag;
 #endif
 };
 GLOBAL Game_State *game;

@@ -1,4 +1,4 @@
-/* orh.h - v0.39 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.40 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.40 - added rotate_point_around_pivot().
 0.39 - completely reworked key state processing and implemented move_towards().
 0.38 - added more functions to dynamic array.
 0.37 - added templated String8 helper function get().
@@ -433,10 +434,12 @@ FUNCDEF inline Quaternion quaternion(f32 x, f32 y, f32 z, f32 w);
 FUNCDEF inline Quaternion quaternion(V3 v, f32 w);
 FUNCDEF inline Quaternion quaternion_identity();
 FUNCDEF Quaternion quaternion_from_axis_angle(V3 axis, f32 angle); // Rotation around _axis_ by _angle_ radians.
+FUNCDEF inline Quaternion quaternion_from_axis_angle_turns(V3 axis, f32 angle_turns); // Rotation around _axis_ by _angle_ turns.
 FUNCDEF Quaternion quaternion_conjugate(Quaternion q);
 FUNCDEF Quaternion quaternion_inverse(Quaternion q);
 FUNCDEF V3         quaternion_get_axis(Quaternion q);
 FUNCDEF f32        quaternion_get_angle(Quaternion q);
+FUNCDEF inline f32 quaternion_get_angle_turns(Quaternion q);
 
 FUNCDEF M4x4 m4x4_identity();
 FUNCDEF M4x4 m4x4_from_quaternion(Quaternion q);
@@ -469,6 +472,8 @@ FUNCDEF inline V4  smoother_step(V4 a, f32 t, V4 b);
 
 FUNCDEF V2 move_towards(V2 current, V2 target, f32 max_distance);
 FUNCDEF V3 move_towards(V3 current, V3 target, f32 max_distance);
+FUNCDEF V2 rotate_point_around_pivot(V2 point, V2 pivot, Quaternion q);
+FUNCDEF V3 rotate_point_around_pivot(V3 point, V3 pivot, Quaternion q);
 
 FUNCDEF inline Range range(f32 min, f32 max);
 FUNCDEF inline Rect2 rect2(V2  min, V2  max);
@@ -2110,6 +2115,11 @@ Quaternion quaternion_from_axis_angle(V3 axis, f32 angle)
     result.w =        _cos(angle*0.5f);
     return result;
 }
+Quaternion quaternion_from_axis_angle_turns(V3 axis, f32 angle_turns)
+{
+    Quaternion result = quaternion_from_axis_angle(axis, angle_turns * TURNS_TO_RADS);
+    return result;
+}
 Quaternion quaternion_conjugate(Quaternion q) 
 {
     Quaternion result;
@@ -2134,7 +2144,11 @@ f32 quaternion_get_angle(Quaternion q)
     f32 result = 2.0f * _arccos(w);
     return result;
 }
-
+f32 quaternion_get_angle_turns(Quaternion q)
+{
+    f32 result = quaternion_get_angle(q) * RADS_TO_TURNS;
+    return result;
+}
 
 M4x4 m4x4_identity() 
 {
@@ -2369,6 +2383,16 @@ V3 move_towards(V3 current, V3 target, f32 max_distance)
     
     f32 ratio = max_distance / distance;
     return current + (delta * ratio);
+}
+V2 rotate_point_around_pivot(V2 point, V2 pivot, Quaternion q)
+{
+    V2 result = rotate_point_around_pivot(v3(point, 0), v3(pivot, 0), q).xy;
+    return result;
+}
+V3 rotate_point_around_pivot(V3 point, V3 pivot, Quaternion q)
+{
+    V3 result = (q * (point - pivot)) + pivot;
+    return result;
 }
 
 Range range(f32 min, f32 max) 
