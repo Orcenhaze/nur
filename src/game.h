@@ -15,6 +15,8 @@ enum Game_Input
     
     ROTATE_CCW,
     ROTATE_CW,
+    
+    UNDO,
 };
 
 GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
@@ -24,7 +26,9 @@ GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
     {Key_S, Key_DOWN},
     
     {Key_Q},
-    {Key_E}
+    {Key_E},
+    
+    {Key_Z}
 };
 
 FUNCTION b32 input_pressed(Game_Input input)
@@ -176,6 +180,7 @@ struct Obj
 struct Player
 {
     s32 x, y;
+    u8 dir;
 };
 
 // The size of a square/cell is 1 unit!
@@ -189,6 +194,7 @@ struct Player
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
+#define PLAYER_ANIMATION_SPEED 8.0f
 GLOBAL s32 mx; GLOBAL s32 my;                                 // Mouse.
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; // Player
 GLOBAL b32 dead = false;

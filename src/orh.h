@@ -1,4 +1,4 @@
-/* orh.h - v0.41 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.42 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.42 - added useful functions for Array: array_remove_range(), array_pop_().
 0.41 - added random_range_v2().
 0.40 - added rotate_point_around_pivot().
 0.39 - completely reworked key state processing and implemented move_towards().
@@ -59,6 +60,7 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
+[] arenas never decommit memory. Find a good way to add that.
 [] arena_init() should take max parameter. If not passed, use the default: ARENA_MAX.
 
 */
@@ -1031,7 +1033,7 @@ struct Array
 };
 
 template<typename T>
-void array_init(Array<T> *array, s64 capacity = 0)
+void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN)
 {
     array->arena    = arena_init();
     array->data     = 0;
@@ -1088,13 +1090,6 @@ void array_reset(Array<T> *array)
 }
 
 template<typename T>
-void array_reset_and_free(Array<T> *array)
-{
-    array_free(array);
-    array_init(array);
-}
-
-template<typename T>
 void array_add(Array<T> *array, T item)
 {
     if (array->count >= array->capacity)
@@ -1102,6 +1097,17 @@ void array_add(Array<T> *array, T item)
     
     array->data[array->count] = item;
     array->count++;
+}
+
+template<typename T>
+void array_remove_range(Array<T> *array, s32 start_index, s32 end_index)
+{
+    ASSERT((start_index >= 0) && (end_index < array->count) && (start_index < end_index));
+    
+    s32 num_elements = end_index - start_index + 1;
+    for (s32 i = start_index; i < end_index+1; i++)
+        array->data[i] = array->data[i+num_elements];
+    array->count -= num_elements;
 }
 
 template<typename T>
@@ -1121,6 +1127,34 @@ void array_ordered_remove_by_index(Array<T> *array, s32 index)
     for (s32 i = index; i < array->count-1; i++)
         array->data[i] = array->data[i+1];
     array->count--;
+}
+
+template<typename T>
+T array_pop_front(Array<T> *array)
+{
+    if (array->count <= 0) {
+        T dummy = {};
+        return dummy;
+    }
+    
+    T result = array->data[0];
+    array_ordered_remove_by_index(array, 0);
+    
+    return result;
+}
+
+template<typename T>
+T array_pop_back(Array<T> *array)
+{
+    if (array->count <= 0) {
+        T dummy = {};
+        return dummy;
+    }
+    
+    T result = array->data[array->count-1];
+    array->count--;
+    
+    return result;
 }
 
 /////////////////////////////////////////
