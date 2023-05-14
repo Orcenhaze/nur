@@ -181,7 +181,7 @@ FUNCTION void win32_process_pending_messages()
                     b32 was_down = (message.lParam & (1 << 30)) == 1;
                     b32 is_down  = (message.lParam & (1 << 31)) == 0;
                     
-                    s32 key = 0;
+                    s32 key = Key_NONE;
                     if ((vkcode >= 'A') && (vkcode <= 'Z')) {
                         key = Key_A + (vkcode - 'A');
                     } else if ((vkcode >= '0') && (vkcode <= '9')) {
@@ -199,8 +199,10 @@ FUNCTION void win32_process_pending_messages()
                         else if (vkcode == VK_DOWN)    key = Key_DOWN;
                     }
                     
-                    Queued_Input input = {key, is_down};
-                    array_add(&global_os.inputs_to_process, input);
+                    if (key != Key_NONE) {
+                        Queued_Input input = {key, is_down};
+                        array_add(&global_os.inputs_to_process, input);
+                    }
                 } break;
                 
                 case WM_LBUTTONDOWN:

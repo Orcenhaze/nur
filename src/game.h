@@ -182,19 +182,18 @@ struct Player
 //
 #define NUM_X  4   // number of rooms.
 #define NUM_Y  4
-#define SIZE_X 8   // size of each room (in squares).
-#define SIZE_Y 8
+#define SIZE_X 10   // size of each room (in squares).
+#define SIZE_Y 10
+#define DEFAULT_ZOOM (SIZE_X*0.55f)
 
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
-GLOBAL s32 mx; GLOBAL s32 my;
-GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; // Player
+GLOBAL s32 mx; GLOBAL s32 my;                                 // Mouse.
+GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; // Player
 GLOBAL b32 dead = false;
-GLOBAL s32 rx; GLOBAL s32 ry; // Room coords (bottom left square) that the player is in.
+GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left square) that player is in.
 GLOBAL V2 camera;
-
-
 
 struct Loaded_Game
 {
@@ -214,6 +213,8 @@ struct Game_State
     V2 delta_mouse;
     V2 mouse_ndc_old;
     V2 mouse_world;
+    
+    Random_PCG rng;
     
 #if DEVELOPER
     // @Note: We want to select using one key (left mouse), so we will store the type is one variable 

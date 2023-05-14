@@ -1,4 +1,4 @@
-/* orh.h - v0.40 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.41 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.41 - added random_range_v2().
 0.40 - added rotate_point_around_pivot().
 0.39 - completely reworked key state processing and implemented move_towards().
 0.38 - added more functions to dynamic array.
@@ -853,6 +854,7 @@ FUNCDEF inline Random_PCG random_seed(u64 seed = 78953890);
 FUNCDEF inline u32 random_next(Random_PCG *rng);
 FUNCDEF inline f32 random_nextf(Random_PCG *rng);         // [0, 1) interval
 FUNCDEF inline u32 random_range(Random_PCG *rng, u32 min, u32 max);  // [min, max) interval.
+FUNCDEF inline V2  random_range_v2(Random_PCG *rng, V2 min, V2 max); // [min, max) interval.
 FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, max) interval.
 
 
@@ -2724,6 +2726,15 @@ u32 random_range(Random_PCG *rng, u32 min, u32 max)
             return min + (r % bound);
         }
     }
+}
+V2 random_range_v2(Random_PCG *rng, V2 min, V2 max)
+{
+    // @Note: Returns value in [min, max) interval.
+    
+    V2 result;
+    result.x = lerp(min.x, random_nextf(rng), max.x);
+    result.y = lerp(min.y, random_nextf(rng), max.y);
+    return result;
 }
 V3 random_range_v3(Random_PCG *rng, V3 min, V3 max)
 {

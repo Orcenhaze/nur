@@ -5,7 +5,13 @@ FUNCTION void update_camera()
     camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
 }
 
-FUNCTION void set_player_position(s32 x, s32 y)
+FUNCTION b32 player_is_at_rest()
+{
+    b32 result = length2(ppos - v2(px, py)) < SQUARE(0.001f);
+    return result;
+}
+
+FUNCTION void set_player_position(s32 x, s32 y, b32 teleport = false)
 {
     s32 room_x = SIZE_X*(x/SIZE_X);
     s32 room_y = SIZE_Y*(y/SIZE_Y);
@@ -17,8 +23,16 @@ FUNCTION void set_player_position(s32 x, s32 y)
         // Calculate camera.
         update_camera();
     }
-    px = x;
-    py = y;
+    
+    if (teleport) {
+        px = ppos.x = x;
+        py = ppos.y = y;
+    } else {
+        ppos.x = px;
+        ppos.y = py;
+        px = x;
+        py = y;
+    }
 }
 
 FUNCTION void save_map()
@@ -50,7 +64,7 @@ FUNCTION void reload_map()
     memory_copy(objmap, g->obj_map, sizeof(objmap));
     Player player;
     memory_copy(&player, &g->player, sizeof(player));
-    set_player_position(player.x, player.y);
+    set_player_position(player.x, player.y, true);
 }
 
 FUNCTION void load_game()
@@ -237,6 +251,9 @@ print("%v3\n", a[i]);\
 print("\n\n");\
 }
 
+#define NUM_ROTATION_PARTICLES 5
+GLOBAL V2 random_rotation_particles[NUM_ROTATION_PARTICLES];
+
 FUNCTION void game_init()
 {
 #if 0
@@ -273,6 +290,11 @@ FUNCTION void game_init()
     
     game = PUSH_STRUCT_ZERO(&os->permanent_arena, Game_State);
     
+    game->rng = random_seed();
+    for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
+        random_rotation_particles[i] = random_range_v2(&game->rng, v2(0), v2(1));
+    }
+    
     {
         USE_TEMP_ARENA_IN_THIS_SCOPE;
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
@@ -292,9 +314,10 @@ FUNCTION void game_init()
             }
         }
         // Initial player and room position.
-        set_player_position(4, 4);
+        set_player_position(4, 4, true);
     }
     
+    ortho_zoom = DEFAULT_ZOOM;
     world_to_view_matrix = look_at(v3(camera, 0),
                                    v3(camera, 0) + v3(0, 0, -1),
                                    v3(0, 1, 0));
@@ -555,7 +578,7 @@ FUNCTION b32 is_obj_collides(u8 type)
     }
 }
 
-FUNCTION void move(s32 dir_x, s32 dir_y)
+FUNCTION void move_player(s32 dir_x, s32 dir_y)
 {
     if (!dir_x && !dir_y) return;
     pdir = dir_x? dir_x<0? Dir_W : Dir_E : dir_y<0? Dir_S : Dir_N;
@@ -602,9 +625,14 @@ FUNCTION void move(s32 dir_x, s32 dir_y)
 GLOBAL s32 last_pressed;
 GLOBAL s32 last_pressed_fallback = -1;
 GLOBAL f32 move_hold_timer;
+GLOBAL s32 queued_moves_count;
+GLOBAL V2s queued_moves[8];
 
 FUNCTION void update_world()
 {
+    ////////////////////////////////
+    // Player movement!
+    //
     if (input_pressed(MOVE_RIGHT)) {
         move_hold_timer = 0.0f;
         last_pressed = MOVE_RIGHT;
@@ -670,12 +698,26 @@ FUNCTION void update_world()
         }
     }
     
-    // @Todo: Move queues!
-    //
-    move(move_dir.x, move_dir.y);
+    if (move_dir.x || move_dir.y) {
+        if (queued_moves_count < ARRAY_COUNT(queued_moves)) {
+            queued_moves[queued_moves_count++] = move_dir;
+        }
+    }
     
+    if (player_is_at_rest() && queued_moves_count > 0) {
+        // Pop the next move.
+        V2s queued_move = queued_moves[0];
+        // Slide other moves down the array.
+        for (s32 i = 0; i < queued_moves_count-1; i++)
+            queued_moves[i] = queued_moves[i+1];
+        queued_moves_count--;
+        
+        move_player(queued_move.x, queued_move.y);
+    }
+    ////////////////////////////////
+    
+    // Rotate objs around player.
     if (input_pressed(ROTATE_CCW) || input_pressed(ROTATE_CW)) {
-        // Rotate objs around player.
         for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
             for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
                 if (dy == py && dx == px)
@@ -791,7 +833,6 @@ FUNCTION void update_editor()
         flip_room_vertically();
     }
     
-    
     // Put stuff down.
     //
     if (!mouse_over_ui()) {
@@ -829,7 +870,7 @@ FUNCTION void update_editor()
         //
         if (key_held(Key_MMIDDLE)) {
             V2 cam = camera;
-            set_player_position(mx, my);
+            set_player_position(mx, my, true);
             camera = cam;
         }
     }
@@ -862,7 +903,7 @@ FUNCTION void game_update()
     if (key_pressed(Key_F1))
         main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
     if (main_mode == M_GAME) {
-        ortho_zoom = 4.5f;
+        ortho_zoom = DEFAULT_ZOOM;
         update_camera();
     }
 #endif
@@ -1153,21 +1194,27 @@ FUNCTION void game_render()
             V4 color = {};
             if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
                 axis = v3(0,0,1);
-                color = v4(0.7f, 0.8f, 0.3f, 1.0f);
+                color = v4(0.7f, 0.8f, 0.3f, 0.8f);
             } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
                 axis = v3(0,0,-1);
-                color = v4(0.5f, 0.2f, 0.6f, 1.0f);
+                color = v4(0.7f, 0.4f, 0.6f, 0.8f);
             }
             if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
                 V2 pivot     = v2(x, y);
-                V2 p0        = pivot - v2(0.4f, 0.0f);
                 f32 duration = 3.0f;
+                V2 size      = v2(0.03f, 0.03f);
                 
-                f32 a0        = repeat(os->time/duration, 1.0f);
-                Quaternion q0 = quaternion_from_axis_angle_turns(axis, a0);
-                V2 c0         = rotate_point_around_pivot(p0, pivot, q0);
-                V2 size       = v2(0.03f, 0.03f);
-                immediate_rect(c0, size, color);
+                for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
+                    f32 radius = 0.4f;
+                    V2 min     = pivot - v2(radius); 
+                    V2 max     = pivot + v2(radius);
+                    V2 p       = min + random_rotation_particles[i]*(max - min);
+                    duration  *= length2(random_rotation_particles[i]);
+                    f32 a      = repeat(os->time/duration, 1.0f);
+                    Quaternion q = quaternion_from_axis_angle_turns(axis, a);
+                    V2 c = rotate_point_around_pivot(p, pivot, q);
+                    immediate_rect(c, size, color);
+                }
             }
         }
     }
@@ -1177,7 +1224,9 @@ FUNCTION void game_render()
     set_texture(&tex);
     // Draw player.
     s32 c = dead? Color_RED : Color_WHITE;
-    draw_sprite(px, py, 0.8f, 0.8f, 0 + pdir, 7, &colors[c], 1.0f);
+    f32 speed = 8.0f;
+    ppos = move_towards(ppos, v2(px, py), speed * os->dt * (queued_moves_count+1));
+    draw_spritef(ppos.x, ppos.y, 0.8f, 0.8f, 0 + pdir, 7, &colors[c], 1.0f);
     immediate_end();
     
 #if DEVELOPER
