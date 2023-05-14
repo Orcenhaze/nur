@@ -133,9 +133,9 @@ V2s obj_sprite[] = {
     v2s(0, 2),
     v2s(0, 3),
     v2s(0, 4), // Draw T_SPLITTER with (s + dir) % 4
-    v2s(0, 5),
-    v2s(0, 6),
-    v2s(1, 6),
+    v2s(4, 4),
+    v2s(5, 4),
+    v2s(6, 4),
 };
 
 enum
@@ -194,7 +194,9 @@ struct Player
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
-#define PLAYER_ANIMATION_SPEED 8.0f
+#define PLAYER_ANIMATION_SPEED 7.0f
+#define NUM_ANIMATION_FRAMES   8
+#define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
 GLOBAL s32 mx; GLOBAL s32 my;                                 // Mouse.
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; // Player
 GLOBAL b32 dead = false;

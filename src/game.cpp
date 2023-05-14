@@ -983,7 +983,7 @@ FUNCTION void draw_sprite(s32 x, s32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, 
     immediate_rect(v2((f32)x, (f32)y), hs, v2(u0, v0), v2(u1, v1), c);
 }
 
-FUNCTION void draw_spritef(f32 x, f32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a)
+FUNCTION void draw_spritef(f32 x, f32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a, b32 invert_u = false)
 {
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
@@ -993,6 +993,12 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w_scale, f32 h_scale, s32 s, s32 t,
     f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / tex.height;
     f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / tex.width;
     f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / tex.height;
+    
+    if (invert_u) {
+        //u0 = 1.0f - u0;
+        //u1 = 1.0f - u1;
+        SWAP(u0, u1, f32);
+    }
     
     immediate_rect(v2(x, y), hs, v2(u0, v0), v2(u1, v1), c);
 }
@@ -1269,12 +1275,34 @@ FUNCTION void game_render()
     }
     immediate_end();
     
+    // @Cleanup: Too messy here!
+    //
     immediate_begin();
     set_texture(&tex);
     // Draw player.
     s32 c = dead? Color_RED : Color_WHITE;
     ppos = move_towards(ppos, v2(px, py), PLAYER_ANIMATION_SPEED * os->dt * (queued_moves_count+1));
-    draw_spritef(ppos.x, ppos.y, 0.8f, 0.8f, 0 + pdir, 7, &colors[c], 1.0f);
+    b32 invert_x = pdir == Dir_W;
+    LOCAL_PERSIST V2s sprite;
+    LOCAL_PERSIST f32 animation_timer;
+    if (pdir == Dir_N)
+        sprite.t = 6;
+    else if (pdir == Dir_S)
+        sprite.t = 7;
+    else 
+        sprite.t = 5;
+    
+    if (player_is_at_rest()) {
+        sprite.s = 0;
+        animation_timer = 0;
+    } else {
+        animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
+        if (animation_timer <= 0) {
+            sprite.s = (sprite.s + 1) % NUM_ANIMATION_FRAMES;
+            animation_timer = ANIMATION_FRAME_DURATION;
+        }
+    }
+    draw_spritef(ppos.x, ppos.y, 0.8f, 0.8f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);
     immediate_end();
     
 #if DEVELOPER

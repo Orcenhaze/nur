@@ -132,7 +132,7 @@ typedef double             f64;
 
 // Nesting macros in if-statements that have no curly-brackets causes issues. Using DOWHILE() avoids all of them.
 #define DOWHILE(s)         do{s}while(0)
-#define SWAP(a, b, Type)   DOWHILE(Type t = a; a = b; b = t;)
+#define SWAP(a, b, Type)   DOWHILE(Type _t = a; a = b; b = _t;)
 
 #if defined(_DEBUG)
 #    ifdef _MSC_VER
