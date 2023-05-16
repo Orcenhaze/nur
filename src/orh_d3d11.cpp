@@ -37,11 +37,7 @@ struct VS_Constants
 
 struct PS_Constants
 {
-    // @Note: tile_rect must be set when rendering tiles, because input UV coordinates to the GPU will
-    // be in tile space. We need to map them to texture space (because that's where we're sampling from)
-    // and to do that, we need to upload the tile UV coordinates in texture atlas space (tile_rect).
-    // This will allow us to do subtexture wrapping in the pixel shader.
-    V4  tile_rect; // v4(min.x, min.y, max.x, max.y);
+    V4  placeholder;
 };
 
 struct Shader
@@ -117,7 +113,6 @@ GLOBAL M4x4         object_to_proj_matrix  = m4x4_identity();
 //
 GLOBAL DWORD current_window_width;
 GLOBAL DWORD current_window_height;
-GLOBAL f32   ortho_zoom; 
 
 FUNCTION void d3d11_create_shader(Shader *shader, const String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC *desc, UINT desc_num_elements)
 {
@@ -224,6 +219,55 @@ FUNCTION void set_texture(Texture *map)
         texture0 = map->view;
     else   
         texture0 = white_texture.view;
+}
+
+FUNCTION void set_view_to_proj(f32 zoom)
+{
+    f32 ar = (f32)os->render_size.width / (f32)os->render_size.height;
+    view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
+}
+
+FUNCTION void set_world_to_view(V3 camera_position)
+{
+    world_to_view_matrix = look_at(camera_position,
+                                   camera_position + v3(0, 0, -1),
+                                   v3(0, 1, 0));
+}
+
+FUNCTION void set_object_to_world(V3 position, Quaternion orientation)
+{
+    // @Note: immediate_() family functions (like immediate_quad(), immediate_triangle(), etc.. ) MUST 
+    // use object-space coordinates for their geometry after calling this function. 
+    // Points are usually passed in world space to immediate_() functions. But after using this function,
+    // you should pass the world position here and use local-space points in the immediate_() functions.
+    //
+    // Example:
+    //
+    // USUALLY:
+    // V3 center = v3(5, 7, 0);  // POINT IN WORLD SPACE
+    // immediate_begin();
+    // immediate_quad(center, v3(1, 1, 0), v4(1));
+    // immediate_end();
+    //
+    //
+    // WHEN WE WANT TO USE set_object_transform():
+    // immediate_begin();
+    // set_object_transform(center, quaternion_identity());
+    // immediate_quad(v3(0), v3(1, 1, 0), v4(1));
+    // immediate_end();
+    //
+    // Notice that we passed v3(0) to immediate_quad() after using set_object_transform(), which means
+    // that the quad object is in it's own local space and it will be transformed to the world in the
+    // vertex shader.
+    
+    M4x4 m = m4x4_identity();
+    m._14  = position.x;
+    m._24  = position.y;
+    m._34  = position.z;
+    
+    M4x4 r = m4x4_from_quaternion(orientation);
+    
+    object_to_world_matrix = m * r;
 }
 
 FUNCTION void d3d11_init(HWND window)
@@ -400,9 +444,7 @@ FUNCTION void d3d11_init(HWND window)
     //
     // Projection transform.
     {
-        ortho_zoom = 5.0f;
-        f32 ar     = (f32)os->render_size.width / (f32)os->render_size.height;
-        view_to_proj_matrix = orthographic_2d(-ar*ortho_zoom, ar*ortho_zoom, -ortho_zoom, ortho_zoom);
+        set_view_to_proj(5.0f);
     }
 }
 
@@ -522,13 +564,6 @@ FUNCTION void d3d11_present(b32 vsync)
 //
 FUNCTION void update_render_transform()
 {
-    //
-    // Projection transform.
-    {
-        f32 ar = (f32)os->render_size.width / (f32)os->render_size.height;
-        view_to_proj_matrix = orthographic_2d(-ar*ortho_zoom, ar*ortho_zoom, -ortho_zoom, ortho_zoom);
-    }
-    
     object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward * object_to_world_matrix;
     
     default_shader.vs_constants.object_to_proj_matrix = object_to_proj_matrix;
@@ -539,65 +574,10 @@ FUNCTION void update_render_transform()
     device_context->Unmap(default_shader.vs_cbuffer, 0);
 }
 
-FUNCTION void set_object_transform(V3 position, Quaternion orientation)
-{
-    // @Note: immediate_() family functions (like immediate_quad(), immediate_triangle(), etc.. ) MUST 
-    // use object-space coordinates for their geometry after calling this function. 
-    // Points are usually passed in world space to immediate_() functions. But after using this function,
-    // you should pass the world position here and use local-space points in the immediate_() functions.
-    //
-    // Example:
-    //
-    // USUALLY:
-    // V3 center = v3(5, 7, 0);  // POINT IN WORLD SPACE
-    // immediate_begin();
-    // immediate_quad(center, v3(1, 1, 0), v4(1));
-    // immediate_end();
-    //
-    //
-    // WHEN WE WANT TO USE set_object_transform():
-    // immediate_begin();
-    // set_object_transform(center, quaternion_identity());
-    // immediate_quad(v3(0), v3(1, 1, 0), v4(1));
-    // immediate_end();
-    //
-    // Notice that we passed v3(0) to immediate_quad() after using set_object_transform(), which means
-    // that the quad object is in it's own local space and it will be transformed to the world in the
-    // vertex shader.
-    
-    M4x4 m = m4x4_identity();
-    m._14  = position.x;
-    m._24  = position.y;
-    m._34  = position.z;
-    
-    M4x4 r = m4x4_from_quaternion(orientation);
-    
-    object_to_world_matrix = m * r;
-}
-
-FUNCTION inline void reset_object_transform()
-{
-    object_to_world_matrix = m4x4_identity();
-}
-
-FUNCTION inline void set_tile_rect(V2 uv_min, V2 uv_max)
-{
-    // @Note: Call this function when rendering tiles.
-    
-    default_shader.ps_constants.tile_rect = v4(uv_min, uv_max);
-}
-
-FUNCTION inline void reset_ps_constants()
-{
-    default_shader.ps_constants.tile_rect = v4(0.0f, 0.0f, 1.0f, 1.0f);
-}
-
 FUNCTION void immediate_end()
 {
     if (!num_immediate_vertices)  {
         set_texture(0);
-        reset_object_transform();
-        reset_ps_constants();
         return;
     }
     
@@ -640,9 +620,6 @@ FUNCTION void immediate_end()
     
     // Reset state.
     num_immediate_vertices = 0;
-    //set_texture(0);
-    reset_object_transform();
-    reset_ps_constants();
 }
 
 FUNCTION void immediate_begin(b32 wireframe = false)

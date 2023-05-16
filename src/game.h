@@ -190,7 +190,6 @@ struct Player
 #define NUM_Y  4
 #define SIZE_X 10   // size of each room (in squares).
 #define SIZE_Y 10
-#define DEFAULT_ZOOM (SIZE_X*0.55f)
 
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
@@ -207,6 +206,10 @@ GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left square) that player is in.
 GLOBAL V2 camera; GLOBAL V2 camera_pos;
 GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos; // Animate obj pushing.
 GLOBAL b32 draw_grid;
+GLOBAL f32 animation_timer;
+
+#define DEFAULT_ZOOM (SIZE_X*0.55f)
+GLOBAL f32 zoom_level; 
 
 struct Loaded_Game
 {

@@ -1,7 +1,9 @@
 
-FUNCTION void update_camera()
+FUNCTION void update_camera(b32 teleport = false)
 {
     camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
+    if (teleport)
+        camera_pos = camera;
 }
 
 FUNCTION b32 player_is_at_rest()
@@ -73,7 +75,7 @@ FUNCTION void reload_map()
     set_player_position(player.x, player.y, player.dir, true);
     
     dead = false;
-    camera_pos = camera;
+    update_camera(true);
     undo_handler_reset(&undo_handler);
 }
 
@@ -327,12 +329,11 @@ FUNCTION void game_init()
         set_player_position(4, 4, Dir_E, true);
     }
     
-    update_camera();
-    ortho_zoom = DEFAULT_ZOOM;
-    camera_pos = camera;
-    world_to_view_matrix = look_at(v3(camera_pos, 0),
-                                   v3(camera_pos, 0) + v3(0, 0, -1),
-                                   v3(0, 1, 0));
+    zoom_level = DEFAULT_ZOOM;
+    set_view_to_proj(zoom_level);
+    
+    update_camera(true);
+    set_world_to_view(v3(camera_pos, 0));
     
     undo_handler_init(&undo_handler);
 }
@@ -648,7 +649,7 @@ GLOBAL f32 move_hold_timer;
 GLOBAL s32 last_pressed;
 GLOBAL s32 last_pressed_fallback = -1;
 GLOBAL s32 queued_moves_count;
-GLOBAL V2s queued_moves[8];
+GLOBAL V2s queued_moves[8]; // @Todo: Decrease max number of queued_moves.
 
 #define UNDO_HOLD_DURATION 0.20f
 GLOBAL f32 undo_hold_timer;
@@ -775,6 +776,8 @@ FUNCTION void update_world()
         queued_moves_count--;
         
         move_player(queued_move.x, queued_move.y);
+    } else if (!player_is_at_rest()) {
+        animation_timer = CLAMP_LOWER(animation_timer - os->dt*(queued_moves_count+1), 0);
     }
     
     ////////////////////////////////
@@ -888,10 +891,11 @@ FUNCTION void update_editor()
     }
     
     if(shift_held) {
-        ortho_zoom += -0.45f*os->mouse_scroll.y;
-        ortho_zoom  = CLAMP_LOWER(ortho_zoom, 0.01f);
+        zoom_level += -0.45f*os->mouse_scroll.y;
+        zoom_level  = CLAMP_LOWER(zoom_level, 0.01f);
+        set_view_to_proj(zoom_level);
         if (length2(os->mouse_scroll) != 0) {
-            print("Zoom %f\n", ortho_zoom);
+            print("zoom_level: %f\n", zoom_level);
         }
     }
     if (key_held(Key_SHIFT) && key_pressed(Key_H)) {
@@ -972,9 +976,9 @@ FUNCTION void game_update()
     if (key_pressed(Key_F1)) {
         main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
         if (main_mode == M_GAME) {
-            ortho_zoom = DEFAULT_ZOOM;
-            update_camera();
-            camera_pos = camera;
+            zoom_level = DEFAULT_ZOOM;
+            set_view_to_proj(zoom_level);
+            update_camera(true);
         }
     }
     
@@ -991,9 +995,7 @@ FUNCTION void game_update()
     }
     
     camera_pos = move_towards(camera_pos, camera, os->dt*30.0f);
-    world_to_view_matrix = look_at(v3(camera_pos, 0),
-                                   v3(camera_pos, 0) + v3(0, 0, -1),
-                                   v3(0, 1, 0));
+    set_world_to_view(v3(camera_pos, 0));
 }
 
 FUNCTION void draw_sprite(s32 x, s32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a)
@@ -1339,7 +1341,6 @@ FUNCTION void game_render()
     b32 invert_x = pdir == Dir_W;
     s32 base_s   = pdir == Dir_N? 4 : 0;
     LOCAL_PERSIST V2s sprite;
-    LOCAL_PERSIST f32 animation_timer;
     
     if (pdir == Dir_S)
         sprite.t = 6;
@@ -1349,13 +1350,10 @@ FUNCTION void game_render()
     if (player_is_at_rest()) {
         animation_timer = 0;
         sprite.s = base_s;
-    } else {
-        animation_timer = CLAMP_LOWER(animation_timer - os->dt*(queued_moves_count+1), 0);
-        if (animation_timer <= 0) {
-            sprite.s = base_s + ((sprite.s + 1) % NUM_ANIMATION_FRAMES);
-            animation_timer = ANIMATION_FRAME_DURATION;
-            //print("s: %d\n", sprite.s);
-        }
+    } else if (animation_timer <= 0) {
+        sprite.s = base_s + ((sprite.s + 1) % NUM_ANIMATION_FRAMES);
+        animation_timer = ANIMATION_FRAME_DURATION;
+        //print("s: %d\n", sprite.s);
     }
     ppos = move_towards(ppos, v2(px, py), player_max_distance);
     draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);

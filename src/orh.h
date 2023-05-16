@@ -2624,8 +2624,9 @@ M4x4_Inverse infinite_perspective(f32 fov, f32 aspect, f32 n)
     
     return result;
 }
-M4x4_Inverse orthographic_3d(f32 left, f32 right, f32 bottom, f32 top, f32 n, f32 f, b32 normalized_z = true)
+M4x4_Inverse orthographic_3d(f32 left, f32 right, f32 bottom, f32 top, f32 n, f32 f, b32 normalized_z)
 {
+    // @Note: normalized_z should be true for D3D11 and false for OpenGL.
     ASSERT(left != right);
     ASSERT(bottom != top);
     

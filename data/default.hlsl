@@ -35,13 +35,11 @@ PS_INPUT vs(VS_INPUT input)
 
 cbuffer PS_Constants : register(b1)
 {
-	float4 tile_rect; // (min.x, min.y, max.x, max.y)
+	float4 placeholder;
 }
 
 float4 ps(PS_INPUT input) : SV_TARGET
 {
-	float2 tile_rect_size = tile_rect.zw - tile_rect.xy;
-	float2 uv  = frac(input.uv) * tile_rect_size + tile_rect.xy;
-	float4 tex = texture0.Sample(sampler0, uv);
+	float4 tex = texture0.Sample(sampler0, input.uv);
 	return input.color * tex;
 }
