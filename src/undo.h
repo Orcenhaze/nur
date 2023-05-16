@@ -134,6 +134,8 @@ FUNCTION void undo_perform_action(Undo_Action action)
         } break;
         case ActionType_OBJ_MOVE: {
             Obj_Move c = action.obj_move;
+            // @Todo: Animate obj when undoing?
+            //pushed_obj = v2(c.from_x, c.from_y);
             SWAP(objmap[c.to_y][c.to_x], objmap[c.from_y][c.from_x], Obj);
         } break;
         case ActionType_OBJ_ROTATE: {

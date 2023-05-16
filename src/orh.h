@@ -2401,23 +2401,23 @@ V4 smoother_step(V4 a, f32 t, V4 b)
 V2 move_towards(V2 current, V2 target, f32 max_distance)
 {
     V2 delta = target - current;
-    f32 distance = length(delta);
+    f32 distance2 = length2(delta);
     
-    if (distance <= max_distance || distance == 0.0f) 
+    if (distance2 <= SQUARE(max_distance)) 
         return target;
     
-    f32 ratio = max_distance / distance;
+    f32 ratio = max_distance / _sqrt(distance2);
     return current + (delta * ratio);
 }
 V3 move_towards(V3 current, V3 target, f32 max_distance)
 {
     V3 delta = target - current;
-    f32 distance = length(delta);
+    f32 distance2 = length2(delta);
     
-    if (distance <= max_distance || distance == 0.0f) 
+    if (distance2 <= SQUARE(max_distance)) 
         return target;
     
-    f32 ratio = max_distance / distance;
+    f32 ratio = max_distance / _sqrt(distance2);
     return current + (delta * ratio);
 }
 V2 rotate_point_around_pivot(V2 point, V2 pivot, Quaternion q)

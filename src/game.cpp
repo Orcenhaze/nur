@@ -1,7 +1,6 @@
 
 FUNCTION void update_camera()
 {
-    // @Todo: Smooth transition.
     camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
 }
 
@@ -37,7 +36,6 @@ FUNCTION void set_player_position(s32 x, s32 y, u8 dir, b32 teleport = false)
     pdir = dir;
 }
 
-// @Cleanup:
 // @Todo: Must organize files.
 #include "undo.h"
 GLOBAL Undo_Handler undo_handler;
@@ -75,6 +73,7 @@ FUNCTION void reload_map()
     set_player_position(player.x, player.y, player.dir, true);
     
     dead = false;
+    camera_pos = camera;
     undo_handler_reset(&undo_handler);
 }
 
@@ -328,10 +327,13 @@ FUNCTION void game_init()
         set_player_position(4, 4, Dir_E, true);
     }
     
+    update_camera();
     ortho_zoom = DEFAULT_ZOOM;
-    world_to_view_matrix = look_at(v3(camera, 0),
-                                   v3(camera, 0) + v3(0, 0, -1),
+    camera_pos = camera;
+    world_to_view_matrix = look_at(v3(camera_pos, 0),
+                                   v3(camera_pos, 0) + v3(0, 0, -1),
                                    v3(0, 1, 0));
+    
     undo_handler_init(&undo_handler);
 }
 
@@ -346,6 +348,8 @@ FUNCTION void move_camera(s32 dir_x, s32 dir_y)
     
     camera.x = temp_x;
     camera.y = temp_y;
+    
+    camera_pos = camera;
 }
 
 FUNCTION void swap_room(s32 dir_x, s32 dir_y)
@@ -594,7 +598,8 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
 {
     if (!dir_x && !dir_y) return;
     u8 old_dir = pdir;
-    pdir      = dir_x? dir_x<0? Dir_W : Dir_E : dir_y<0? Dir_S : Dir_N;
+    pdir       = dir_x? dir_x<0? Dir_W : Dir_E : dir_y<0? Dir_S : Dir_N;
+    
     s32 tempx = px + dir_x; 
     s32 tempy = py + dir_y;
     if (is_outside_map(tempx, tempy))
@@ -627,6 +632,8 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
                 return;
             }
             
+            pushed_obj     = v2(nx, ny);
+            pushed_obj_pos = v2(tempx, tempy);
             undo_push_obj_move(&undo_handler, tempx, tempy, nx, ny);
             SWAP(objmap[tempy][tempx], objmap[ny][nx], Obj);
         }
@@ -636,21 +643,24 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
     set_player_position(tempx, tempy, pdir);
 }
 
-#define MOVE_HOLD_TIMER 0.25f
+#define MOVE_HOLD_DURATION 0.20f
 GLOBAL f32 move_hold_timer;
 GLOBAL s32 last_pressed;
 GLOBAL s32 last_pressed_fallback = -1;
 GLOBAL s32 queued_moves_count;
 GLOBAL V2s queued_moves[8];
 
-#define UNDO_HOLD_TIMER 0.25f
+#define UNDO_HOLD_DURATION 0.20f
 GLOBAL f32 undo_hold_timer;
 GLOBAL f32 undo_speed_scale;
 
 FUNCTION void update_world()
 {
+    ////////////////////////////////
+    // Undo!
+    //
     if (input_pressed(UNDO)) {
-        undo_hold_timer = 0.0f;
+        undo_hold_timer  = 0.0f;
         undo_speed_scale = 1.0f;
     }
     
@@ -659,18 +669,15 @@ FUNCTION void update_world()
     if (input_held(UNDO)) {
         if (undo_hold_timer <= 0) {
             undo_next(&undo_handler);
-            undo_hold_timer  = UNDO_HOLD_TIMER * undo_speed_scale;
-            undo_speed_scale = CLAMP_LOWER(undo_speed_scale - 4.0f*os->dt, 0.4f);
+            undo_hold_timer  = UNDO_HOLD_DURATION * undo_speed_scale;
+            undo_speed_scale = CLAMP_LOWER(undo_speed_scale - 3.5f*os->dt, 0.3f);
             
             // @Hardcoded:
             dead = false;
             
-            print("COMMIT: %m\n", undo_handler.records.arena.commit_used);
+            //print("COMMIT: %m\n", undo_handler.records.arena.commit_used);
         }
-        
-        return;
     }
-    
     
     if (dead)
         return;
@@ -713,34 +720,44 @@ FUNCTION void update_world()
     move_hold_timer = MAX(0, move_hold_timer - os->dt);
     
     V2s move_dir = {};
+    b32 move_input_held = false; 
     if (input_held(MOVE_RIGHT) && last_pressed == MOVE_RIGHT) {
+        move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.x = 1;
-            move_hold_timer = MOVE_HOLD_TIMER;
+            move_hold_timer = MOVE_HOLD_DURATION;
             if (last_pressed_fallback == -1)
                 last_pressed_fallback = last_pressed;
         }
     } else if (input_held(MOVE_UP) && last_pressed == MOVE_UP) {
+        move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.y = 1;
-            move_hold_timer = MOVE_HOLD_TIMER;
+            move_hold_timer = MOVE_HOLD_DURATION;
             if (last_pressed_fallback == -1)
                 last_pressed_fallback = last_pressed;
         }
     } else if (input_held(MOVE_LEFT) && last_pressed == MOVE_LEFT) {
+        move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.x = -1;
-            move_hold_timer = MOVE_HOLD_TIMER;
+            move_hold_timer = MOVE_HOLD_DURATION;
             if (last_pressed_fallback == -1)
                 last_pressed_fallback = last_pressed;
         }
     } else if (input_held(MOVE_DOWN) && last_pressed == MOVE_DOWN) {
+        move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.y = -1;
-            move_hold_timer = MOVE_HOLD_TIMER;
+            move_hold_timer = MOVE_HOLD_DURATION;
             if (last_pressed_fallback == -1)
                 last_pressed_fallback = last_pressed;
         }
+    }
+    
+    if (move_input_held) {
+        undo_hold_timer  = UNDO_HOLD_DURATION;
+        undo_speed_scale = 1.0f;
     }
     
     if (move_dir.x || move_dir.y) {
@@ -759,7 +776,10 @@ FUNCTION void update_world()
         
         move_player(queued_move.x, queued_move.y);
     }
+    
     ////////////////////////////////
+    // Update map.
+    //
     
     // Rotate objs around player.
     if (input_pressed(ROTATE_CCW) || input_pressed(ROTATE_CW)) {
@@ -874,10 +894,10 @@ FUNCTION void update_editor()
             print("Zoom %f\n", ortho_zoom);
         }
     }
-    if (key_held(Key_CONTROL) && key_pressed(Key_H)) {
+    if (key_held(Key_SHIFT) && key_pressed(Key_H)) {
         flip_room_horizontally();
     }
-    if (key_held(Key_CONTROL) && key_pressed(Key_V)) {
+    if (key_held(Key_SHIFT) && key_pressed(Key_V)) {
         flip_room_vertically();
     }
     
@@ -949,11 +969,17 @@ FUNCTION void game_update()
     my   = (s32)m.y;
     
 #if DEVELOPER
-    if (key_pressed(Key_F1))
+    if (key_pressed(Key_F1)) {
         main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
-    if (main_mode == M_GAME) {
-        ortho_zoom = DEFAULT_ZOOM;
-        update_camera();
+        if (main_mode == M_GAME) {
+            ortho_zoom = DEFAULT_ZOOM;
+            update_camera();
+            camera_pos = camera;
+        }
+    }
+    
+    if (key_pressed(Key_G)) {
+        draw_grid = !draw_grid;
     }
 #endif
     
@@ -964,8 +990,9 @@ FUNCTION void game_update()
 #endif
     }
     
-    world_to_view_matrix = look_at(v3(camera, 0),
-                                   v3(camera, 0) + v3(0, 0, -1),
+    camera_pos = move_towards(camera_pos, camera, os->dt*30.0f);
+    world_to_view_matrix = look_at(v3(camera_pos, 0),
+                                   v3(camera_pos, 0) + v3(0, 0, -1),
                                    v3(0, 1, 0));
 }
 
@@ -995,8 +1022,6 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w_scale, f32 h_scale, s32 s, s32 t,
     f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / tex.height;
     
     if (invert_u) {
-        //u0 = 1.0f - u0;
-        //u1 = 1.0f - u1;
         SWAP(u0, u1, f32);
     }
     
@@ -1037,7 +1062,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         return;
     }
     
-    // We hit an object, so we should determine which color to reflect in which dir.  
+    // We hit an object, so we should determine which color to draw in which dir.  
     switch (test_o.type) {
         case T_DOOR: {
             draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
@@ -1053,6 +1078,10 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
             return;
         } break;
+        //
+        // @Todo: When pushing Mirrors, Benders and Splitters, the beam is in the center and not
+        // drawing in floating point.
+        //
         case T_MIRROR: {
             u8 inv_d  = WRAP_D(src_dir + 4);
             u8 ninv_d = WRAP_D(inv_d + 1);
@@ -1150,11 +1179,13 @@ FUNCTION void game_render()
     }
     immediate_end();
     
-    immediate_begin();
-    set_texture(0);
-    // Draw grid.
-    immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
-    immediate_end();
+    if (draw_grid) {
+        immediate_begin();
+        set_texture(0);
+        // Draw grid.
+        immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
+        immediate_end();
+    }
     
     immediate_begin();
     set_texture(&tex);
@@ -1202,6 +1233,10 @@ FUNCTION void game_render()
     }
     immediate_end();
     
+    //
+    f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt * (queued_moves_count+1);
+    //
+    
     immediate_begin();
     set_texture(&tex);
     // Draw objs.
@@ -1215,17 +1250,35 @@ FUNCTION void game_render()
                     sprite.s += o.dir;
                     draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                 } break;
+                //
+                // @Todo:  Combine T_MIRROR and T_BENDER and T_SPLITTER if they remain the same.
+                //
                 case T_MIRROR: {
                     sprite.s += o.dir;
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    if (pushed_obj.x == x && pushed_obj.y == y) {
+                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    } else {
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    }
                 } break;
                 case T_BENDER: {
                     sprite.s += o.dir;
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    if (pushed_obj.x == x && pushed_obj.y == y) {
+                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    } else {
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    }
                 } break;
                 case T_SPLITTER: {
                     sprite.s = (sprite.s + o.dir) % 4;
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    if (pushed_obj.x == x && pushed_obj.y == y) {
+                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    } else {
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    }
                 } break;
                 case T_DOOR:
                 case T_DOOR_OPEN: {
@@ -1255,10 +1308,14 @@ FUNCTION void game_render()
                 color = v4(0.7f, 0.4f, 0.6f, 0.8f);
             }
             if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                V2 pivot     = v2(x, y);
+                V2 pivot;
+                if (pushed_obj.x == x && pushed_obj.y == y)
+                    pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
+                else 
+                    pivot = v2(x, y);
+                
                 f32 duration = 3.0f;
                 V2 size      = v2(0.03f, 0.03f);
-                
                 for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
                     f32 radius = 0.4f;
                     V2 min     = pivot - v2(radius); 
@@ -1275,34 +1332,33 @@ FUNCTION void game_render()
     }
     immediate_end();
     
-    // @Cleanup: Too messy here!
-    //
     immediate_begin();
     set_texture(&tex);
     // Draw player.
-    s32 c = dead? Color_RED : Color_WHITE;
-    ppos = move_towards(ppos, v2(px, py), PLAYER_ANIMATION_SPEED * os->dt * (queued_moves_count+1));
+    s32 c        = dead? Color_RED : Color_WHITE;
     b32 invert_x = pdir == Dir_W;
+    s32 base_s   = pdir == Dir_N? 4 : 0;
     LOCAL_PERSIST V2s sprite;
     LOCAL_PERSIST f32 animation_timer;
-    if (pdir == Dir_N)
+    
+    if (pdir == Dir_S)
         sprite.t = 6;
-    else if (pdir == Dir_S)
-        sprite.t = 7;
-    else 
+    else
         sprite.t = 5;
     
     if (player_is_at_rest()) {
-        sprite.s = 0;
         animation_timer = 0;
+        sprite.s = base_s;
     } else {
-        animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
+        animation_timer = CLAMP_LOWER(animation_timer - os->dt*(queued_moves_count+1), 0);
         if (animation_timer <= 0) {
-            sprite.s = (sprite.s + 1) % NUM_ANIMATION_FRAMES;
+            sprite.s = base_s + ((sprite.s + 1) % NUM_ANIMATION_FRAMES);
             animation_timer = ANIMATION_FRAME_DURATION;
+            //print("s: %d\n", sprite.s);
         }
     }
-    draw_spritef(ppos.x, ppos.y, 0.8f, 0.8f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);
+    ppos = move_towards(ppos, v2(px, py), player_max_distance);
+    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);
     immediate_end();
     
 #if DEVELOPER

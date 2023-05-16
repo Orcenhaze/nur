@@ -170,6 +170,7 @@ enum
 struct Obj
 {
     // @Note: Color in each direction. Some objs don't use this.
+    // @Todo: Use bitfileds?
     u8 color[8];
     u8 flags;
     u8 type;
@@ -194,14 +195,18 @@ struct Player
 GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
-#define PLAYER_ANIMATION_SPEED 7.0f
-#define NUM_ANIMATION_FRAMES   8
+// @Cleanup: What a mess!
+//
+#define PLAYER_ANIMATION_SPEED 5.0f
+#define NUM_ANIMATION_FRAMES   4
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
 GLOBAL s32 mx; GLOBAL s32 my;                                 // Mouse.
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; // Player
 GLOBAL b32 dead = false;
 GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left square) that player is in.
-GLOBAL V2 camera;
+GLOBAL V2 camera; GLOBAL V2 camera_pos;
+GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos; // Animate obj pushing.
+GLOBAL b32 draw_grid;
 
 struct Loaded_Game
 {
