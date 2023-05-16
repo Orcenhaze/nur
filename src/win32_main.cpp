@@ -273,13 +273,13 @@ FUNCTION void win32_process_inputs(HWND window)
     POINT cursor; 
     GetCursorPos(&cursor);
     ScreenToClient(window, &cursor);
-    global_os.mouse_screen = {
+    V2 mouse_client = {
         (f32) cursor.x,
         ((f32)global_os.window_size.height - 1.0f) - cursor.y,
     };
     global_os.mouse_ndc = {
-        2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.x, global_os.mouse_screen.x, global_os.drawing_rect.max.x) - 1.0f,
-        2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.y, global_os.mouse_screen.y, global_os.drawing_rect.max.y) - 1.0f,
+        2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.x, mouse_client.x, global_os.drawing_rect.max.x) - 1.0f,
+        2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.y, mouse_client.y, global_os.drawing_rect.max.y) - 1.0f,
         0.0f
     };
     

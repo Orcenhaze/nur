@@ -1,4 +1,4 @@
-/* orh.h - v0.42 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.43 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.43 - removed mouse_screen from OS_State.
 0.42 - added useful functions for Array: array_remove_range(), array_pop_().
 0.41 - added random_range_v2().
 0.40 - added rotate_point_around_pivot().
@@ -1402,8 +1403,7 @@ struct OS_State
     b32 pressed [Key_COUNT];
     b32 held    [Key_COUNT];
     b32 released[Key_COUNT];
-    V3  mouse_screen;
-    V3  mouse_ndc;
+    V3  mouse_ndc;           // In [-1, 1] interval - relative to drawing_rect.
     V2  mouse_scroll;
     
     // Options.
