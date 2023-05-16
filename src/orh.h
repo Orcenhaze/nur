@@ -1410,10 +1410,10 @@ struct OS_State
     b32 vsync;
     b32 fix_aspect_ratio;
     V2u render_size;         // Determines aspect ratio.
-    V2u window_size;
-    Rect2 drawing_rect;      // In screen space - relative to client window.
+    V2u window_size;         // Client window width and height.
+    Rect2 drawing_rect;      // In pixel space - relative to client window.
     f32 dt;                  // The timestep - it should be fixed!
-    f64 time;                // Incremented by dt at the end of each frame.
+    f64 time;                // Incremented by dt at the end of each update.
     
     // Functions.
     void*   (*reserve) (u64 size);
