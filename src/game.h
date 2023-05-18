@@ -2,7 +2,7 @@
 #define GAME_H
 
 ////////////////////////////////
-// @Note: Game inputs.
+// Game inputs.
 //
 #define MAX_BINDS_PER_INPUT 3
 
@@ -66,15 +66,36 @@ FUNCTION b32 input_released(Game_Input input)
 
 ////////////////////////////////
 ////////////////////////////////
-
+// Menu
+//
 GLOBAL b32 game_loaded = false;
 enum
 {
-    M_LOGO,
     M_MENU,
     M_GAME,
     M_EDITOR
 } GLOBAL main_mode = M_GAME;
+
+s32 menu_selection = 0;
+GLOBAL char *choices[] = 
+{
+    "START GAME",
+    "SAVE AND QUIT"
+};
+
+////////////////////////////////
+////////////////////////////////
+// Textures
+//
+#define TILE_SIZE 16  // In pixels!
+Texture tex;
+
+#define FONT_TILE_W 6 // In pixels!
+#define FONT_TILE_H 8
+Texture font_tex;
+
+////////////////////////////////
+
 
 #define WRAP_D(d) (((d) + 8) % 8)
 enum
@@ -100,9 +121,6 @@ V2s dirs[8] = {
     v2s( 0, -1),
     v2s( 1, -1),
 };
-
-#define TILE_SIZE 16  // In pixels!
-Texture tex;
 
 enum
 {

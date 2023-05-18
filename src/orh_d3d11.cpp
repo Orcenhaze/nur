@@ -114,6 +114,11 @@ GLOBAL M4x4         object_to_proj_matrix  = m4x4_identity();
 GLOBAL DWORD current_window_width;
 GLOBAL DWORD current_window_height;
 
+//
+// State.
+//
+GLOBAL b32 is_using_pixel_coords;
+
 FUNCTION void d3d11_create_shader(Shader *shader, const String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC *desc, UINT desc_num_elements)
 {
     String8 file = os->read_entire_file(hlsl_path);
@@ -329,16 +334,16 @@ FUNCTION void d3d11_init(HWND window)
     {
         D3D11_RASTERIZER_DESC desc = {};
         desc.FillMode              = D3D11_FILL_SOLID;
-        desc.CullMode              = D3D11_CULL_BACK;
-        desc.FrontCounterClockwise = TRUE;
+        desc.CullMode              = D3D11_CULL_NONE;
+        //desc.FrontCounterClockwise = TRUE;
         //desc.MultisampleEnable     = TRUE;
         device->CreateRasterizerState(&desc, &rasterizer_state_solid);
     }
     {
         D3D11_RASTERIZER_DESC desc = {};
         desc.FillMode              = D3D11_FILL_WIREFRAME;
-        desc.CullMode              = D3D11_CULL_BACK;
-        desc.FrontCounterClockwise = TRUE;
+        desc.CullMode              = D3D11_CULL_NONE;
+        //desc.FrontCounterClockwise = TRUE;
         //desc.MultisampleEnable     = TRUE;
         device->CreateRasterizerState(&desc, &rasterizer_state_wireframe);
     }
@@ -562,9 +567,24 @@ FUNCTION void d3d11_present(b32 vsync)
 // Immediate mode stuff.
 //
 //
+FUNCTION V2 pixel_to_ndc(V2 pixel)
+{
+    f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
+    f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
+    
+    V2 p = hadamard_div(pixel, v2(w, h));
+    p    = 2.0f*p - v2(1.0f);
+    p.y *= -1;
+    
+    return p;
+}
+
 FUNCTION void update_render_transform()
 {
-    object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward * object_to_world_matrix;
+    if (is_using_pixel_coords)
+        object_to_proj_matrix = m4x4_identity();
+    else
+        object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward * object_to_world_matrix;
     
     default_shader.vs_constants.object_to_proj_matrix = object_to_proj_matrix;
     
@@ -577,7 +597,6 @@ FUNCTION void update_render_transform()
 FUNCTION void immediate_end()
 {
     if (!num_immediate_vertices)  {
-        set_texture(0);
         return;
     }
     
@@ -620,6 +639,7 @@ FUNCTION void immediate_end()
     
     // Reset state.
     num_immediate_vertices = 0;
+    is_using_pixel_coords  = false;
 }
 
 FUNCTION void immediate_begin(b32 wireframe = false)
@@ -642,6 +662,9 @@ FUNCTION void immediate_vertex(V2 position, V4 color)
 {
     if (num_immediate_vertices == MAX_IMMEDIATE_VERTICES) immediate_end();
     
+    if (is_using_pixel_coords)
+        position = pixel_to_ndc(position);
+    
     Vertex_XCNU *v = immediate_vertex_ptr(num_immediate_vertices);
     v->position    = v3(position, 0);
     v->color       = color;
@@ -654,6 +677,9 @@ FUNCTION void immediate_vertex(V2 position, V4 color)
 FUNCTION void immediate_vertex(V2 position, V2 uv, V4 color)
 {
     if (num_immediate_vertices == MAX_IMMEDIATE_VERTICES) immediate_end();
+    
+    if (is_using_pixel_coords)
+        position = pixel_to_ndc(position);
     
     Vertex_XCNU *v = immediate_vertex_ptr(num_immediate_vertices);
     v->position    = v3(position, 0);
@@ -708,6 +734,28 @@ FUNCTION void immediate_quad(V2 p0, V2 p1, V2 p2, V2 p3,
     immediate_vertex(p0, uv0, color);
     immediate_vertex(p2, uv2, color);
     immediate_vertex(p3, uv3, color);
+}
+
+// @Cleanup:
+//
+FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 color)
+{
+    // @Note: We provide top left position, so we need to be careful with winding order.
+    
+    // CCW starting bottom-left.
+    
+    V2 p3 = top_left;
+    V2 p1 = top_left + size;
+    V2 p0 = v2(p3.x, p1.y);
+    V2 p2 = v2(p1.x, p3.y);
+    
+    // @Note: UV coordinates origin is top-left corner.
+    V2 uv3 = uv_min;
+    V2 uv1 = uv_max;
+    V2 uv0 = v2(uv3.x, uv1.y);
+    V2 uv2 = v2(uv1.x, uv3.y);
+    
+    immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
 }
 
 FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv_min, V2 uv_max, V4 color)

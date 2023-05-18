@@ -310,6 +310,7 @@ FUNCTION void game_init()
     {
         USE_TEMP_ARENA_IN_THIS_SCOPE;
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
+        d3d11_load_texture(&font_tex, sprint("%Sfont_sprites.png", os->data_folder));
     }
     
     load_game();
@@ -998,36 +999,73 @@ FUNCTION void game_update()
     set_world_to_view(v3(camera_pos, 0));
 }
 
-FUNCTION void draw_sprite(s32 x, s32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a)
+// @Todo: Combine draw_sprite and draw_spritef?
+//
+FUNCTION void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, Texture *texture = &tex)
 {
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    V2 hs  = v2(0.5f * w_scale, 0.5f * h_scale);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / tex.width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / tex.height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / tex.width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / tex.height;
+    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / texture->width;
+    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / texture->height;
+    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
+    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
     
-    immediate_rect(v2((f32)x, (f32)y), hs, v2(u0, v0), v2(u1, v1), c);
+    immediate_rect(v2((f32)x, (f32)y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
 }
 
-FUNCTION void draw_spritef(f32 x, f32 y, f32 w_scale, f32 h_scale, s32 s, s32 t, V4 *color, f32 a, b32 invert_u = false)
+FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 invert_u = false, Texture *texture = &tex)
 {
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    V2 hs  = v2(0.5f * w_scale, 0.5f * h_scale);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / tex.width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / tex.height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / tex.width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / tex.height;
+    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / texture->width;
+    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / texture->height;
+    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
+    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
     
     if (invert_u) {
         SWAP(u0, u1, f32);
     }
     
-    immediate_rect(v2(x, y), hs, v2(u0, v0), v2(u1, v1), c);
+    immediate_rect(v2(x, y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
+}
+
+// @Cleanup:
+//
+FUNCTION void draw_sprite_text(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
+{
+    // @Note: We use this for text because we draw text with top_left position instead of center.
+    //
+    
+    // Offsetting uv-coords with 0.05f to avoid texture bleeding.
+    //
+    V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
+    f32 u0 = (((s + 0) * FONT_TILE_W) + 0.05f) / font_tex.width;
+    f32 v0 = (((t + 0) * FONT_TILE_H) + 0.05f) / font_tex.height;
+    f32 u1 = (((s + 1) * FONT_TILE_W) - 0.05f) / font_tex.width;
+    f32 v1 = (((t + 1) * FONT_TILE_H) - 0.05f) / font_tex.height;
+    
+    immediate_rect_tl(v2(x, y), v2(w, h), v2(u0, v0), v2(u1, v1), c);
+}
+GLOBAL char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/- ";
+FUNCTION s32 draw_text(s32 top_left_x, s32 top_left_y, s32 scale, V4 color, u8 *text)
+{
+    while (*text) {
+        char *p = strchr(font, *text);
+        if (p) {
+            s32 ch = p - font;
+            s32 s  = ch % (font_tex.width / FONT_TILE_W);
+            s32 t  = ch / (font_tex.width / FONT_TILE_W);
+            
+            draw_sprite_text(top_left_x, top_left_y, FONT_TILE_W*scale, FONT_TILE_H*scale, s, t, &color, 1.0f);
+            top_left_x += FONT_TILE_W * scale;
+        }
+        
+        text++;
+    }
+    
+    return top_left_x;
 }
 
 FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.06f)
@@ -1361,10 +1399,30 @@ FUNCTION void game_render()
     
 #if DEVELOPER
     // Draw debugging stuff.
+    
+    // @Cleanup:
+    //
     immediate_begin();
-    set_texture(0);
-    //immediate_rect(v2(0), v2(0.2f, 0.2f), v4(1,0,1,1));
-    //immediate_rect(v2(NUM_X*SIZE_X-1, 0), v2(0.2f, 0.2f), v4(1,0,1,1));
+    set_texture(&font_tex);
+    is_using_pixel_coords = true;
+    f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
+    f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
+    s32 sx = w/2;
+    s32 sy = h/2;
+    
+    String8 test = S8LIT("TEST STRING");
+    s32 scale = 4 * (w/os->render_size.width);
+    s32 width = test.count*FONT_TILE_W*scale;
+    
+    
+    draw_text(sx - width/2, sy, scale, v4(1,0,0,1), test.data);
+    
+    sy += 50* (w/os->render_size.width);
+    
+    String8 test2 = S8LIT("HELLO");
+    s32 scale2 = 18 * (w/os->render_size.width);
+    s32 width2 = test2.count*FONT_TILE_W*scale2;
+    draw_text(sx - width2/2, sy, scale2, v4(1,0,0,1), test2.data);
     immediate_end();
     
     if(main_mode == M_EDITOR)
