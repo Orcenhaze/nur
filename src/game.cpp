@@ -359,7 +359,7 @@ FUNCTION void game_init()
         USE_TEMP_ARENA_IN_THIS_SCOPE;
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
         d3d11_load_texture(&font_tex, sprint("%Sfont_sprites.png", os->data_folder));
-        d3d11_load_texture(&menu_tex, sprint("%Smenu.png", os->data_folder));
+        d3d11_load_texture(&controls_tex, sprint("%Scontrols.png", os->data_folder));
     }
     
     load_game();
@@ -517,8 +517,11 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     
     // Advance until we hit a wall or an object.
     while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) && tilemap[test_y][test_x] != Tile_WALL) {
-        if (test_x == px && test_y == py && src_color == Color_RED) 
-            dead = true;
+        if (test_x == px && test_y == py) {
+            is_hitting_beam = true;
+            if (src_color == Color_RED) 
+                dead = true;
+        }
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
         test_x += dirs[src_dir].x;
@@ -529,8 +532,11 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         return;
     
     // @Sanity:
-    if (test_x == px && test_y == py && src_color == Color_RED)
-        dead = true;
+    if (test_x == px && test_y == py) {
+        is_hitting_beam = true;
+        if (src_color == Color_RED) 
+            dead = true;
+    }
     
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
@@ -684,7 +690,6 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
 #define MOVE_HOLD_DURATION 0.20f
 GLOBAL f32 move_hold_timer;
 GLOBAL s32 last_pressed;
-GLOBAL s32 last_pressed_fallback = -1;
 GLOBAL s32 queued_moves_count;
 GLOBAL V2s queued_moves[8]; // @Todo: Decrease max number of queued_moves.
 
@@ -694,6 +699,10 @@ GLOBAL f32 undo_speed_scale;
 
 FUNCTION void update_world()
 {
+    if (key_pressed(Key_G)) {
+        draw_grid = !draw_grid;
+    }
+    
     ////////////////////////////////
     // Undo!
     //
@@ -737,24 +746,6 @@ FUNCTION void update_world()
         last_pressed = MOVE_DOWN;
     }
     
-    if (input_released(MOVE_RIGHT)) {
-        if (last_pressed_fallback != MOVE_RIGHT)
-            last_pressed = last_pressed_fallback;
-        last_pressed_fallback = -1;
-    } else if (input_released(MOVE_UP)) {
-        if (last_pressed_fallback != MOVE_UP)
-            last_pressed = last_pressed_fallback;
-        last_pressed_fallback = -1;
-    } else if (input_released(MOVE_LEFT)) {
-        if (last_pressed_fallback != MOVE_LEFT)
-            last_pressed = last_pressed_fallback;
-        last_pressed_fallback = -1;
-    } else if (input_released(MOVE_DOWN)) {
-        if (last_pressed_fallback != MOVE_DOWN)
-            last_pressed = last_pressed_fallback;
-        last_pressed_fallback = -1;
-    }
-    
     move_hold_timer = MAX(0, move_hold_timer - os->dt);
     
     V2s move_dir = {};
@@ -764,32 +755,24 @@ FUNCTION void update_world()
         if (move_hold_timer <= 0) {
             move_dir.x = 1;
             move_hold_timer = MOVE_HOLD_DURATION;
-            if (last_pressed_fallback == -1)
-                last_pressed_fallback = last_pressed;
         }
     } else if (input_held(MOVE_UP) && last_pressed == MOVE_UP) {
         move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.y = 1;
             move_hold_timer = MOVE_HOLD_DURATION;
-            if (last_pressed_fallback == -1)
-                last_pressed_fallback = last_pressed;
         }
     } else if (input_held(MOVE_LEFT) && last_pressed == MOVE_LEFT) {
         move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.x = -1;
             move_hold_timer = MOVE_HOLD_DURATION;
-            if (last_pressed_fallback == -1)
-                last_pressed_fallback = last_pressed;
         }
     } else if (input_held(MOVE_DOWN) && last_pressed == MOVE_DOWN) {
         move_input_held = true;
         if (move_hold_timer <= 0) {
             move_dir.y = -1;
             move_hold_timer = MOVE_HOLD_DURATION;
-            if (last_pressed_fallback == -1)
-                last_pressed_fallback = last_pressed;
         }
     }
     
@@ -813,8 +796,22 @@ FUNCTION void update_world()
         queued_moves_count--;
         
         move_player(queued_move.x, queued_move.y);
-    } else if (!player_is_at_rest()) {
-        animation_timer = CLAMP_LOWER(animation_timer - os->dt*(queued_moves_count+1), 0);
+    } 
+    
+    s32 base_s = pdir == Dir_N? 4 : 0;
+    if (pdir == Dir_S)
+        psprite.t = 6;
+    else
+        psprite.t = 5;
+    
+    if (player_is_at_rest()) {
+        animation_timer = 0;
+        psprite.s = base_s;
+    } else if (animation_timer <= 0) {
+        psprite.s = base_s + ((psprite.s + 1) % NUM_ANIMATION_FRAMES);
+        animation_timer = ANIMATION_FRAME_DURATION;
+    }  else {
+        animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
     }
     
     ////////////////////////////////
@@ -859,6 +856,7 @@ FUNCTION void update_world()
     }
     
     // Update laser beams.
+    is_hitting_beam = false;
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
@@ -987,10 +985,12 @@ FUNCTION void update_editor()
     
     // Mouse scroll change dir.
     //
-    if (os->mouse_scroll.y > 0) {
-        objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + (s32)os->mouse_scroll.y);
-    } else if (os->mouse_scroll.y < 0) {
-        objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + (s32)os->mouse_scroll.y);
+    if (!key_held(Key_SHIFT)) {
+        if (os->mouse_scroll.y > 0) {
+            objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + (s32)os->mouse_scroll.y);
+        } else if (os->mouse_scroll.y < 0) {
+            objmap[my][mx].dir = WRAP_D(objmap[my][mx].dir + (s32)os->mouse_scroll.y);
+        }
     }
 }
 #endif
@@ -1100,10 +1100,6 @@ FUNCTION void game_update()
             set_view_to_proj(zoom_level);
             update_camera(true);
         }
-    }
-    
-    if (key_pressed(Key_G)) {
-        draw_grid = !draw_grid;
     }
 #endif
     
@@ -1254,7 +1250,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         } break;
         //
         // @Todo: When pushing Mirrors, Benders and Splitters, the beam is in the center and not
-        // drawing in floating point.
+        // drawing in floating point. Make it smooth.
         //
         case T_MIRROR: {
             u8 inv_d  = WRAP_D(src_dir + 4);
@@ -1366,20 +1362,13 @@ FUNCTION void game_render()
         //immediate_line_2d(v2(w/2, 0), v2(w/2, h), v4(1, 0, 0, 1), 15);
         immediate_end();
         
-        // Menu texture.
-        immediate_begin();
-        set_texture(&menu_tex);
-        is_using_pixel_coords = true;
-        immediate_rect_tl(v2(0), v2(w,h), v2(0), v2(1), v4(1));
-        immediate_end();
-        
         // Menu choices.
         immediate_begin();
         set_texture(&font_tex);
         is_using_pixel_coords = true;
         // Start in center.
         s32 sx = w/2;
-        s32 sy = h/2;
+        s32 sy = h/3;
         b32 is_enabled[MAX_CHOICES];
         get_enabled_choices(is_enabled);
         for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
@@ -1415,11 +1404,25 @@ FUNCTION void game_render()
         }
         immediate_end();
         
+        // @Temporary:
+        // @Hardcoded:
+        // @Remove:
+        {        
+            immediate_begin();
+            set_texture(&controls_tex);
+            // Draw controls.
+            V2 min = v2(1, 6);
+            V2 max = v2(6, 8);
+            V2 center = min + (max-min)*0.5f;
+            immediate_rect(center, v2((max.x-min.x)*0.5f, (max.y-min.y)*0.5f), v2(0), v2(1), v4(1));
+            immediate_end();
+        }
+        
         if (draw_grid) {
             immediate_begin();
             set_texture(0);
             // Draw grid.
-            immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
+            immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1, 1, 1, 0.7f), 0.01f);
             immediate_end();
         }
         
@@ -1470,8 +1473,9 @@ FUNCTION void game_render()
         immediate_end();
         
         //
-        f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt * (queued_moves_count+1);
         //
+        //
+        f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
         
         immediate_begin();
         set_texture(&tex);
@@ -1572,30 +1576,14 @@ FUNCTION void game_render()
         set_texture(&tex);
         // Draw player.
         s32 c        = dead? Color_RED : Color_WHITE;
+        f32 alpha    = is_hitting_beam && !dead? 0.9f : 1.0f;
         b32 invert_x = pdir == Dir_W;
-        s32 base_s   = pdir == Dir_N? 4 : 0;
-        LOCAL_PERSIST V2s sprite;
-        
-        if (pdir == Dir_S)
-            sprite.t = 6;
-        else
-            sprite.t = 5;
-        
-        if (player_is_at_rest()) {
-            animation_timer = 0;
-            sprite.s = base_s;
-        } else if (animation_timer <= 0) {
-            sprite.s = base_s + ((sprite.s + 1) % NUM_ANIMATION_FRAMES);
-            animation_timer = ANIMATION_FRAME_DURATION;
-            //print("s: %d\n", sprite.s);
-        }
         ppos = move_towards(ppos, v2(px, py), player_max_distance);
-        draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);
+        draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, invert_x);
         immediate_end();
         
 #if DEVELOPER
         // Draw debugging stuff.
-        
         if(main_mode == M_EDITOR)
         {
             bool show_demo_window = true;

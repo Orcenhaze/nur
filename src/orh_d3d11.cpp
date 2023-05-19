@@ -818,11 +818,10 @@ FUNCTION void immediate_line_2d(V2 p0, V2 p1, V4 color, f32 thickness = 0.1f)
     immediate_quad(b[0], b[1], a[1], a[0], color);
 }
 
-FUNCTION void immediate_grid(V2 bottom_left, u32 grid_width, u32 grid_height, f32 cell_size, V4 color)
+FUNCTION void immediate_grid(V2 bottom_left, u32 grid_width, u32 grid_height, f32 cell_size, V4 color, f32 line_thickness = 0.025f)
 {
     V2 p0 = bottom_left;
     V2 p1;
-    f32 line_thickness = 0.025f;
     
     // Horizontal lines.
     for(u32 i = 0; i <= grid_height; i++)

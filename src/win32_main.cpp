@@ -450,7 +450,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.data_folder       = string(global_data_folder);
         
         // Options.
+#if DEVELOPER
         global_os.fullscreen        = false;
+#else
+        global_os.fullscreen        = true;
+#endif
         global_os.exit              = false;
         global_os.vsync             = true;
         global_os.fix_aspect_ratio  = true;
@@ -495,6 +499,9 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 #endif
     
     game_init();
+    
+    if (global_os.fullscreen) 
+        win32_toggle_fullscreen(window);
     
     LARGE_INTEGER last_counter = win32_qpc();
     f64 accumulator = 0.0;

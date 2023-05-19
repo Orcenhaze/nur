@@ -106,7 +106,7 @@ Texture tex;
 #define FONT_TILE_H 8
 Texture font_tex;
 
-Texture menu_tex;
+Texture controls_tex;
 
 ////////////////////////////////
 
@@ -228,12 +228,12 @@ GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 
 // @Cleanup: What a mess!
 //
-#define PLAYER_ANIMATION_SPEED 5.0f
+#define PLAYER_ANIMATION_SPEED 8.0f
 #define NUM_ANIMATION_FRAMES   4
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
 GLOBAL s32 mx; GLOBAL s32 my;                                 // Mouse.
-GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; // Player
-GLOBAL b32 dead = false;
+GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite;// Player
+GLOBAL b32 dead = false; GLOBAL b32 is_hitting_beam;
 GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left square) that player is in.
 GLOBAL V2 camera; GLOBAL V2 camera_pos;
 GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos; // Animate obj pushing.
