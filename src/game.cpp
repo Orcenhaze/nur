@@ -56,6 +56,9 @@ FUNCTION void save_map()
 
 FUNCTION void save_game()
 {
+    if (!game_started)
+        return;
+    
     USE_TEMP_ARENA_IN_THIS_SCOPE;
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
@@ -84,22 +87,51 @@ FUNCTION void load_game()
     USE_TEMP_ARENA_IN_THIS_SCOPE;
     String8 file = os->read_entire_file(sprint("%Ssave.dat", os->data_folder));
     if (!file.data) {
-        print("Couldn't load game!");
+        print("Save file not present!");
+        return;
+    }
+    defer(os->free_file_memory(file.data));
+    MEMORY_COPY_STRUCT(&game->loaded_game, file.data);
+    reload_map();
+    game_started = true;
+}
+
+#if DEVELOPER
+FUNCTION void save_level(s32 level_number)
+{
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    String_Builder sb = sb_init();
+    defer(sb_free(&sb));
+    
+    save_map();
+    sb_append(&sb, &game->loaded_game, sizeof(game->loaded_game));
+    os->write_entire_file(sprint("%Slev%d.dat", os->data_folder, level_number), sb_to_string(&sb));
+}
+#endif
+
+FUNCTION void load_level(s32 level_number)
+{
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    String8 file = os->read_entire_file(sprint("%Slev%d.dat", os->data_folder, level_number));
+    if (!file.data) {
+        print("Couldn't load level!");
+        ASSERT(0);
         return;
     }
     defer(os->free_file_memory(file.data));
     
     MEMORY_COPY_STRUCT(&game->loaded_game, file.data);
     reload_map();
-    game_loaded = true;
 }
 
 FUNCTION b32 mouse_over_ui()
 {
     b32 result = false;
     
+#if DEVELOPER
     ImGuiIO& io = ImGui::GetIO();
     if(io.WantCaptureMouse) result = true;
+#endif
     
     return result;
 }
@@ -115,8 +147,10 @@ FUNCTION void do_editor()
     //
     // Save game.
     {
-        if (ImGui::Button("Save Game")) {
-            save_game();
+        LOCAL_PERSIST s32 level_number = 1;
+        ImGui::SliderInt("Level#", &level_number, 1, 16);
+        if (ImGui::Button("Save level")) {
+            save_level(level_number);
             ImGui::SameLine(); ImGui::Text("Saved!");
         }
         
@@ -246,6 +280,20 @@ FUNCTION void do_editor()
     
     ImGui::End();
 }
+
+FUNCTION void make_empty_level()
+{
+    // Init map.
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            tilemap[y][x] = Tile_FLOOR;
+            objmap[y][x].type = T_EMPTY;
+        }
+    }
+    // Initial player and room position.
+    set_player_position(4, 4, Dir_E, true);
+    update_camera(true);
+}
 #endif
 
 FUNCTION b32 is_outside_map(s32 x, s32 y)
@@ -311,24 +359,12 @@ FUNCTION void game_init()
         USE_TEMP_ARENA_IN_THIS_SCOPE;
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
         d3d11_load_texture(&font_tex, sprint("%Sfont_sprites.png", os->data_folder));
+        d3d11_load_texture(&menu_tex, sprint("%Smenu.png", os->data_folder));
     }
     
     load_game();
-    
-	// @Todo: Rename game_loaded to something that indicates whether a save.dat file is present or not. If not present: we don't load, we don't display "continue game". Instead, we only display "new game". 
-    // If we "save and quit" and there's no save.dat, i.e. we never started the game, we simply return. 
-	// "new game" calls init_map() and "continue game" just loads the map from read save.dat file.
-    if (!game_loaded) {
-        // Init map.
-        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-                tilemap[y][x] = Tile_FLOOR;
-                objmap[y][x].type = T_EMPTY;
-            }
-        }
-        // Initial player and room position.
-        set_player_position(4, 4, Dir_E, true);
-    }
+    if (game_started)
+        menu_selection = 0;
     
     zoom_level = DEFAULT_ZOOM;
     set_view_to_proj(zoom_level);
@@ -959,6 +995,85 @@ FUNCTION void update_editor()
 }
 #endif
 
+FUNCTION void get_enabled_choices(b32 is_enabled[MAX_CHOICES])
+{
+    for (s32 i = 0; i < 4; i++)
+        is_enabled[i] = true;
+    if (!game_started)
+        is_enabled[0] = false;
+};
+
+FUNCTION void move_selection(s32 dir)
+{
+    b32 is_enabled[MAX_CHOICES];
+    get_enabled_choices(is_enabled);
+    for (;;) {
+        // Wrap move.
+        menu_selection = (menu_selection + dir + ARRAY_COUNT(choices)) % ARRAY_COUNT(choices);
+        if (is_enabled[menu_selection])
+            break;
+    }
+    
+}
+
+FUNCTION void process_metagame()
+{
+    ////////////////////////////////
+    // Main menu
+    //
+    if (input_pressed(MOVE_UP)) {
+        move_hold_timer = 0.0f;
+    } else if (input_pressed(MOVE_DOWN)) {
+        move_hold_timer = 0.0f;
+    }  
+    
+    move_hold_timer = MAX(0, move_hold_timer - os->dt);
+    
+    s32 dir = 0;
+    if (input_held(MOVE_UP)) {
+        if (move_hold_timer <= 0.0f) {
+            dir = -1;
+            move_hold_timer = MOVE_HOLD_DURATION;
+        }
+    } else if (input_held(MOVE_DOWN)) {
+        if (move_hold_timer <= 0.0f) {
+            dir = 1;
+            move_hold_timer = MOVE_HOLD_DURATION;
+        }
+    }
+    
+    if (dir != 0) {
+        move_selection(dir);
+    }
+    
+    if (input_pressed(CONFIRM)) {
+        switch (menu_selection) {
+            case 0: {
+                game_started = true;
+                main_mode = M_GAME;
+            } break;
+            case 1: {
+                load_level(1);
+                game_started = true;
+                main_mode = M_GAME;
+            } break;
+            case 2: {
+                os->fullscreen = !os->fullscreen;
+            } break;
+            case 3: {
+                save_game();
+                os->exit = true;
+            } break;
+#if DEVELOPER
+            case 4: {
+                make_empty_level();
+                main_mode = M_GAME;
+            } break;
+#endif
+        }
+    }
+}
+
 FUNCTION void game_update()
 {
     game->delta_mouse   = os->mouse_ndc.xy - game->mouse_ndc_old;
@@ -975,7 +1090,11 @@ FUNCTION void game_update()
     
 #if DEVELOPER
     if (key_pressed(Key_F1)) {
-        main_mode = (main_mode == M_GAME)? M_EDITOR : M_GAME;
+        if (main_mode == M_GAME)
+            main_mode = M_EDITOR;
+        else if (main_mode == M_EDITOR)
+            main_mode = M_GAME;
+        
         if (main_mode == M_GAME) {
             zoom_level = DEFAULT_ZOOM;
             set_view_to_proj(zoom_level);
@@ -988,17 +1107,31 @@ FUNCTION void game_update()
     }
 #endif
     
+    if (key_pressed(Key_ESCAPE)) {
+        if (main_mode == M_GAME) {
+            can_toggle_menu = true;
+            menu_selection = 0;
+        }
+        
+        if (can_toggle_menu)
+            main_mode = main_mode == M_GAME? M_MENU : M_GAME;
+        else
+            main_mode = M_MENU;
+    }
+    
     switch (main_mode) {
         case M_GAME: update_world(); break;
 #if DEVELOPER
         case M_EDITOR: update_editor(); break; 
 #endif
+        default: process_metagame(); break;
     }
     
     camera_pos = move_towards(camera_pos, camera, os->dt*30.0f);
     set_world_to_view(v3(camera_pos, 0));
 }
 
+//
 // @Todo: Combine draw_sprite and draw_spritef?
 //
 FUNCTION void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, Texture *texture = &tex)
@@ -1031,12 +1164,13 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
     immediate_rect(v2(x, y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
 }
 
+//
 // @Cleanup:
 //
 FUNCTION void draw_sprite_text(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
 {
     // @Note: We use this for text because we draw text with top_left position instead of center.
-    //
+    // i.e. we call immediate_rect_tl().
     
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
@@ -1049,7 +1183,7 @@ FUNCTION void draw_sprite_text(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *col
     immediate_rect_tl(v2(x, y), v2(w, h), v2(u0, v0), v2(u1, v1), c);
 }
 GLOBAL char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/- ";
-FUNCTION s32 draw_text(s32 top_left_x, s32 top_left_y, s32 scale, V4 color, u8 *text)
+FUNCTION s32 draw_text(s32 top_left_x, s32 top_left_y, f32 scale, V4 color, u8 *text)
 {
     while (*text) {
         char *p = strchr(font, *text);
@@ -1205,231 +1339,269 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 
 FUNCTION void game_render()
 {
-    immediate_begin();
-    set_texture(&tex);
-    // Draw tiles.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            u8 t = tilemap[y][x];
-            // Skip walls, we draw them later.
-            if (t == Tile_WALL) continue; 
-            
-            draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
-        }
-    }
-    immediate_end();
-    
-    if (draw_grid) {
+    if (main_mode == M_MENU) {
+        f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
+        f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
+        
+        // @Note: Multiply these values with pixels, so that pixel sizes scale with drawing_rect size.
+        f32 w_scale = w / os->render_size.width;
+        f32 h_scale = h / os->render_size.height;
+        
+        // Gradient background.
         immediate_begin();
         set_texture(0);
-        // Draw grid.
-        immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
+        is_using_pixel_coords = true;
+        V4 c0 = v4(0.275, 0.549, 0.820, 1.0f);
+        V4 c1 = v4(0.298, 0.039, 0.710, 1.0f);
+        V4 c2 = v4(0.629, 0.063, 0.678, 1.0f);
+        V4 c3 = v4(0.451, 0.165, 0.831, 1.0f);
+        immediate_vertex(v2(0, h), v2(0, 1), c0); // Bottom-left.
+        immediate_vertex(v2(w, h), v2(1, 1), c1); // Bottom-right.
+        immediate_vertex(v2(w, 0), v2(1, 0), c2); // Top-right.
+        
+        immediate_vertex(v2(0, h), v2(0, 1), c0); // Bottom-left.
+        immediate_vertex(v2(w, 0), v2(1, 0), c2); // Top-right.
+        immediate_vertex(v2(0, 0), v2(0, 0), c3); // Top-left.
+        
+        //immediate_line_2d(v2(w/2, 0), v2(w/2, h), v4(1, 0, 0, 1), 15);
         immediate_end();
-    }
-    
-    immediate_begin();
-    set_texture(&tex);
-    // Draw detectors.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            V2s sprite = obj_sprite[o.type];
-            if (o.type == T_DETECTOR) {
-                u8 final_c = Color_WHITE;
-                for (s32 i = 0; i < 8; i++)
-                    final_c = mix_colors(final_c, o.color[i]);
+        
+        // Menu texture.
+        immediate_begin();
+        set_texture(&menu_tex);
+        is_using_pixel_coords = true;
+        immediate_rect_tl(v2(0), v2(w,h), v2(0), v2(1), v4(1));
+        immediate_end();
+        
+        // Menu choices.
+        immediate_begin();
+        set_texture(&font_tex);
+        is_using_pixel_coords = true;
+        // Start in center.
+        s32 sx = w/2;
+        s32 sy = h/2;
+        b32 is_enabled[MAX_CHOICES];
+        get_enabled_choices(is_enabled);
+        for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
+            if (is_enabled[i]) {
+                b32 selected       = menu_selection == i;
+                f32 selected_scale = selected? 5 : 4;
+                f32 final_scale    = selected_scale * w_scale;
+                f32 text_width     = choices[i].count * FONT_TILE_W * final_scale;
                 
-                if (final_c == o.c)
-                    draw_sprite(x, y, 1.1f, 1.1f, sprite.s, sprite.t, &colors[o.c], 1.0f);
-                else
-                    draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.6f);
+                V4 c = v4(0.8f, 0.5f, 0.8f, 1.0f);
+                if (selected)
+                    c = v4(1);
+                
+                draw_text(sx - text_width/2, sy, final_scale, c, choices[i].data);
             }
-        }
-    }
-    immediate_end();
-    
-    immediate_begin();
-    set_texture(0);
-    // Draw laser beams.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            if (o.type == T_EMITTER) {
-                draw_beams(x, y, o.dir, o.c);
-            }
-        }
-    }
-    immediate_end();
-    
-    immediate_begin();
-    set_texture(&tex);
-    // Draw walls.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            u8 t = tilemap[y][x];
-            if (t == Tile_WALL)
-                draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
-        }
-    }
-    immediate_end();
-    
-    //
-    f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt * (queued_moves_count+1);
-    //
-    
-    immediate_begin();
-    set_texture(&tex);
-    // Draw objs.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            V2s sprite = obj_sprite[o.type];
-            switch (o.type) {
-                case T_EMPTY: continue;
-                case T_EMITTER: {
-                    sprite.s += o.dir;
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
-                } break;
-                //
-                // @Todo:  Combine T_MIRROR and T_BENDER and T_SPLITTER if they remain the same.
-                //
-                case T_MIRROR: {
-                    sprite.s += o.dir;
-                    if (pushed_obj.x == x && pushed_obj.y == y) {
-                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
-                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    } else {
-                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    }
-                } break;
-                case T_BENDER: {
-                    sprite.s += o.dir;
-                    if (pushed_obj.x == x && pushed_obj.y == y) {
-                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
-                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    } else {
-                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    }
-                } break;
-                case T_SPLITTER: {
-                    sprite.s = (sprite.s + o.dir) % 4;
-                    if (pushed_obj.x == x && pushed_obj.y == y) {
-                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
-                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    } else {
-                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    }
-                } break;
-                case T_DOOR:
-                case T_DOOR_OPEN: {
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
-                } break;
-            }
-        }
-    }
-    immediate_end();
-    
-    immediate_begin();
-    set_texture(0);
-    // Draw particles
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            if (o.type == T_EMPTY) continue;
             
-            // Locked rotation particles.
-            V3 axis = {};
-            V4 color = {};
-            if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
-                axis = v3(0,0,1);
-                color = v4(0.7f, 0.8f, 0.3f, 0.8f);
-            } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                axis = v3(0,0,-1);
-                color = v4(0.7f, 0.4f, 0.6f, 0.8f);
-            }
-            if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                V2 pivot;
-                if (pushed_obj.x == x && pushed_obj.y == y)
-                    pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
-                else 
-                    pivot = v2(x, y);
+            sy += 80 * h_scale;
+        }
+        immediate_end();
+        
+    } else {
+        immediate_begin();
+        set_texture(&tex);
+        // Draw tiles.
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                u8 t = tilemap[y][x];
+                // Skip walls, we draw them later.
+                if (t == Tile_WALL) continue; 
                 
-                f32 duration = 3.0f;
-                V2 size      = v2(0.03f, 0.03f);
-                for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
-                    f32 radius = 0.4f;
-                    V2 min     = pivot - v2(radius); 
-                    V2 max     = pivot + v2(radius);
-                    V2 p       = min + random_rotation_particles[i]*(max - min);
-                    duration  *= length2(random_rotation_particles[i]);
-                    f32 a      = repeat(os->time/duration, 1.0f);
-                    Quaternion q = quaternion_from_axis_angle_turns(axis, a);
-                    V2 c = rotate_point_around_pivot(p, pivot, q);
-                    immediate_rect(c, size, color);
+                draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
+            }
+        }
+        immediate_end();
+        
+        if (draw_grid) {
+            immediate_begin();
+            set_texture(0);
+            // Draw grid.
+            immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1));
+            immediate_end();
+        }
+        
+        immediate_begin();
+        set_texture(&tex);
+        // Draw detectors.
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                Obj o = objmap[y][x];
+                V2s sprite = obj_sprite[o.type];
+                if (o.type == T_DETECTOR) {
+                    u8 final_c = Color_WHITE;
+                    for (s32 i = 0; i < 8; i++)
+                        final_c = mix_colors(final_c, o.color[i]);
+                    
+                    if (final_c == o.c)
+                        draw_sprite(x, y, 1.1f, 1.1f, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                    else
+                        draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.6f);
                 }
             }
         }
-    }
-    immediate_end();
-    
-    immediate_begin();
-    set_texture(&tex);
-    // Draw player.
-    s32 c        = dead? Color_RED : Color_WHITE;
-    b32 invert_x = pdir == Dir_W;
-    s32 base_s   = pdir == Dir_N? 4 : 0;
-    LOCAL_PERSIST V2s sprite;
-    
-    if (pdir == Dir_S)
-        sprite.t = 6;
-    else
-        sprite.t = 5;
-    
-    if (player_is_at_rest()) {
-        animation_timer = 0;
-        sprite.s = base_s;
-    } else if (animation_timer <= 0) {
-        sprite.s = base_s + ((sprite.s + 1) % NUM_ANIMATION_FRAMES);
-        animation_timer = ANIMATION_FRAME_DURATION;
-        //print("s: %d\n", sprite.s);
-    }
-    ppos = move_towards(ppos, v2(px, py), player_max_distance);
-    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);
-    immediate_end();
-    
+        immediate_end();
+        
+        immediate_begin();
+        set_texture(0);
+        // Draw laser beams.
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                Obj o = objmap[y][x];
+                if (o.type == T_EMITTER) {
+                    draw_beams(x, y, o.dir, o.c);
+                }
+            }
+        }
+        immediate_end();
+        
+        immediate_begin();
+        set_texture(&tex);
+        // Draw walls.
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                u8 t = tilemap[y][x];
+                if (t == Tile_WALL)
+                    draw_sprite(x, y, 1, 1, tile_sprite[t].s, tile_sprite[t].t, 0, 1.0f);
+            }
+        }
+        immediate_end();
+        
+        //
+        f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt * (queued_moves_count+1);
+        //
+        
+        immediate_begin();
+        set_texture(&tex);
+        // Draw objs.
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                Obj o = objmap[y][x];
+                V2s sprite = obj_sprite[o.type];
+                switch (o.type) {
+                    case T_EMPTY: continue;
+                    case T_EMITTER: {
+                        sprite.s += o.dir;
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                    } break;
+                    //
+                    // @Todo:  Combine T_MIRROR and T_BENDER and T_SPLITTER if they remain the same.
+                    //
+                    case T_MIRROR: {
+                        sprite.s += o.dir;
+                        if (pushed_obj.x == x && pushed_obj.y == y) {
+                            pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                        } else {
+                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                        }
+                    } break;
+                    case T_BENDER: {
+                        sprite.s += o.dir;
+                        if (pushed_obj.x == x && pushed_obj.y == y) {
+                            pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                        } else {
+                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                        }
+                    } break;
+                    case T_SPLITTER: {
+                        sprite.s = (sprite.s + o.dir) % 4;
+                        if (pushed_obj.x == x && pushed_obj.y == y) {
+                            pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                        } else {
+                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                        }
+                    } break;
+                    case T_DOOR:
+                    case T_DOOR_OPEN: {
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                    } break;
+                }
+            }
+        }
+        immediate_end();
+        
+        immediate_begin();
+        set_texture(0);
+        // Draw particles
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                Obj o = objmap[y][x];
+                if (o.type == T_EMPTY) continue;
+                
+                // Locked rotation particles.
+                V3 axis = {};
+                V4 color = {};
+                if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
+                    axis = v3(0,0,1);
+                    color = v4(0.7f, 0.8f, 0.3f, 0.8f);
+                } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
+                    axis = v3(0,0,-1);
+                    color = v4(0.7f, 0.4f, 0.6f, 0.8f);
+                }
+                if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
+                    V2 pivot;
+                    if (pushed_obj.x == x && pushed_obj.y == y)
+                        pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
+                    else 
+                        pivot = v2(x, y);
+                    
+                    f32 duration = 3.0f;
+                    V2 size      = v2(0.03f, 0.03f);
+                    for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
+                        f32 radius = 0.4f;
+                        V2 min     = pivot - v2(radius); 
+                        V2 max     = pivot + v2(radius);
+                        V2 p       = min + random_rotation_particles[i]*(max - min);
+                        duration  *= length2(random_rotation_particles[i]);
+                        f32 a      = repeat(os->time/duration, 1.0f);
+                        Quaternion q = quaternion_from_axis_angle_turns(axis, a);
+                        V2 c = rotate_point_around_pivot(p, pivot, q);
+                        immediate_rect(c, size, color);
+                    }
+                }
+            }
+        }
+        immediate_end();
+        
+        immediate_begin();
+        set_texture(&tex);
+        // Draw player.
+        s32 c        = dead? Color_RED : Color_WHITE;
+        b32 invert_x = pdir == Dir_W;
+        s32 base_s   = pdir == Dir_N? 4 : 0;
+        LOCAL_PERSIST V2s sprite;
+        
+        if (pdir == Dir_S)
+            sprite.t = 6;
+        else
+            sprite.t = 5;
+        
+        if (player_is_at_rest()) {
+            animation_timer = 0;
+            sprite.s = base_s;
+        } else if (animation_timer <= 0) {
+            sprite.s = base_s + ((sprite.s + 1) % NUM_ANIMATION_FRAMES);
+            animation_timer = ANIMATION_FRAME_DURATION;
+            //print("s: %d\n", sprite.s);
+        }
+        ppos = move_towards(ppos, v2(px, py), player_max_distance);
+        draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, sprite.s, sprite.t, &colors[c], 1.0f, invert_x);
+        immediate_end();
+        
 #if DEVELOPER
-    // Draw debugging stuff.
-    
-    // @Cleanup:
-    //
-    immediate_begin();
-    set_texture(&font_tex);
-    is_using_pixel_coords = true;
-    f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
-    f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
-    s32 sx = w/2;
-    s32 sy = h/2;
-    
-    String8 test = S8LIT("TEST STRING");
-    s32 scale = 4 * (w/os->render_size.width);
-    s32 width = test.count*FONT_TILE_W*scale;
-    
-    
-    draw_text(sx - width/2, sy, scale, v4(1,0,0,1), test.data);
-    
-    sy += 50* (w/os->render_size.width);
-    
-    String8 test2 = S8LIT("HELLO");
-    s32 scale2 = 18 * (w/os->render_size.width);
-    s32 width2 = test2.count*FONT_TILE_W*scale2;
-    draw_text(sx - width2/2, sy, scale2, v4(1,0,0,1), test2.data);
-    immediate_end();
-    
-    if(main_mode == M_EDITOR)
-    {
-        bool show_demo_window = true;
-        ImGui::ShowDemoWindow(&show_demo_window);
-        do_editor();
-    }
+        // Draw debugging stuff.
+        
+        if(main_mode == M_EDITOR)
+        {
+            bool show_demo_window = true;
+            ImGui::ShowDemoWindow(&show_demo_window);
+            do_editor();
+        }
 #endif
+    }
 }

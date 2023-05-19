@@ -17,6 +17,8 @@ enum Game_Input
     ROTATE_CW,
     
     UNDO,
+    
+    CONFIRM,
 };
 
 GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
@@ -28,7 +30,9 @@ GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
     {Key_Q},
     {Key_E},
     
-    {Key_Z}
+    {Key_Z},
+    
+    {Key_ENTER, Key_SPACE}
 };
 
 FUNCTION b32 input_pressed(Game_Input input)
@@ -68,20 +72,28 @@ FUNCTION b32 input_released(Game_Input input)
 ////////////////////////////////
 // Menu
 //
-GLOBAL b32 game_loaded = false;
+GLOBAL b32 game_started = false;
 enum
 {
     M_MENU,
     M_GAME,
     M_EDITOR
-} GLOBAL main_mode = M_GAME;
+} GLOBAL main_mode = M_MENU;
 
-s32 menu_selection = 0;
-GLOBAL char *choices[] = 
+#define MAX_CHOICES 4
+s32 menu_selection = 1;
+GLOBAL String8 choices[] = 
 {
-    "START GAME",
-    "SAVE AND QUIT"
+    S8LIT("CONTINUE"),
+    S8LIT("START NEW GAME"),
+    S8LIT("TOGGLE FULLSCREEN"),
+    S8LIT("SAVE AND QUIT"),
+#if DEVELOPER
+    S8LIT("EMPTY LEVEL"),
+#endif
 };
+
+GLOBAL b32 can_toggle_menu;
 
 ////////////////////////////////
 ////////////////////////////////
@@ -93,6 +105,8 @@ Texture tex;
 #define FONT_TILE_W 6 // In pixels!
 #define FONT_TILE_H 8
 Texture font_tex;
+
+Texture menu_tex;
 
 ////////////////////////////////
 

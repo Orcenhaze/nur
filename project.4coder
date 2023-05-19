@@ -1,5 +1,5 @@
 version(1);
-project_name = "untitled_puzzle_game";
+project_name = "NUR";
 patterns = {
     "*.h",
     "*.hpp",

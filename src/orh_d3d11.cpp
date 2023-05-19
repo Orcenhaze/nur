@@ -16,16 +16,16 @@ TODO:
 */
 
 #include <d3d11.h>       // D3D interface
-#include <dxgi.h>        // DirectX driver interface
+#include <dxgi1_2.h>     // DirectX driver interface
 #include <d3dcompiler.h> // Shader compiler
 
+//#pragma comment(lib, "dxgi.lib")        
 #pragma comment(lib, "d3d11.lib")       // direct3D library
-#pragma comment(lib, "dxgi.lib")        // directx graphics interface
+#pragma comment(lib, "dxguid")          // directx graphics interface
 #pragma comment(lib, "d3dcompiler.lib") // shader compiler
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
-
 
 //
 // Shaders.
@@ -85,7 +85,7 @@ GLOBAL Vertex_XCNU   immediate_vertices[MAX_IMMEDIATE_VERTICES];
 //
 // D3D11 objects.
 //
-GLOBAL IDXGISwapChain           *swap_chain;
+GLOBAL IDXGISwapChain1          *swap_chain;
 GLOBAL ID3D11Device             *device;
 GLOBAL ID3D11DeviceContext      *device_context;
 GLOBAL D3D11_VIEWPORT            viewport;
@@ -277,38 +277,20 @@ FUNCTION void set_object_to_world(V3 position, Quaternion orientation)
 
 FUNCTION void d3d11_init(HWND window)
 {
+    // @Note: Kudos Martins:
+    // https://gist.github.com/mmozeiko/5e727f845db182d468a34d524508ad5f
+    
     //
-    // Create device and swapchain.
+    // Create device and context.
     {
-        DXGI_SWAP_CHAIN_DESC desc = {};
-        desc.BufferDesc.RefreshRate.Numerator   = 0;
-        desc.BufferDesc.RefreshRate.Denominator = 1;
-        desc.BufferDesc.Format                  = DXGI_FORMAT_B8G8R8A8_UNORM;
-        desc.SampleDesc                         = {1, 0};
-        desc.BufferUsage                        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        desc.BufferCount                        = 2;
-        desc.OutputWindow                       = window;
-        desc.Windowed                           = true;
-        desc.SwapEffect                         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        
-        D3D_FEATURE_LEVEL feature_level;
         UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED;
 #if defined(_DEBUG)
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
-        HRESULT hr = D3D11CreateDeviceAndSwapChain(0,
-                                                   D3D_DRIVER_TYPE_HARDWARE,
-                                                   0,
-                                                   flags,
-                                                   0,
-                                                   0,
-                                                   D3D11_SDK_VERSION,
-                                                   &desc,
-                                                   &swap_chain,
-                                                   &device,
-                                                   &feature_level,
-                                                   &device_context);
-        ASSERT(S_OK == hr && swap_chain && device && device_context);
+        D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0};
+        HRESULT hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, levels, ARRAYSIZE(levels),
+                                       D3D11_SDK_VERSION, &device, NULL, &device_context);
+        ASSERT_HR(hr);
     }
     
 #if defined(_DEBUG)
@@ -328,6 +310,43 @@ FUNCTION void d3d11_init(HWND window)
     // so all HRESULT return values in this code will be ignored
     // debugger will break on errors anyway
 #endif
+    
+    //
+    // Create swapchain.
+    {
+        // get DXGI device from D3D11 device
+        IDXGIDevice *dxgi_device;
+        HRESULT hr = device->QueryInterface(IID_IDXGIDevice, (void**)&dxgi_device);
+        ASSERT_HR(hr);
+        
+        // get DXGI adapter from DXGI device
+        IDXGIAdapter *dxgi_adapter;
+        hr = dxgi_device->GetAdapter(&dxgi_adapter);
+        ASSERT_HR(hr);
+        
+        // get DXGI factory from DXGI adapter
+        IDXGIFactory2 *factory;
+        hr = dxgi_adapter->GetParent(IID_IDXGIFactory2, (void**)&factory);
+        ASSERT_HR(hr);
+        
+        DXGI_SWAP_CHAIN_DESC1 desc = {};
+        desc.Format                = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc            = {1, 0};
+        desc.BufferUsage           = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        desc.BufferCount           = 2;
+        desc.SwapEffect            = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        desc.Scaling               = DXGI_SCALING_NONE,
+        
+        hr = factory->CreateSwapChainForHwnd((IUnknown*)device, window, &desc, NULL, NULL, &swap_chain);
+        ASSERT_HR(hr);
+        
+        // disable Alt+Enter changing monitor resolution to match window size.
+        factory->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER);
+        
+        factory->Release();
+        dxgi_adapter->Release();
+        dxgi_device->Release();
+    }
     
     //
     // Create rasterize states.
@@ -517,8 +536,6 @@ FUNCTION void d3d11_resize()
 // Call in beginning of frame.
 FUNCTION void d3d11_viewport(FLOAT top_left_x, FLOAT top_left_y, FLOAT width, FLOAT height)
 {
-    // @Debug: Getting complaints from DXGI when doing fullscreen.
-    
     // Resize swap chain if needed.
     if ((render_target_view == 0)                        || 
         (os->window_size.width  != current_window_width) || 
@@ -536,7 +553,6 @@ FUNCTION void d3d11_viewport(FLOAT top_left_x, FLOAT top_left_y, FLOAT width, FL
 
 FUNCTION void d3d11_clear(FLOAT r, FLOAT g, FLOAT b, FLOAT a)
 {
-	// @Debug: When we minimize the game from taskbar, we call ClearRenderTargetView() with null render_target_view!
     FLOAT rgba[4] = {r, g, b, a};
     device_context->ClearRenderTargetView(render_target_view, rgba);
     device_context->ClearDepthStencilView(depth_stencil_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
@@ -547,7 +563,7 @@ FUNCTION void d3d11_clear()
     d3d11_clear(0.0f, 0.0f, 0.0f, 1.0f); 
 }
 
-FUNCTION void d3d11_present(b32 vsync)
+FUNCTION HRESULT d3d11_present(b32 vsync)
 {
     ID3D11Texture2D *backbuffer, *texture;
     swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**) &backbuffer);
@@ -556,7 +572,8 @@ FUNCTION void d3d11_present(b32 vsync)
     backbuffer->Release();
     texture->Release();
     
-    swap_chain->Present(vsync? 1 : 0, 0);
+    HRESULT hr = swap_chain->Present(vsync? 1 : 0, 0);
+    return hr;
 }
 
 

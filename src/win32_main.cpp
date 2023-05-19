@@ -20,7 +20,6 @@
 #include "game.h"
 #include "game.cpp"
 
-GLOBAL b32      global_running;
 GLOBAL OS_State global_os;
 GLOBAL s64      global_performance_frequency;
 GLOBAL char     global_exe_full_path[256];
@@ -39,6 +38,45 @@ inline f64 win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
     f64 result = (f64)(end.QuadPart - start.QuadPart) / (f64)global_performance_frequency;
     
     return result;
+}
+
+FUNCTION void win32_toggle_fullscreen(HWND window)
+{
+    LOCAL_PERSIST WINDOWPLACEMENT last_window_placement = {
+        sizeof(last_window_placement)
+    };
+    
+    DWORD window_style = GetWindowLong(window, GWL_STYLE);
+    if(window_style & WS_OVERLAPPEDWINDOW)
+    {
+        MONITORINFO monitor_info = { sizeof(monitor_info) };
+        if(GetWindowPlacement(window, &last_window_placement) &&
+           GetMonitorInfo(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY),
+                          &monitor_info))
+        {
+            
+            SetWindowLong(window, GWL_STYLE,
+                          window_style & ~WS_OVERLAPPEDWINDOW);
+            
+            SetWindowPos(window, HWND_TOP,
+                         monitor_info.rcMonitor.left,
+                         monitor_info.rcMonitor.top,
+                         monitor_info.rcMonitor.right -
+                         monitor_info.rcMonitor.left,
+                         monitor_info.rcMonitor.bottom -
+                         monitor_info.rcMonitor.top,
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+    }
+    else
+    {
+        SetWindowLong(window, GWL_STYLE,
+                      window_style | WS_OVERLAPPEDWINDOW);
+        SetWindowPlacement(window, &last_window_placement);
+        SetWindowPos(window, 0, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
 }
 
 FUNCTION void win32_free_file_memory(void *memory)
@@ -148,7 +186,9 @@ FUNCTION void win32_build_paths()
 
 FUNCTION void win32_process_pending_messages()
 {
+#if DEVELOPER
     ImGuiIO& io = ImGui::GetIO(); (void)io;
+#endif
     MSG message;
     while (PeekMessage(&message, 0, 0, 0, PM_REMOVE)) {
 #if DEVELOPER
@@ -178,8 +218,15 @@ FUNCTION void win32_process_pending_messages()
                 case WM_KEYDOWN:
                 case WM_KEYUP: {
                     s32 vkcode   = (s32) message.wParam;
+                    b32 alt_down = (message.lParam & (1 << 29));
                     b32 was_down = (message.lParam & (1 << 30)) == 1;
                     b32 is_down  = (message.lParam & (1 << 31)) == 0;
+                    
+                    if((vkcode == VK_F4) && alt_down)
+                    {
+                        global_os.exit = true;
+                        return;
+                    }
                     
                     s32 key = Key_NONE;
                     if ((vkcode >= 'A') && (vkcode <= 'Z')) {
@@ -188,6 +235,7 @@ FUNCTION void win32_process_pending_messages()
                         key = Key_0 + (vkcode - '0');
                     } else {
                         if      ((vkcode >= VK_F1) && (vkcode <= VK_F12)) key = Key_F1 + (vkcode - VK_F1);
+                        else if (vkcode == VK_RETURN)  key = Key_ENTER;
                         else if (vkcode == VK_SHIFT)   key = Key_SHIFT;
                         else if (vkcode == VK_CONTROL) key = Key_CONTROL;
                         else if (vkcode == VK_MENU)    key = Key_ALT;
@@ -246,14 +294,19 @@ FUNCTION void win32_process_pending_messages()
 
 LRESULT CALLBACK win32_main_window_callback(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
+#if DEVELOPER
     if (ImGui_ImplWin32_WndProcHandler(window, message, wparam, lparam))
         return true;
+#endif
     
     LRESULT result = 0;
     
     switch (message) {
         case WM_CLOSE: 
-        case WM_DESTROY: global_running = false; break;
+        case WM_DESTROY:
+        case WM_QUIT: {
+            global_os.exit = true;
+        } break;
         
         default: {
             result = DefWindowProcA(window, message, wparam, lparam);
@@ -289,9 +342,12 @@ FUNCTION void win32_process_inputs(HWND window)
     // Put input messages in queue.
     //
     win32_process_pending_messages();
+    
+#if DEVELOPER
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     if (io.WantCaptureKeyboard || io.WantCaptureMouse)
         return;
+#endif
     
     // Process queued inputs.
     //
@@ -373,6 +429,12 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     }
     
     ShowWindow(window, show_code);
+#if DEVELOPER
+    ShowCursor(true);
+#else
+    // @Todo: Show cursor when we hover on window borders.
+    ShowCursor(false);
+#endif
     
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
@@ -388,6 +450,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.data_folder       = string(global_data_folder);
         
         // Options.
+        global_os.fullscreen        = false;
+        global_os.exit              = false;
         global_os.vsync             = true;
         global_os.fix_aspect_ratio  = true;
         global_os.render_size       = {1920, 1080};
@@ -416,6 +480,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     
     d3d11_init(window);
     
+#if DEVELOPER
     //
     // Setup Dear ImGui context and renderer.
     IMGUI_CHECKVERSION();
@@ -427,6 +492,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(window);
     ImGui_ImplDX11_Init(device, device_context);
+#endif
     
     game_init();
     
@@ -436,8 +502,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
     
-    global_running = true;
-    while (global_running) {
+    while (!global_os.exit) {
         //
         //
         // Update drawing region.
@@ -450,41 +515,51 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         if (global_os.fix_aspect_ratio) {
             drawing_rect = aspect_ratio_fit(global_os.render_size, window_size);
         } else {
-            drawing_rect.min   = {0, 0};
-            drawing_rect.max.x = (f32)window_size.x;
-            drawing_rect.max.y = (f32)window_size.y;
+            drawing_rect.min = {0, 0};
+            drawing_rect.max = {(f32)window_size.x, (f32)window_size.y};
         }
         
         global_os.window_size  = window_size;
         global_os.drawing_rect = drawing_rect;
         
-        // Start the Dear ImGui frame.
-        ImGui_ImplDX11_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
-        
+#if DEVELOPER
+        // Start the Dear ImGui frame only if window size is non-zero.
+        if ((window_size.x != 0) && (window_size.y != 0)) {
+            ImGui_ImplDX11_NewFrame();
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+        }
+#endif
         //
         //
         // Process Inputs --> Update --> Render.
         //
         //
         while (accumulator >= os->dt) {
+            b32 last_fullscreen = global_os.fullscreen;
             win32_process_inputs(window);
             game_update();
-            
             accumulator -= os->dt;
             os->time    += os->dt;
+            if (last_fullscreen != global_os.fullscreen)
+                win32_toggle_fullscreen(window);
         }
-        d3d11_viewport(drawing_rect.min.x, drawing_rect.min.y, 
-                       drawing_rect.max.x - drawing_rect.min.x, 
-                       drawing_rect.max.y - drawing_rect.min.y);
-        d3d11_clear(0.20f, 0.20f, 0.20f, 1.0f);
-        game_render();
         
-        ImGui::Render();
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-        
-        d3d11_present(global_os.vsync);
+        // Render only if window size is non-zero.
+        if ((window_size.x != 0) && (window_size.y != 0)) {
+            d3d11_viewport(drawing_rect.min.x, drawing_rect.min.y, 
+                           drawing_rect.max.x - drawing_rect.min.x, 
+                           drawing_rect.max.y - drawing_rect.min.y);
+            d3d11_clear(0.20f, 0.20f, 0.20f, 1.0f);
+            game_render();
+            
+#if DEVELOPER
+            ImGui::Render();
+            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+#endif
+            
+            HRESULT hr = d3d11_present(global_os.vsync);
+        }
         
         //
         //
@@ -500,11 +575,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
     
+#if DEVELOPER
     //
     // Cleanup.
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
+#endif
     
     return 0;
 }

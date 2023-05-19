@@ -1,4 +1,4 @@
-/* orh.h - v0.43 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.44 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.44 - added fullscreen flag. OS layer has to check it after update and toggle fullscreen.
 0.43 - removed mouse_screen from OS_State.
 0.42 - added useful functions for Array: array_remove_range(), array_pop_().
 0.41 - added random_range_v2().
@@ -1307,7 +1308,7 @@ V table_find(Table<K, V> *table, K key)
 //
 // OS
 //
-enum
+enum Key
 {
     Key_NONE,
     
@@ -1362,6 +1363,7 @@ enum
     Key_Y,
     Key_Z,
     
+    Key_ENTER,
     Key_SHIFT,
     Key_CONTROL,
     Key_ALT,
@@ -1407,6 +1409,8 @@ struct OS_State
     V2  mouse_scroll;
     
     // Options.
+    volatile b32 exit;
+    b32 fullscreen;
     b32 vsync;
     b32 fix_aspect_ratio;
     V2u render_size;         // Determines aspect ratio.
