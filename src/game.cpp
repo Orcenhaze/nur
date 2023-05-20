@@ -497,11 +497,13 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
     else if ((cur == Color_MAGENTA && src == Color_CYAN) || (src == Color_MAGENTA && cur == Color_CYAN))
         return Color_BLUE;
     
-    // primary-secondary, choose secondary.
-    else if ((cur >= Color_YELLOW && src <= Color_BLUE))
-        return cur;
-    else if ((cur <= Color_BLUE && src >= Color_YELLOW))
-        return src;
+    // primary-secondary, choose white.
+    /* 
+        else if ((cur >= Color_YELLOW && src <= Color_BLUE))
+            return cur;
+        else if ((cur <= Color_BLUE && src >= Color_YELLOW))
+            return src;
+     */
     else
         return Color_WHITE;
 }
@@ -1368,7 +1370,7 @@ FUNCTION void game_render()
         immediate_begin();
         set_texture(&font_tex);
         is_using_pixel_coords = true;
-        // Start in center.
+        // Start slightly above center.
         s32 sx = w/2;
         s32 sy = h/3;
         b32 is_enabled[MAX_CHOICES];
@@ -1392,6 +1394,53 @@ FUNCTION void game_render()
         immediate_end();
         
     } else {
+        // @Temporary:
+        // @Hardcoded:
+        // @Remove:
+        // @Remove:
+        // @Remove:
+        {      
+            if (px == 4 && py == SIZE_Y*NUM_Y-1) {
+                f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
+                f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
+                f32 w_scale = w / os->render_size.width;
+                f32 h_scale = h / os->render_size.height;
+                // Gradient background.
+                immediate_begin();
+                set_texture(0);
+                is_using_pixel_coords = true;
+                V4 c0 = v4(0.275, 0.549, 0.820, 1.0f);
+                V4 c1 = v4(0.298, 0.039, 0.710, 1.0f);
+                V4 c2 = v4(0.629, 0.063, 0.678, 1.0f);
+                V4 c3 = v4(0.451, 0.165, 0.831, 1.0f);
+                immediate_vertex(v2(0, h), v2(0, 1), c0); // Bottom-left.
+                immediate_vertex(v2(w, h), v2(1, 1), c1); // Bottom-right.
+                immediate_vertex(v2(w, 0), v2(1, 0), c2); // Top-right.
+                
+                immediate_vertex(v2(0, h), v2(0, 1), c0); // Bottom-left.
+                immediate_vertex(v2(w, 0), v2(1, 0), c2); // Top-right.
+                immediate_vertex(v2(0, 0), v2(0, 0), c3); // Top-left.
+                
+                //immediate_line_2d(v2(w/2, 0), v2(w/2, h), v4(1, 0, 0, 1), 15);
+                immediate_end();
+                
+                // Menu choices.
+                immediate_begin();
+                set_texture(&font_tex);
+                is_using_pixel_coords = true;
+                // Start in center.
+                s32 sx = w/2;
+                s32 sy = h/2;
+                String8 s = S8LIT("YAY");
+                f32 final_scale    = 4 * w_scale;
+                f32 text_width = s.count * FONT_TILE_W * final_scale;
+                draw_text(sx - text_width/2, sy, final_scale, v4(1), s.data);
+                immediate_end();
+                
+                return;
+            }
+        }
+        
         immediate_begin();
         set_texture(&tex);
         // Draw tiles.
@@ -1408,6 +1457,8 @@ FUNCTION void game_render()
         
         // @Temporary:
         // @Hardcoded:
+        // @Remove:
+        // @Remove:
         // @Remove:
         {        
             immediate_begin();
