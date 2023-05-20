@@ -456,7 +456,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.fullscreen        = true;
 #endif
         global_os.exit              = false;
-        global_os.vsync             = true;
+        global_os.vsync             = false;
         global_os.fix_aspect_ratio  = true;
         global_os.render_size       = {1920, 1080};
         global_os.dt                = 1.0f/144.0f;

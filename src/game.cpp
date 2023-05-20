@@ -87,7 +87,7 @@ FUNCTION void load_game()
     USE_TEMP_ARENA_IN_THIS_SCOPE;
     String8 file = os->read_entire_file(sprint("%Ssave.dat", os->data_folder));
     if (!file.data) {
-        print("Save file not present!");
+        print("Save file not present!\n");
         return;
     }
     defer(os->free_file_memory(file.data));
@@ -1061,6 +1061,8 @@ FUNCTION void process_metagame()
                 os->fullscreen = !os->fullscreen;
             } break;
             case 3: {
+                if (dead)
+                    undo_next(&undo_handler);
                 save_game();
                 os->exit = true;
             } break;
