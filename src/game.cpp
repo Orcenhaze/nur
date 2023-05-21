@@ -497,13 +497,14 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
     else if ((cur == Color_MAGENTA && src == Color_CYAN) || (src == Color_MAGENTA && cur == Color_CYAN))
         return Color_BLUE;
     
-    // primary-secondary, choose white.
-    /* 
-        else if ((cur >= Color_YELLOW && src <= Color_BLUE))
-            return cur;
-        else if ((cur <= Color_BLUE && src >= Color_YELLOW))
-            return src;
-     */
+    // primary-secondary.
+    else if ((cur == Color_YELLOW && ((src == Color_RED) || (src == Color_GREEN))) || (src == Color_YELLOW && ((cur == Color_RED) || (cur == Color_GREEN))))
+        return Color_YELLOW;
+    else if ((cur == Color_MAGENTA && ((src == Color_RED) || (src == Color_BLUE))) || (src == Color_MAGENTA && ((cur == Color_RED) || (cur == Color_BLUE))))
+        return Color_MAGENTA;
+    else if ((cur == Color_CYAN && ((src == Color_GREEN) || (src == Color_BLUE))) || (src == Color_CYAN && ((cur == Color_GREEN) || (cur == Color_BLUE))))
+        return Color_CYAN;
+    
     else
         return Color_WHITE;
 }

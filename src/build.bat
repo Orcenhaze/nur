@@ -19,7 +19,7 @@ REM -opt:ref : Eliminates functions and data that are never referenced.
 REM -LD      : Creates a .dll.
 
 set COMPILER_FLAGS=-Od -nologo -MTd -fp:fast -Gm- -GR- -EHa- -Oi -WX -W4 -wd4201 -wd4100 -wd4189 -wd4505 -wd4456 -wd4244 -FC -Z7 -Zo
-set COMPILER_FLAGS=-DDEVELOPER=0 %COMPILER_FLAGS%
+set COMPILER_FLAGS=-DDEVELOPER=1 %COMPILER_FLAGS%
 REM set COMPILER_FLAGS=-fsanitize=address %COMPILER_FLAGS%
 set LINKER_FLAGS=-incremental:no -opt:ref user32.lib gdi32.lib winmm.lib shell32.lib 
 
