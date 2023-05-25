@@ -1,4 +1,4 @@
-/* orh.h - v0.44 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.45 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.45 - added f32 version of move_towards().
 0.44 - added fullscreen flag. OS layer has to check it after update and toggle fullscreen.
 0.43 - removed mouse_screen from OS_State.
 0.42 - added useful functions for Array: array_remove_range(), array_pop_().
@@ -475,6 +476,7 @@ FUNCDEF inline V2  smoother_step(V2 a, f32 t, V2 b);
 FUNCDEF inline V3  smoother_step(V3 a, f32 t, V3 b);
 FUNCDEF inline V4  smoother_step(V4 a, f32 t, V4 b);
 
+FUNCDEF f32 move_towards(f32 current, f32 target, f32 max_distance);
 FUNCDEF V2 move_towards(V2 current, V2 target, f32 max_distance);
 FUNCDEF V3 move_towards(V3 current, V3 target, f32 max_distance);
 FUNCDEF V2 rotate_point_around_pivot(V2 point, V2 pivot, Quaternion q);
@@ -2402,6 +2404,14 @@ V4 smoother_step(V4 a, f32 t, V4 b)
     return result;
 }
 
+f32 move_towards(f32 current, f32 target, f32 max_distance)
+{
+    f32 delta = target - current;
+    if (ABS(delta) <= max_distance)
+        return target;
+    
+    return current + SIGN(delta) * max_distance;
+}
 V2 move_towards(V2 current, V2 target, f32 max_distance)
 {
     V2 delta = target - current;
