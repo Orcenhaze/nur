@@ -657,6 +657,7 @@ FUNCTION void immediate_end()
     // Reset state.
     num_immediate_vertices = 0;
     is_using_pixel_coords  = false;
+    object_to_world_matrix = m4x4_identity();
 }
 
 FUNCTION void immediate_begin(b32 wireframe = false)

@@ -1147,7 +1147,6 @@ FUNCTION void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f
     
     immediate_rect(v2((f32)x, (f32)y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
 }
-
 FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 invert_u = false, Texture *texture = &tex)
 {
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
@@ -1163,6 +1162,19 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
     }
     
     immediate_rect(v2(x, y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
+}
+FUNCTION void draw_sprite_rotated(V2 position, V2 size, Quaternion q, s32 s, s32 t, V4 *color, f32 a, Texture *texture = &tex)
+{
+    // Offsetting uv-coords with 0.05f to avoid texture bleeding.
+    //
+    V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
+    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / texture->width;
+    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / texture->height;
+    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
+    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
+    
+    set_object_to_world(v3(position, 0.0f), q);
+    immediate_rect(v2(0), size/2, v2(u0, v0), v2(u1, v1), c);
 }
 
 //
@@ -1530,6 +1542,39 @@ FUNCTION void game_render()
         //
         //
         f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
+        
+#if 0
+        immediate_begin();
+        set_texture(&tex);
+        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+                Obj o = objmap[y][x];
+                if (o.type == T_MIRROR) {
+                    //
+                    // @Todo: We can use quaternions to draw rotated objs instead of having separate
+                    // sprite for each Dir. It's slower, but it looks much better.
+                    //
+                    // @Fix: When moving from Dir_SE to Dir_E, we move_towards in opposite direction.
+                    //
+                    V2 p = {};
+                    if (pushed_obj.x == x && pushed_obj.y == y) {
+                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        p = pushed_obj_pos;
+                    } else {
+                        p = v2(x, y);
+                    }
+                    
+                    V2s sprite = obj_sprite[o.type];
+                    LOCAL_PERSIST f32 turns = o.dir / 8.0f;
+                    turns = move_towards(turns, o.dir / 8.0f, os->dt);
+                    print("turns: %f\n", turns);
+                    Quaternion q = quaternion_from_axis_angle_turns(v3(0,0,1), turns);
+                    draw_sprite_rotated(p, v2(1), q, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                }
+            }
+        }
+        immediate_end();
+#endif
         
         immediate_begin();
         set_texture(&tex);
