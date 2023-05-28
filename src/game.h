@@ -208,6 +208,8 @@ struct Obj
     u8 type;
     u8 dir;
     u8 c; // The actual color of the object. Used for emitters, detectors and doors.
+    
+    //f32 test;
 };
 
 struct Player
@@ -242,6 +244,13 @@ GLOBAL f32 animation_timer;
 
 #define DEFAULT_ZOOM (SIZE_X*0.55f)
 GLOBAL f32 zoom_level; 
+
+enum
+{
+    LevelVersion_INIT,
+    
+    LevelVersion_COUNT,
+};
 
 struct Loaded_Game
 {

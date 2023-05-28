@@ -45,8 +45,8 @@ GLOBAL Undo_Handler undo_handler;
 FUNCTION void save_map()
 {
     Loaded_Game *g = &game->loaded_game;
-    memory_copy(g->tile_map, tilemap, sizeof(tilemap));
     memory_copy(g->obj_map, objmap, sizeof(objmap));
+    memory_copy(g->tile_map, tilemap, sizeof(tilemap));
     Player player;
     player.x = px;
     player.y = py;
@@ -71,8 +71,8 @@ FUNCTION void save_game()
 FUNCTION void reload_map()
 {
     Loaded_Game *g = &game->loaded_game;
-    memory_copy(tilemap, g->tile_map, sizeof(tilemap));
     memory_copy(objmap, g->obj_map, sizeof(objmap));
+    memory_copy(tilemap, g->tile_map, sizeof(tilemap));
     Player player;
     memory_copy(&player, &g->player, sizeof(player));
     set_player_position(player.x, player.y, player.dir, true);
@@ -103,7 +103,10 @@ FUNCTION void save_level(s32 level_number)
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
     
+    s32 latest_version = LevelVersion_COUNT-1;
+    
     save_map();
+    sb_append(&sb, &latest_version, sizeof(s32));
     sb_append(&sb, &game->loaded_game, sizeof(game->loaded_game));
     os->write_entire_file(sprint("%Slev%d.dat", os->data_folder, level_number), sb_to_string(&sb));
 }
@@ -111,6 +114,30 @@ FUNCTION void save_level(s32 level_number)
 
 FUNCTION void load_level(s32 level_number)
 {
+    //
+    // @Cleanup: !!!
+    // @Cleanup: !!!
+    // @Cleanup: !!!
+    //
+#define RESTORE_FIELD(field, inclusion_version) \
+if (version >= (inclusion_version)) \
+get(&file, &field)
+#define RESTORE_FIELD_ARRAY(field, size, inclusion_version) \
+if (version >= (inclusion_version)) \
+get(&file, &field, size)
+#define IGNORE_FIELD(type, field, inclusion_version, removed_version) \
+do { \
+type field; \
+if (version >= (inclusion_version) && version < (removed_version)) \
+get(&file, &field); \
+} while(0)
+#define IGNORE_FIELD_ARRAY(type, field, size, inclusion_version, removed_version) \
+do { \
+type field; \
+if (version >= (inclusion_version) && version < (removed_version)) \
+get(&file, &field, size); \
+} while(0)
+    
     USE_TEMP_ARENA_IN_THIS_SCOPE;
     String8 file = os->read_entire_file(sprint("%Slev%d.dat", os->data_folder, level_number));
     if (!file.data) {
@@ -120,7 +147,22 @@ FUNCTION void load_level(s32 level_number)
     }
     defer(os->free_file_memory(file.data));
     
-    MEMORY_COPY_STRUCT(&game->loaded_game, file.data);
+    s32 version = 0;
+    get(&file, &version);
+    Loaded_Game *g = &game->loaded_game;
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj *dst = &g->obj_map[y][x];
+            
+            RESTORE_FIELD(dst->color, LevelVersion_INIT);
+            RESTORE_FIELD(dst->flags, LevelVersion_INIT);
+            RESTORE_FIELD(dst->type, LevelVersion_INIT);
+            RESTORE_FIELD(dst->dir, LevelVersion_INIT);
+            RESTORE_FIELD(dst->c, LevelVersion_INIT);
+        }
+    }
+    get(&file, &g->tile_map, sizeof(g->tile_map));
+    get(&file, &g->player);
     reload_map();
 }
 

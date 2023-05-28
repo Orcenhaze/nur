@@ -967,10 +967,17 @@ FUNCDEF inline b32  is_file_separator(char c);
 template<typename T>
 void get(String8 *s, T *value)
 {
-    ASSERT(sizeof(T) < s->count);
+    ASSERT(sizeof(T) <= s->count);
     
     memory_copy(value, s->data, sizeof(T));
     advance(s, sizeof(T));
+}
+void get(String8 *s, void *data, u64 size)
+{
+    ASSERT(size <= s->count);
+    
+    memory_copy(data, s->data, size);
+    advance(s, size);
 }
 
 /////////////////////////////////////////
