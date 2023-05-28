@@ -218,18 +218,25 @@ struct Player
     u8 dir;
 };
 
-// The size of a square/cell is 1 unit!
+
 //
-#define NUM_X  4   // number of rooms.
-#define NUM_Y  4
-#define SIZE_X 10   // size of each room (in squares).
-#define SIZE_Y 10
-
-GLOBAL u8  tilemap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-GLOBAL Obj objmap[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-
 // @Cleanup: What a mess!
 //
+//
+// The size of a square/cell is 1 unit!
+//
+GLOBAL Arena current_level_arena;
+
+// These values don't change once we load a level.
+GLOBAL s32 CURRENT_LEVEL_ID;
+GLOBAL s32 NUM_X;   // number of rooms.
+GLOBAL s32 NUM_Y;
+GLOBAL s32 SIZE_X;   // size of each room (in squares).
+GLOBAL s32 SIZE_Y;
+
+GLOBAL u8  **tilemap;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+GLOBAL Obj **objmap;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+
 #define PLAYER_ANIMATION_SPEED 8.0f
 #define NUM_ANIMATION_FRAMES   4
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
@@ -242,8 +249,16 @@ GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos; // Animate obj pushing.
 GLOBAL b32 draw_grid;
 GLOBAL f32 animation_timer;
 
-#define DEFAULT_ZOOM (SIZE_X*0.55f)
+#define DEFAULT_ZOOM (10*0.55f)
 GLOBAL f32 zoom_level; 
+
+
+GLOBAL String8 level_names[] = 
+{
+    S8LIT("invalid_level"),
+    S8LIT("intro"),
+    S8LIT("intro_sokoban"),
+};
 
 enum
 {
@@ -252,20 +267,20 @@ enum
     LevelVersion_COUNT,
 };
 
-struct Loaded_Game
+struct Loaded_Level
 {
-    Obj obj_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-    u8  tile_map[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-    
-    // @Note: From player xy, we calculate room xy. 
-    //        And from room xy, we calculate camera xy.
-    //
+    s32 id;
+    s32 num_x, num_y;
+    s32 size_x, size_y;
     Player player;
+    Obj **obj_map;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+    u8  **tile_map;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
 };
 
 struct Game_State
 {
-    Loaded_Game loaded_game;
+    Arena loaded_level_arena;
+    Loaded_Level loaded_level;
     
     V2 delta_mouse;
     V2 mouse_ndc_old;

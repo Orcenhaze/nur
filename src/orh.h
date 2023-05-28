@@ -1,4 +1,4 @@
-/* orh.h - v0.45 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.46 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.46 - arena_init() now takes max size as parameter. And changed default auto_align from 8 to 1.
 0.45 - added f32 version of move_towards().
 0.44 - added fullscreen flag. OS layer has to check it after update and toggle fullscreen.
 0.43 - removed mouse_screen from OS_State.
@@ -64,7 +65,6 @@ CONVENTIONS:
 
 TODO:
 [] arenas never decommit memory. Find a good way to add that.
-[] arena_init() should take max parameter. If not passed, use the default: ARENA_MAX.
 
 */
 
@@ -889,6 +889,10 @@ FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, ma
 Arena_Temp __temp_arena = arena_temp_begin(&os->permanent_arena); \
 defer(arena_temp_end(__temp_arena))
 
+#define ARENA_AUTO_ALIGN_DEFAULT 1 // 8
+#define ARENA_MAX_DEFAULT        GIGABYTES(8)
+#define ARENA_COMMIT_SIZE        KILOBYTES(4)
+
 typedef struct Arena
 {
     u8 *base;
@@ -904,7 +908,7 @@ typedef struct Arena_Temp
     u64    used;
 } Arena_Temp;
 
-FUNCDEF Arena      arena_init(u64 auto_align = 8);
+FUNCDEF Arena      arena_init(u64 max_size = ARENA_MAX_DEFAULT, u64 auto_align = ARENA_AUTO_ALIGN_DEFAULT);
 FUNCDEF void       arena_free(Arena *arena);
 FUNCDEF void*      arena_push(Arena *arena, u64 size);
 FUNCDEF void*      arena_push_zero(Arena *arena, u64 size);
@@ -1022,6 +1026,11 @@ FUNCDEF void           sb_reset(String_Builder *builder);
 FUNCDEF void           sb_append(String_Builder *builder, void *data, u64 size);
 FUNCDEF void           sb_appendf(String_Builder *builder, char *format, ...);
 FUNCDEF String8        sb_to_string(String_Builder *builder, Arena *arena = 0);
+template<typename T>
+void sb_append(String_Builder *builder, T *data)
+{
+    sb_append(builder, data, sizeof(T));
+}
 
 /////////////////////////////////////////
 //
@@ -2828,13 +2837,10 @@ void * memory_set(void *dst, s32 val, u64 size)
     return dst;
 }
 
-#define ARENA_MAX         GIGABYTES(8)
-#define ARENA_COMMIT_SIZE KILOBYTES(4)
-
-Arena arena_init(u64 auto_align /*= 8*/)
+Arena arena_init(u64 max_size /*= ARENA_MAX_DEFAULT*/, u64 auto_align /*= ARENA_AUTO_ALIGN_DEFAULT*/)
 {
     Arena result;
-    result.max         = ARENA_MAX;
+    result.max         = max_size;
     result.base        = (u8 *) os->reserve(result.max);
     result.used        = 0;
     result.commit_used = 0;
