@@ -87,7 +87,7 @@ GLOBAL String8 choices[] =
     S8LIT("CONTINUE"),
     S8LIT("START NEW GAME"),
     S8LIT("TOGGLE FULLSCREEN"),
-    S8LIT("SAVE AND QUIT"),
+    S8LIT("QUIT"),
 #if DEVELOPER
     S8LIT("EMPTY LEVEL"),
 #endif
@@ -234,8 +234,8 @@ GLOBAL s32 NUM_Y;
 GLOBAL s32 SIZE_X;   // size of each room (in squares).
 GLOBAL s32 SIZE_Y;
 
-GLOBAL u8  **tilemap;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-GLOBAL Obj **objmap;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+GLOBAL u8  **tilemap;
+GLOBAL Obj **objmap;
 
 #define PLAYER_ANIMATION_SPEED 8.0f
 #define NUM_ANIMATION_FRAMES   4
@@ -273,8 +273,8 @@ struct Loaded_Level
     s32 num_x, num_y;
     s32 size_x, size_y;
     Player player;
-    Obj **obj_map;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
-    u8  **tile_map;//[NUM_Y*SIZE_Y][NUM_X*SIZE_X];
+    Obj **obj_map;
+    u8  **tile_map;
 };
 
 struct Game_State

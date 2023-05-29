@@ -51,34 +51,6 @@ GLOBAL Undo_Handler undo_handler;
 // @Cleanup: Cleanup serialization stuff.
 //
 //
-FUNCTION void save_map()
-{
-    Loaded_Level *lev = &game->loaded_level;
-    
-    Player player;
-    player.x    = px;
-    player.y    = py;
-    player.dir  = pdir;
-    lev->player = player;
-    
-    s32 num_rows = NUM_Y*SIZE_Y;
-    s32 num_cols = NUM_X*SIZE_X;
-    
-    // Copy objmap.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            lev->obj_map[y][x] = objmap[y][x];
-        }
-    }
-    
-    // Copy tilemap.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            lev->tile_map[y][x] = tilemap[y][x];
-        }
-    }
-}
-
 FUNCTION void save_game()
 {
     if (!game_started)
@@ -88,34 +60,9 @@ FUNCTION void save_game()
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
     
-    Loaded_Level *lev  = &game->loaded_level;
-    
-    save_map();
-    sb_append(&sb, &lev->id);
-    sb_append(&sb, &lev->num_x);
-    sb_append(&sb, &lev->num_y);
-    sb_append(&sb, &lev->size_x);
-    sb_append(&sb, &lev->size_y);
-    
-    sb_append(&sb, &lev->player);
-    
-    s32 num_rows = lev->num_y*lev->size_y;
-    s32 num_cols = lev->num_x*lev->size_x;
-    
-    // Save obj_map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            sb_append(&sb, &lev->obj_map[y][x]);
-        }
-    }
-    
-    // Save tile_map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            sb_append(&sb, &lev->tile_map[y][x]);
-        }
-    }
-    
+    //save_map();
+    s32 level_id = game->loaded_level.id;
+    sb_append(&sb, &level_id);
     os->write_entire_file(sprint("%Ssave.dat", os->data_folder), sb_to_string(&sb));
 }
 
@@ -133,14 +80,13 @@ FUNCTION void reload_map()
     Player player    = lev->player;
     set_player_position(player.x, player.y, player.dir, true);
     
-    s32 num_rows = NUM_Y*SIZE_Y;
-    s32 num_cols = NUM_X*SIZE_X;
+    s32 num_rows = lev->num_y*lev->size_y;
+    s32 num_cols = lev->num_x*lev->size_x;
     
     // Allocate memory for objmap.
     objmap = PUSH_ARRAY(a, Obj*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
         objmap[i] = PUSH_ARRAY_ZERO(a, Obj, num_cols);
-    
     // Copy objmap.
     for (s32 y = 0; y < num_rows; y++) {
         for (s32 x = 0; x < num_cols; x++) {
@@ -152,7 +98,6 @@ FUNCTION void reload_map()
     tilemap = PUSH_ARRAY(a, u8*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
         tilemap[i] = PUSH_ARRAY_ZERO(a, u8, num_cols);
-    
     // Copy tilemap.
     for (s32 y = 0; y < num_rows; y++) {
         for (s32 x = 0; x < num_cols; x++) {
@@ -164,103 +109,6 @@ FUNCTION void reload_map()
     update_camera(true);
     undo_handler_reset(&undo_handler);
 }
-
-FUNCTION b32 load_game()
-{
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
-    String8 file = os->read_entire_file(sprint("%Ssave.dat", os->data_folder));
-    if (!file.data) {
-        print("Save file not present!\n");
-        return false;
-    }
-    defer(os->free_file_memory(file.data));
-    
-    Arena *a          = &game->loaded_level_arena;
-    Loaded_Level *lev = &game->loaded_level;
-    s32 version       = 0;
-    arena_reset(a);
-    
-    get(&file, &lev->id);
-    get(&file, &lev->num_x);
-    get(&file, &lev->num_y);
-    get(&file, &lev->size_x);
-    get(&file, &lev->size_y);
-    
-    get(&file, &lev->player);
-    
-    s32 num_rows = lev->num_y*lev->size_y;
-    s32 num_cols = lev->num_x*lev->size_x;
-    
-    // Allocate memory for obj_map.
-    lev->obj_map = PUSH_ARRAY(a, Obj*, num_rows);
-    for (s32 i = 0; i < num_rows; i++) 
-        lev->obj_map[i] = PUSH_ARRAY_ZERO(a, Obj, num_cols);
-    
-    // Load obj_map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            get(&file, &lev->obj_map[y][x]);
-        }
-    }
-    
-    // Allocate memory for tile_map.
-    lev->tile_map = PUSH_ARRAY(a, u8*, num_rows);
-    for (s32 i = 0; i < num_rows; i++) 
-        lev->tile_map[i] = PUSH_ARRAY_ZERO(a, u8, num_cols);
-    
-    // Load tile_map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            get(&file, &lev->tile_map[y][x]);
-        }
-    }
-    
-    reload_map();
-    game_started = true;
-    
-    return true;
-}
-
-#if DEVELOPER
-FUNCTION void save_level(String8 level_name)
-{
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
-    String_Builder sb = sb_init();
-    defer(sb_free(&sb));
-    
-    Loaded_Level *lev  = &game->loaded_level;
-    s32 latest_version = LevelVersion_COUNT-1;
-    
-    save_map();
-    sb_append(&sb, &latest_version, sizeof(s32));
-    sb_append(&sb, &lev->id);
-    sb_append(&sb, &lev->num_x);
-    sb_append(&sb, &lev->num_y);
-    sb_append(&sb, &lev->size_x);
-    sb_append(&sb, &lev->size_y);
-    
-    sb_append(&sb, &lev->player);
-    
-    s32 num_rows = lev->num_y*lev->size_y;
-    s32 num_cols = lev->num_x*lev->size_x;
-    
-    // Save obj_map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            sb_append(&sb, &lev->obj_map[y][x]);
-        }
-    }
-    
-    // Save tile_map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
-            sb_append(&sb, &lev->tile_map[y][x]);
-        }
-    }
-    
-    os->write_entire_file(sprint("%S%S.dat", os->data_folder, level_name), sb_to_string(&sb));
-}
-#endif
 
 FUNCTION b32 load_level(String8 level_name)
 {
@@ -289,7 +137,7 @@ get(&file, &field, size); \
 } while(0)
     
     USE_TEMP_ARENA_IN_THIS_SCOPE;
-    String8 file = os->read_entire_file(sprint("%S%S.nlf", os->data_folder, level_name));
+    String8 file = os->read_entire_file(sprint("%Slevels/%S.nlf", os->data_folder, level_name));
     if (!file.data) {
         print("Couldn't load level: %S\n", level_name);
         return false;
@@ -318,7 +166,6 @@ get(&file, &field, size); \
     lev->obj_map = PUSH_ARRAY(a, Obj*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
         lev->obj_map[i] = PUSH_ARRAY_ZERO(a, Obj, num_cols);
-    
     // Load obj_map.
     for (s32 y = 0; y < num_rows; y++) {
         for (s32 x = 0; x < num_cols; x++) {
@@ -336,7 +183,6 @@ get(&file, &field, size); \
     lev->tile_map = PUSH_ARRAY(a, u8*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
         lev->tile_map[i] = PUSH_ARRAY_ZERO(a, u8, num_cols);
-    
     // Load tile_map.
     for (s32 y = 0; y < num_rows; y++) {
         for (s32 x = 0; x < num_cols; x++) {
@@ -348,6 +194,115 @@ get(&file, &field, size); \
     
     return true;
 }
+
+FUNCTION b32 load_game()
+{
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    String8 file = os->read_entire_file(sprint("%Ssave.dat", os->data_folder));
+    if (!file.data) {
+        print("Save file not present!\n");
+        return false;
+    }
+    defer(os->free_file_memory(file.data));
+    
+    s32 level_id;
+    get(&file, &level_id);
+    if (!load_level(level_names[level_id])) {
+        return false;
+    }
+    
+    game_started = true;
+    return true;
+}
+
+#if DEVELOPER
+FUNCTION void save_map()
+{
+    Arena *a          = &game->loaded_level_arena;
+    Loaded_Level *lev = &game->loaded_level;
+    arena_reset(a);
+    
+    lev->id     = CURRENT_LEVEL_ID;
+    lev->num_x  = NUM_X;
+    lev->num_y  = NUM_Y;
+    lev->size_x = SIZE_X;
+    lev->size_y = SIZE_Y;
+    Player player;
+    player.x    = px;
+    player.y    = py;
+    player.dir  = pdir;
+    lev->player = player;
+    
+    s32 num_rows = NUM_Y*SIZE_Y;
+    s32 num_cols = NUM_X*SIZE_X;
+    
+    // Allocate memory for obj_map.
+    lev->obj_map = PUSH_ARRAY(a, Obj*, num_rows);
+    for (s32 i = 0; i < num_rows; i++) 
+        lev->obj_map[i] = PUSH_ARRAY_ZERO(a, Obj, num_cols);
+    // Copy.
+    for (s32 y = 0; y < num_rows; y++) {
+        for (s32 x = 0; x < num_cols; x++) {
+            lev->obj_map[y][x] = objmap[y][x];
+        }
+    }
+    
+    // Allocate memory for tile_map.
+    lev->tile_map = PUSH_ARRAY(a, u8*, num_rows);
+    for (s32 i = 0; i < num_rows; i++) 
+        lev->tile_map[i] = PUSH_ARRAY_ZERO(a, u8, num_cols);
+    // Copy.
+    for (s32 y = 0; y < num_rows; y++) {
+        for (s32 x = 0; x < num_cols; x++) {
+            lev->tile_map[y][x] = tilemap[y][x];
+        }
+    }
+}
+
+FUNCTION b32 save_level(String8 level_name)
+{
+    if (string_match(level_name, level_names[0])) {
+        print("Can't save invalid level!\n");
+        return false;
+    }
+    
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    String_Builder sb = sb_init();
+    defer(sb_free(&sb));
+    
+    Loaded_Level *lev = &game->loaded_level;
+    s32 latest_version = LevelVersion_COUNT-1;
+    
+    save_map();
+    sb_append(&sb, &latest_version, sizeof(s32));
+    sb_append(&sb, &lev->id);
+    sb_append(&sb, &lev->num_x);
+    sb_append(&sb, &lev->num_y);
+    sb_append(&sb, &lev->size_x);
+    sb_append(&sb, &lev->size_y);
+    
+    sb_append(&sb, &lev->player);
+    
+    s32 num_rows = lev->num_y*lev->size_y;
+    s32 num_cols = lev->num_x*lev->size_x;
+    
+    // append obj_map.
+    for (s32 y = 0; y < num_rows; y++) {
+        for (s32 x = 0; x < num_cols; x++) {
+            sb_append(&sb, &lev->obj_map[y][x]);
+        }
+    }
+    
+    // append tile_map.
+    for (s32 y = 0; y < num_rows; y++) {
+        for (s32 x = 0; x < num_cols; x++) {
+            sb_append(&sb, &lev->tile_map[y][x]);
+        }
+    }
+    
+    return os->write_entire_file(sprint("%Slevels/%S.nlf", os->data_folder, level_name), sb_to_string(&sb));
+}
+#endif
 
 FUNCTION b32 mouse_over_ui()
 {
@@ -362,8 +317,15 @@ FUNCTION b32 mouse_over_ui()
 }
 
 #if DEVELOPER
-FUNCTION void make_empty_level()
+FUNCTION void resize_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
 {
+    NUM_X  = num_x;
+    NUM_Y  = num_y;
+    SIZE_X = size_x;
+    SIZE_Y = size_y;
+    
+    arena_reset(&current_level_arena);
+	
     s32 num_rows = NUM_Y*SIZE_Y;
     s32 num_cols = NUM_X*SIZE_X;
     
@@ -375,17 +337,59 @@ FUNCTION void make_empty_level()
     tilemap = PUSH_ARRAY(&current_level_arena, u8*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
         tilemap[i] = PUSH_ARRAY_ZERO(&current_level_arena, u8, num_cols);
-    
+}
+
+FUNCTION void make_empty_level()
+{
     // Init map.
-    for (s32 y = 0; y < num_rows; y++) {
-        for (s32 x = 0; x < num_cols; x++) {
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             tilemap[y][x] = Tile_FLOOR;
-            objmap[y][x].type = T_EMPTY;
+            objmap[y][x]  = {};
         }
     }
     // Initial player and room position.
     set_player_position(0, 0, Dir_E, true);
     update_camera(true);
+}
+
+FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
+{
+    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    u8  **old_tilemap;
+    Obj **old_objmap;
+    
+    // Copy current level before resizing.
+    s32 old_num_rows = NUM_Y*SIZE_Y;
+    s32 old_num_cols = NUM_X*SIZE_X;
+    old_objmap = PUSH_ARRAY(&os->permanent_arena, Obj*, old_num_rows);
+    for (s32 i = 0; i < old_num_rows; i++) 
+        old_objmap[i] = PUSH_ARRAY_ZERO(&os->permanent_arena, Obj, old_num_cols);
+    old_tilemap = PUSH_ARRAY(&os->permanent_arena, u8*, old_num_rows);
+    for (s32 i = 0; i < old_num_rows; i++) 
+        old_tilemap[i] = PUSH_ARRAY_ZERO(&os->permanent_arena, u8, old_num_cols);
+    
+    for (s32 y = 0; y < old_num_rows; y++) {
+        for (s32 x = 0; x < old_num_cols; x++) {
+            old_tilemap[y][x] = tilemap[y][x];
+            old_objmap[y][x]  = objmap[y][x];
+        }
+    }
+    
+    ////////////////////////////////
+    ////////////////////////////////
+    
+    resize_current_level(num_x, num_y, size_x, size_y);
+    
+    // Restore old maps.
+    s32 num_rows = MIN(old_num_rows, num_y*size_y);
+    s32 num_cols = MIN(old_num_cols, num_x*size_x);
+    for (s32 y = 0; y < num_rows; y++) {
+        for (s32 x = 0; x < num_cols; x++) {
+            tilemap[y][x] = old_tilemap[y][x];
+            objmap[y][x]  = old_objmap[y][x];
+        }
+    }
 }
 
 FUNCTION void do_editor()
@@ -396,7 +400,7 @@ FUNCTION void do_editor()
     ImGui::Begin("Editor", NULL, ImGuiWindowFlags_AlwaysAutoResize);
     
     //
-    // Save game.
+    // Level meta.
     {
         // Select level.
         const char* combo_preview_value = (const char*)level_names[CURRENT_LEVEL_ID].data;
@@ -407,8 +411,7 @@ FUNCTION void do_editor()
                     CURRENT_LEVEL_ID = name_index;
                     
                     if (!load_level(level_names[CURRENT_LEVEL_ID])) {
-                        NUM_X = NUM_Y = 1;
-                        SIZE_X = SIZE_Y = 4;
+                        resize_current_level(1, 1, 4, 4);
                         make_empty_level();
                     }
                 }
@@ -420,18 +423,34 @@ FUNCTION void do_editor()
             ImGui::EndCombo();
         }
         
-        ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
-        
-        if (ImGui::InputInt("NUM_X", &NUM_X)) make_empty_level(); ImGui::SameLine();
-        if (ImGui::InputInt("NUM_Y", &NUM_Y)) make_empty_level();
-        if (ImGui::InputInt("SIZE_X", &SIZE_X)) make_empty_level(); ImGui::SameLine();
-        if (ImGui::InputInt("SIZE_Y", &SIZE_Y)) make_empty_level();
         
         ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
         
+        
+        // Expand level size.
+        LOCAL_PERSIST s32 num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
+        b32 do_expand = false;
+        if (ImGui::InputInt("NUM_X", &num_x)) do_expand = true;
+        if (ImGui::InputInt("NUM_Y", &num_y)) do_expand = true;;
+        if (ImGui::InputInt("SIZE_X", &size_x)) do_expand = true;
+        if (ImGui::InputInt("SIZE_Y", &size_y)) do_expand = true;
+        num_x = CLAMP_LOWER(num_x, 0); 
+        num_y = CLAMP_LOWER(num_y, 0); 
+        size_x = CLAMP_LOWER(size_x, 0); 
+        size_y = CLAMP_LOWER(size_y, 0); 
+        if (do_expand)
+            expand_current_level(num_x, num_y, size_x, size_y);
+        
+        
+        ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
+        
+        
+        // Save level.
         if (ImGui::Button("Save level")) {
-            save_level(level_names[CURRENT_LEVEL_ID]);
-            ImGui::SameLine(); ImGui::Text("Saved!");
+            if (save_level(level_names[CURRENT_LEVEL_ID])) {
+                ImGui::SameLine(); 
+                ImGui::Text("Saved!");
+            }
         }
         
         if (key_pressed(Key_F3)) {
@@ -623,8 +642,7 @@ FUNCTION void game_init()
     current_level_arena      = arena_init(MEGABYTES(1));
     
 #if DEVELOPER
-    NUM_X = NUM_Y = 1;
-    SIZE_X = SIZE_Y = 4;
+    resize_current_level(1, 1, 4, 4);
     make_empty_level();
 #endif
     
@@ -1343,8 +1361,8 @@ FUNCTION void process_metagame()
                 os->fullscreen = !os->fullscreen;
             } break;
             case 3: {
-                if (dead)
-                    undo_next(&undo_handler);
+                //if (dead)
+                //undo_next(&undo_handler);
                 save_game();
                 os->exit = true;
             } break;
@@ -1390,7 +1408,8 @@ FUNCTION void game_update()
     if (key_pressed(Key_ESCAPE)) {
         if (main_mode == M_GAME) {
             can_toggle_menu = true;
-            menu_selection = 0;
+            if (game_started)
+                menu_selection = 0;
         }
         
         if (can_toggle_menu)
