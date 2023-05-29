@@ -46,10 +46,6 @@ GLOBAL Undo_Handler undo_handler;
 //
 // @Cleanup: Cleanup serialization stuff.
 // @Cleanup: Cleanup serialization stuff.
-// @Cleanup: Cleanup serialization stuff.
-// @Cleanup: Cleanup serialization stuff.
-// @Cleanup: Cleanup serialization stuff.
-//
 //
 FUNCTION void save_game()
 {
@@ -112,28 +108,23 @@ FUNCTION void reload_map()
 
 FUNCTION b32 load_level(String8 level_name)
 {
-    //
-    // @Cleanup: !!!
-    // @Cleanup: !!!
-    // @Cleanup: !!!
-    //
 #define RESTORE_FIELD(field, inclusion_version) \
 if (version >= (inclusion_version)) \
 get(&file, &field)
 #define RESTORE_FIELD_ARRAY(field, size, inclusion_version) \
 if (version >= (inclusion_version)) \
 get(&file, &field, size)
-#define IGNORE_FIELD(type, field, inclusion_version, removed_version) \
+#define IGNORE_FIELD(type, field_name, inclusion_version, removed_version) \
 do { \
-type field; \
+type field_name; \
 if (version >= (inclusion_version) && version < (removed_version)) \
-get(&file, &field); \
+get(&file, &field_name); \
 } while(0)
-#define IGNORE_FIELD_ARRAY(type, field, size, inclusion_version, removed_version) \
+#define IGNORE_FIELD_ARRAY(type, field_name, size, inclusion_version, removed_version) \
 do { \
-type field; \
+type field_name; \
 if (version >= (inclusion_version) && version < (removed_version)) \
-get(&file, &field, size); \
+get(&file, &field_name, size); \
 } while(0)
     
     USE_TEMP_ARENA_IN_THIS_SCOPE;
@@ -402,6 +393,8 @@ FUNCTION void do_editor()
     //
     // Level meta.
     {
+        LOCAL_PERSIST s32 num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
+        
         // Select level.
         const char* combo_preview_value = (const char*)level_names[CURRENT_LEVEL_ID].data;
         if(ImGui::BeginCombo("Choose level", combo_preview_value)) {
@@ -414,6 +407,8 @@ FUNCTION void do_editor()
                         resize_current_level(1, 1, 4, 4);
                         make_empty_level();
                     }
+                    
+                    num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
                 }
                 
                 // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -428,7 +423,6 @@ FUNCTION void do_editor()
         
         
         // Expand level size.
-        LOCAL_PERSIST s32 num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
         b32 do_expand = false;
         if (ImGui::InputInt("NUM_X", &num_x)) do_expand = true;
         if (ImGui::InputInt("NUM_Y", &num_y)) do_expand = true;;
@@ -1020,8 +1014,6 @@ FUNCTION void update_world()
             
             // @Hardcoded:
             dead = false;
-            
-            //print("COMMIT: %m\n", undo_handler.records.arena.commit_used);
         }
     }
     
@@ -1097,6 +1089,7 @@ FUNCTION void update_world()
         move_player(queued_move.x, queued_move.y);
     } 
     
+    // Update player sprite.
     s32 base_s = pdir == Dir_N? 4 : 0;
     if (pdir == Dir_S)
         psprite.t = 6;

@@ -219,39 +219,48 @@ struct Player
 };
 
 
+////////////////////////////////
+////////////////////////////////
+// Global current state.
 //
-// @Cleanup: What a mess!
-//
-//
-// The size of a square/cell is 1 unit!
-//
+
+// current_level metadata (we're storing each field independently).
 GLOBAL Arena current_level_arena;
-
-// These values don't change once we load a level.
 GLOBAL s32 CURRENT_LEVEL_ID;
-GLOBAL s32 NUM_X;   // number of rooms.
+GLOBAL s32 NUM_X;
 GLOBAL s32 NUM_Y;
-GLOBAL s32 SIZE_X;   // size of each room (in squares).
+GLOBAL s32 SIZE_X;
 GLOBAL s32 SIZE_Y;
-
 GLOBAL u8  **tilemap;
 GLOBAL Obj **objmap;
 
+// Square position of mouse cursor.
+GLOBAL s32 mx; GLOBAL s32 my;
+
+// Room (bottom left square) that player is in.
+GLOBAL s32 rx; GLOBAL s32 ry;
+
+// Camera discrete and animated positions.
+GLOBAL V2 camera; GLOBAL V2 camera_pos;
+
+// Pushed obj discrete and animated positions.
+GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos;
+
+// Player state.
 #define PLAYER_ANIMATION_SPEED 8.0f
 #define NUM_ANIMATION_FRAMES   4
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
-GLOBAL s32 mx; GLOBAL s32 my;                                 // Mouse.
-GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite;// Player
-GLOBAL b32 dead = false; GLOBAL b32 is_hitting_beam;
-GLOBAL s32 rx; GLOBAL s32 ry; // Room (bottom left square) that player is in.
-GLOBAL V2 camera; GLOBAL V2 camera_pos;
-GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos; // Animate obj pushing.
-GLOBAL b32 draw_grid;
 GLOBAL f32 animation_timer;
+GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite;
+GLOBAL b32 dead = false; GLOBAL b32 is_hitting_beam;
 
+// Other state.
 #define DEFAULT_ZOOM (10*0.55f)
 GLOBAL f32 zoom_level; 
+GLOBAL b32 draw_grid;
 
+////////////////////////////////
+////////////////////////////////
 
 GLOBAL String8 level_names[] = 
 {
@@ -269,9 +278,9 @@ enum
 
 struct Loaded_Level
 {
-    s32 id;
-    s32 num_x, num_y;
-    s32 size_x, size_y;
+    s32 id;             // Index to level_names[].
+    s32 num_x, num_y;   // Number of rooms.
+    s32 size_x, size_y; // Size of each room (in squares).
     Player player;
     Obj **obj_map;
     u8  **tile_map;
