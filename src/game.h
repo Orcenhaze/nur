@@ -201,15 +201,18 @@ enum
 
 struct Obj
 {
-    // @Note: Color in each direction. Some objs don't use this.
-    // @Todo: Use bitfileds?
+    // @Note: 
+    // color[8] is color in each direction. Some objs don't interact with beams, so they use
+    // it in a special way:
+    // T_DOOR: color[0] is number of detectors in room required to be lit in order to open it.
+    //         color[1] is used every frame as counter of number of detectors currently lit.
+    //         color[1] must be cleared every frame before we update the doors and detectors.
+    //
     u8 color[8];
     u8 flags;
     u8 type;
     u8 dir;
     u8 c; // The actual color of the object. Used for emitters, detectors and doors.
-    
-    //f32 test;
 };
 
 struct Player
@@ -305,6 +308,7 @@ struct Game_State
     u8  selected_tile_or_obj;
     s32 selected_color;
     s32 selected_flag;
+    s32 num_detectors_required;
 #endif
 };
 GLOBAL Game_State *game;

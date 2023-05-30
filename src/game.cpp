@@ -404,7 +404,7 @@ FUNCTION void do_editor()
                     CURRENT_LEVEL_ID = name_index;
                     
                     if (!load_level(level_names[CURRENT_LEVEL_ID])) {
-                        resize_current_level(1, 1, 4, 4);
+                        resize_current_level(1, 1, 8, 8);
                         make_empty_level();
                     }
                     
@@ -563,11 +563,19 @@ FUNCTION void do_editor()
             ImGui::SameLine(0, ImGui::GetFrameHeight());
             const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
             const char* col = cols[game->selected_color];
-            ImGui::SliderInt("Color", &game->selected_color, 0, ARRAY_COUNT(cols)-1, col);
+            ImGui::Combo("Color", &game->selected_color, cols, ARRAY_COUNT(cols));
             
-            ImGui::RadioButton("NONE", &game->selected_flag, 0); ImGui::SameLine();
-            ImGui::RadioButton("LOCK CCW", &game->selected_flag, 1); ImGui::SameLine();
-            ImGui::RadioButton("LOCK CW", &game->selected_flag, 2);
+            if (game->selected_tile_or_obj == T_MIRROR || 
+                game->selected_tile_or_obj == T_BENDER ||
+                game->selected_tile_or_obj == T_SPLITTER) {
+                ImGui::RadioButton("NONE", &game->selected_flag, 0); ImGui::SameLine();
+                ImGui::RadioButton("LOCK CCW", &game->selected_flag, 1); ImGui::SameLine();
+                ImGui::RadioButton("LOCK CW", &game->selected_flag, 2);
+            }
+            
+            if (game->selected_tile_or_obj == T_DOOR) {
+                ImGui::SliderInt("Number of detectors required", &game->num_detectors_required, 1, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
+            }
         }
     }
     
@@ -636,8 +644,10 @@ FUNCTION void game_init()
     current_level_arena      = arena_init(MEGABYTES(1));
     
 #if DEVELOPER
-    resize_current_level(1, 1, 4, 4);
+    resize_current_level(1, 1, 8, 8);
     make_empty_level();
+    
+    game->num_detectors_required = 1;
 #endif
     
     game->rng = random_seed();
@@ -1140,10 +1150,13 @@ FUNCTION void update_world()
         }
     }
     
-    // Clear colors for all objs.
+    // Clear colors for all objs (except ones that use it specially).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            MEMORY_ZERO_ARRAY(objmap[y][x].color);
+            if (objmap[y][x].type == T_DOOR || objmap[y][x].type == T_DOOR_OPEN)
+                objmap[y][x].color[1] = 0;
+            else
+                MEMORY_ZERO_ARRAY(objmap[y][x].color);
         }
     }
     
@@ -1161,36 +1174,36 @@ FUNCTION void update_world()
         }
     }
     
-    // Update doors
+    // Update doors and detectors.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            if (o.type == T_DETECTOR) {
-                s32 room_x     = SIZE_X*(x/SIZE_X);
-                s32 room_y     = SIZE_Y*(y/SIZE_Y);
+            Obj detector = objmap[y][x];
+            if (detector.type == T_DETECTOR) {
+                s32 room_x = SIZE_X*(x/SIZE_X);
+                s32 room_y = SIZE_Y*(y/SIZE_Y);
                 
                 u8 final_c = Color_WHITE;
                 for (s32 i = 0; i < 8; i++)
-                    final_c = mix_colors(final_c, o.color[i]);
+                    final_c = mix_colors(final_c, detector.color[i]);
                 
-                if (final_c == o.c) {
-                    // Open doors in room.
-                    for (s32 dy = room_y; dy < room_y+SIZE_Y; dy++) {
-                        for (s32 dx = room_x; dx < room_x+SIZE_X; dx++) {
-                            if (dx == x && dy == y)
-                                continue;
-                            if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c) 
-                                objmap[dy][dx].type = T_DOOR_OPEN;
-                        }}
-                } else {
-                    // Close doors in room.
-                    for (s32 dy = room_y; dy < room_y+SIZE_Y; dy++) {
-                        for (s32 dx = room_x; dx < room_x+SIZE_X; dx++) {
-                            if (dx == x && dy == y)
-                                continue;
-                            if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == o.c)
+                for (s32 dy = room_y; dy < room_y+SIZE_Y; dy++) {
+                    for (s32 dx = room_x; dx < room_x+SIZE_X; dx++) {
+                        if (dx == x && dy == y)
+                            continue;
+                        if ((objmap[dy][dx].type == T_DOOR || objmap[dy][dx].type == T_DOOR_OPEN) && objmap[dy][dx].c == detector.c) {
+                            if (final_c == detector.c) {
+                                // Potentially open door.
+                                objmap[dy][dx].color[1] += 1;
+                                if (objmap[dy][dx].color[1] >= objmap[dy][dx].color[0])
+                                    objmap[dy][dx].type = T_DOOR_OPEN;
+                                else
+                                    objmap[dy][dx].type = T_DOOR;
+                            } else {
+                                // Close door.
                                 objmap[dy][dx].type = T_DOOR;
-                        }}
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1254,6 +1267,11 @@ FUNCTION void update_editor()
                         objmap[my][mx].flags = game->selected_flag;
                         game->selected_flag = 0;
                     }
+                    
+                    if (game->selected_tile_or_obj == T_DOOR) {
+                        objmap[my][mx].color[0] = game->num_detectors_required;
+                    }
+                    
                 }
             }
         }
