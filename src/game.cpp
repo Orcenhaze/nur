@@ -1200,7 +1200,8 @@ FUNCTION void update_world()
                                     objmap[dy][dx].type = T_DOOR;
                             } else {
                                 // Close door.
-                                objmap[dy][dx].type = T_DOOR;
+                                if (objmap[dy][dx].color[1] < objmap[dy][dx].color[0])
+                                    objmap[dy][dx].type = T_DOOR;
                             }
                         }
                     }
