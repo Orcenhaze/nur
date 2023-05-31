@@ -927,8 +927,6 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 
 FUNCTION b32 is_obj_collides(u8 type)
 {
-    // @Todo: Could make interesting puzzles if we allow pushing things over T_DOOR_OPEN.
-    // But we can't have two objs occupying the same square!
     switch (type) {
         case T_EMITTER:
         case T_MIRROR:
