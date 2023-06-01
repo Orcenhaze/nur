@@ -453,6 +453,7 @@ FUNCTION void do_editor()
     }
     
     ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
+    ImGui::Checkbox("Draw grid", (bool*)&draw_grid);
     ImGui::Dummy(ImVec2(0, ImGui::GetFrameHeight()));
     
     //
