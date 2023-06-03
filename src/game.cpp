@@ -1397,7 +1397,7 @@ FUNCTION void game_update()
                                     view_to_proj_matrix).xy;
     
     V2 m = round(game->mouse_world);
-    m    = clamp(v2(0), m, v2(NUM_X*SIZE_X-1, NUM_X*SIZE_X-1));
+    m    = clamp(v2(0), m, v2(NUM_X*SIZE_X-1, NUM_Y*SIZE_Y-1));
     mx   = (s32)m.x;
     my   = (s32)m.y;
     
