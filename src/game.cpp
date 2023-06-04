@@ -1,20 +1,18 @@
 
-FUNCTION f32 calculate_zoom()
+FUNCTION void set_default_zoom()
 {
-    f32 level_ar    = (f32)SIZE_X/(f32)SIZE_Y;
-    f32 render_ar   = (f32)os->render_size.width / (f32)os->render_size.height;
-    b32 level_wider = (level_ar >= render_ar);
+    f32 level_ar  = (f32)SIZE_X/(f32)SIZE_Y;
+    f32 render_ar = (f32)os->render_size.width / (f32)os->render_size.height;
     
-    f32 result;
-    if (level_wider)
-        result = ((f32)SIZE_X + 1.0f) / (2.0f * render_ar);
+    if (level_ar >= render_ar)
+        zoom_level = ((f32)SIZE_X + 1.0f) / (2.0f * render_ar);
     else
-        result = ((f32)SIZE_Y + 1.0f) / (2.0f);
+        zoom_level = ((f32)SIZE_Y + 1.0f) / (2.0f);
     
     f32 padding_factor = 1.1f;
-    result *= padding_factor;
+    zoom_level *= padding_factor;
     
-    return result;
+    set_view_to_proj(zoom_level);
 }
 
 FUNCTION void update_camera(b32 teleport = false)
@@ -120,8 +118,7 @@ FUNCTION void reload_map()
     }
     
     dead = false;
-    zoom_level = calculate_zoom();
-    set_view_to_proj(zoom_level);
+    set_default_zoom();
     update_camera(true);
     undo_handler_reset(&undo_handler);
 }
@@ -334,6 +331,8 @@ FUNCTION void resize_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
     NUM_Y  = num_y;
     SIZE_X = size_x;
     SIZE_Y = size_y;
+    set_default_zoom();
+    update_camera(true);
     
     arena_reset(&current_level_arena);
 	
@@ -361,7 +360,6 @@ FUNCTION void make_empty_level()
     }
     // Initial player and room position.
     set_player_position(0, 0, Dir_E, true);
-    update_camera(true);
 }
 
 FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
@@ -687,9 +685,7 @@ FUNCTION void game_init()
     if (game_started)
         menu_selection = 0;
     
-    zoom_level = calculate_zoom();
-    set_view_to_proj(zoom_level);
-    
+    set_default_zoom();
     update_camera(true);
     set_world_to_view(v3(camera_pos, 0));
     
@@ -1429,8 +1425,7 @@ FUNCTION void game_update()
             main_mode = M_GAME;
         
         if (main_mode == M_GAME) {
-            zoom_level = calculate_zoom();
-            set_view_to_proj(zoom_level);
+            set_default_zoom();
             update_camera(true);
         }
     }

@@ -258,7 +258,6 @@ GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite
 GLOBAL b32 dead = false; GLOBAL b32 is_hitting_beam;
 
 // Other state.
-#define DEFAULT_ZOOM (10*0.55f)
 GLOBAL f32 zoom_level; 
 GLOBAL b32 draw_grid;
 
