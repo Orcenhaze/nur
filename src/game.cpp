@@ -1,4 +1,22 @@
 
+FUNCTION f32 calculate_zoom()
+{
+    f32 level_ar    = (f32)SIZE_X/(f32)SIZE_Y;
+    f32 render_ar   = (f32)os->render_size.width / (f32)os->render_size.height;
+    b32 level_wider = (level_ar >= render_ar);
+    
+    f32 result;
+    if (level_wider)
+        result = ((f32)SIZE_X + 1.0f) / (2.0f * render_ar);
+    else
+        result = ((f32)SIZE_Y + 1.0f) / (2.0f);
+    
+    f32 padding_factor = 1.1f;
+    result *= padding_factor;
+    
+    return result;
+}
+
 FUNCTION void update_camera(b32 teleport = false)
 {
     camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
@@ -102,6 +120,8 @@ FUNCTION void reload_map()
     }
     
     dead = false;
+    zoom_level = calculate_zoom();
+    set_view_to_proj(zoom_level);
     update_camera(true);
     undo_handler_reset(&undo_handler);
 }
@@ -667,7 +687,7 @@ FUNCTION void game_init()
     if (game_started)
         menu_selection = 0;
     
-    zoom_level = DEFAULT_ZOOM;
+    zoom_level = calculate_zoom();
     set_view_to_proj(zoom_level);
     
     update_camera(true);
@@ -1409,7 +1429,7 @@ FUNCTION void game_update()
             main_mode = M_GAME;
         
         if (main_mode == M_GAME) {
-            zoom_level = DEFAULT_ZOOM;
+            zoom_level = calculate_zoom();
             set_view_to_proj(zoom_level);
             update_camera(true);
         }
