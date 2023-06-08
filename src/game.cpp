@@ -678,7 +678,6 @@ FUNCTION void game_init()
         USE_TEMP_ARENA_IN_THIS_SCOPE;
         d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
         d3d11_load_texture(&font_tex, sprint("%Sfont_sprites.png", os->data_folder));
-        d3d11_load_texture(&controls_tex, sprint("%Scontrols.png", os->data_folder));
     }
     
     load_game();
