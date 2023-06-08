@@ -184,7 +184,7 @@ FUNCTION void win32_build_paths()
     string_format(global_data_folder, sizeof(global_data_folder), "%s..\\data\\", global_exe_parent_folder);
 }
 
-FUNCTION void win32_process_pending_messages()
+FUNCTION void win32_process_pending_messages(HWND window)
 {
 #if DEVELOPER
     ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -253,14 +253,24 @@ FUNCTION void win32_process_pending_messages()
                     }
                 } break;
                 
-                case WM_LBUTTONDOWN:
+                case WM_LBUTTONDOWN: {
+                    SetCapture(window);
+                    Queued_Input input = {Key_MLEFT, (message.wParam & MK_LBUTTON)};
+                    array_add(&global_os.inputs_to_process, input);
+                } break;
                 case WM_LBUTTONUP: {
+                    ReleaseCapture();
                     Queued_Input input = {Key_MLEFT, (message.wParam & MK_LBUTTON)};
                     array_add(&global_os.inputs_to_process, input);
                 } break;
                 
-                case WM_RBUTTONDOWN:
+                case WM_RBUTTONDOWN: {
+                    SetCapture(window);
+                    Queued_Input input = {Key_MRIGHT, (message.wParam & MK_RBUTTON)};
+                    array_add(&global_os.inputs_to_process, input);
+                } break;
                 case WM_RBUTTONUP: {
+                    ReleaseCapture();
                     Queued_Input input = {Key_MRIGHT, (message.wParam & MK_RBUTTON)};
                     array_add(&global_os.inputs_to_process, input);
                 } break;
@@ -341,7 +351,7 @@ FUNCTION void win32_process_inputs(HWND window)
     
     // Put input messages in queue.
     //
-    win32_process_pending_messages();
+    win32_process_pending_messages(window);
     
 #if DEVELOPER
     ImGuiIO& io = ImGui::GetIO(); (void)io;
