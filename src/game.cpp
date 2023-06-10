@@ -401,7 +401,7 @@ FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
     }
 }
 
-FUNCTION void do_editor()
+FUNCTION void do_editor(b32 is_first_call)
 {
     ImGuiIO& io      = ImGui::GetIO();
     b32 pressed_left = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse_over_ui();
@@ -412,6 +412,11 @@ FUNCTION void do_editor()
     // Level meta.
     {
         LOCAL_PERSIST s32 num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
+        
+        // Maybe player restarted level in game mode, so ensure we update the level size.
+        if (is_first_call) {
+            num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
+        }
         
         // Select level.
         const char* combo_preview_value = (const char*)level_names[CURRENT_LEVEL_ID].data;
@@ -542,6 +547,9 @@ FUNCTION void do_editor()
             if (i % 4 == 0)
                 ImGui::NewLine();
             
+            if (i == T_DOOR_OPEN)
+                continue;
+            
             V2s sprite = obj_sprite[i];
             
             ImVec2 uv_min = {
@@ -579,10 +587,14 @@ FUNCTION void do_editor()
             
             // Choose color
             //
-            ImGui::SameLine(0, ImGui::GetFrameHeight());
-            const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
-            const char* col = cols[game->selected_color];
-            ImGui::Combo("Color", &game->selected_color, cols, ARRAY_COUNT(cols));
+            if (game->selected_tile_or_obj == T_EMITTER  || 
+                game->selected_tile_or_obj == T_DETECTOR ||
+                game->selected_tile_or_obj == T_DOOR) {
+                ImGui::SameLine(0, ImGui::GetFrameHeight());
+                const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
+                const char* col = cols[game->selected_color];
+                ImGui::ListBox("Color", &game->selected_color, cols, ARRAY_COUNT(cols));
+            }
             
             if (game->selected_tile_or_obj == T_MIRROR || 
                 game->selected_tile_or_obj == T_BENDER ||
@@ -594,6 +606,25 @@ FUNCTION void do_editor()
             
             if (game->selected_tile_or_obj == T_DOOR) {
                 ImGui::SliderInt("Number of detectors required", &game->num_detectors_required, 1, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
+            }
+            
+            if (game->selected_tile_or_obj == T_TELEPORTER) {
+                ImGui::SameLine(0, ImGui::GetFrameHeight());
+                // Select level.
+                const char* combo_preview_value = (const char*)level_names[game->level_teleport_to].data;
+                if(ImGui::BeginListBox("Teleport to")) {
+                    for(int name_index = 0; name_index < IM_ARRAYSIZE(level_names); name_index++) {
+                        const bool is_selected = (game->level_teleport_to == name_index);
+                        if(ImGui::Selectable((const char*)level_names[name_index].data, is_selected)) {
+                            game->level_teleport_to = name_index;
+                        }
+                        
+                        // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                        if(is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndListBox();
+                }
             }
         }
     }
@@ -1130,6 +1161,15 @@ FUNCTION void update_world()
         animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
     }
     
+    // Load new level if we step on teleporter.
+    if (player_is_at_rest()) {
+        Obj o = objmap[py][px];
+        if (o.type == T_TELEPORTER) {
+            load_level(level_names[o.color[0]]);
+        }
+    }
+    
+    
     ////////////////////////////////
     // Update map.
     //
@@ -1167,7 +1207,9 @@ FUNCTION void update_world()
     // Clear colors for all objs (except ones that use it specially).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            if (objmap[y][x].type == T_DOOR || objmap[y][x].type == T_DOOR_OPEN)
+            if (objmap[y][x].type == T_TELEPORTER)
+                continue;
+            else if (objmap[y][x].type == T_DOOR || objmap[y][x].type == T_DOOR_OPEN)
                 objmap[y][x].color[1] = 0;
             else
                 MEMORY_ZERO_ARRAY(objmap[y][x].color);
@@ -1287,6 +1329,9 @@ FUNCTION void update_editor()
                         objmap[my][mx].color[0] = game->num_detectors_required;
                     }
                     
+                    if (game->selected_tile_or_obj == T_TELEPORTER) {
+                        objmap[my][mx].color[0] = game->level_teleport_to;
+                    }
                 }
             }
         }
@@ -1441,6 +1486,10 @@ FUNCTION void game_update()
             main_mode = main_mode == M_GAME? M_MENU : M_GAME;
         else
             main_mode = M_MENU;
+    }
+    
+    if (input_pressed(RESTART_LEVEL)) {
+        load_level(level_names[CURRENT_LEVEL_ID]);
     }
     
     switch (main_mode) {
@@ -1882,6 +1931,9 @@ FUNCTION void game_render()
                     case T_DOOR_OPEN: {
                         draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                     } break;
+                    case T_TELEPORTER: {
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    } break;
                 }
             }
         }
@@ -1946,7 +1998,7 @@ FUNCTION void game_render()
         {
             bool show_demo_window = true;
             ImGui::ShowDemoWindow(&show_demo_window);
-            do_editor();
+            do_editor(key_pressed(Key_F1));
         }
 #endif
     }

@@ -552,6 +552,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         // Process Inputs --> Update --> Render.
         //
         //
+        u32 num_updates_this_frame = 0;
         while (accumulator >= os->dt) {
             b32 last_fullscreen = global_os.fullscreen;
             win32_process_inputs(window);
@@ -560,6 +561,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             os->time    += os->dt;
             if (last_fullscreen != global_os.fullscreen)
                 win32_toggle_fullscreen(window);
+            
+            num_updates_this_frame++;
         }
         
         // Render only if window size is non-zero.
@@ -587,6 +590,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         f64 seconds_elapsed_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
         last_counter                  = end_counter;
         accumulator                  += seconds_elapsed_for_frame;
+        print("Num updates this frame: %d\n", num_updates_this_frame);
     }
     
     /////////////////////////////////////////////////////

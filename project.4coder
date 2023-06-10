@@ -42,7 +42,7 @@ command_list = {
             { "./src/build.sh", .os = "mac"   }, }, },
     { .name = "run",
         .out = "*run*", .footer_panel = false, .save_dirty_files = false,
-        .cmd = { { ".\\build\\win32_main.exe", .os = "win"   },
+        .cmd = { { ".\\build\\nur.exe", .os = "win"   },
         }, },
 };
 

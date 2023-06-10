@@ -19,6 +19,8 @@ enum Game_Input
     UNDO,
     
     CONFIRM,
+    
+    RESTART_LEVEL,
 };
 
 GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
@@ -32,7 +34,9 @@ GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
     
     {Key_Z},
     
-    {Key_ENTER, Key_SPACE}
+    {Key_ENTER, Key_SPACE},
+    
+    {Key_R}
 };
 
 FUNCTION b32 input_pressed(Game_Input input)
@@ -157,6 +161,7 @@ enum
     T_DETECTOR,
     T_DOOR,
     T_DOOR_OPEN,
+    T_TELEPORTER,
 };
 
 V2s obj_sprite[] = {
@@ -168,6 +173,7 @@ V2s obj_sprite[] = {
     v2s(4, 4),
     v2s(5, 4),
     v2s(6, 4),
+    v2s(2, 0),
 };
 
 enum
@@ -207,6 +213,8 @@ struct Obj
     // T_DOOR: color[0] is number of detectors in room required to be lit in order to open it.
     //         color[1] is used every frame as counter of number of detectors currently lit.
     //         color[1] must be cleared every frame before we update the doors and detectors.
+    //
+    // T_TELEPORTER: color[0] is level index to load once we step on the teleporter.
     //
     u8 color[8];
     u8 flags;
@@ -336,6 +344,7 @@ struct Game_State
     s32 selected_color;
     s32 selected_flag;
     s32 num_detectors_required;
+    u8  level_teleport_to;
 #endif
 };
 GLOBAL Game_State *game;
