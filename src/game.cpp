@@ -1150,7 +1150,6 @@ FUNCTION void update_world()
         psprite.t = 6;
     else
         psprite.t = 5;
-    
     if (player_is_at_rest()) {
         animation_timer = 0;
         psprite.s = base_s;
@@ -1169,6 +1168,23 @@ FUNCTION void update_world()
         }
     }
     
+    // Update player pos.
+    f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
+    ppos = move_towards(ppos, v2(px, py), player_max_distance);
+    
+    // Update pushed obj pos.
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_MIRROR ||
+                o.type == T_BENDER ||
+                o.type == T_SPLITTER) {
+                if (pushed_obj.x == x && pushed_obj.y == y) {
+                    pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                }
+            }
+        }
+    }
     
     ////////////////////////////////
     // Update map.
@@ -1846,11 +1862,6 @@ FUNCTION void game_render()
         }
         immediate_end();
         
-        //
-        //
-        //
-        f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
-        
 #if 0
         immediate_begin();
         set_texture(&tex);
@@ -1902,30 +1913,24 @@ FUNCTION void game_render()
                     //
                     case T_MIRROR: {
                         sprite.s += o.dir;
-                        if (pushed_obj.x == x && pushed_obj.y == y) {
-                            pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        if (pushed_obj.x == x && pushed_obj.y == y)
                             draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        } else {
+                        else
                             draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        }
                     } break;
                     case T_BENDER: {
                         sprite.s += o.dir;
-                        if (pushed_obj.x == x && pushed_obj.y == y) {
-                            pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        if (pushed_obj.x == x && pushed_obj.y == y)
                             draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        } else {
+                        else
                             draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        }
                     } break;
                     case T_SPLITTER: {
                         sprite.s = (sprite.s + o.dir) % 4;
-                        if (pushed_obj.x == x && pushed_obj.y == y) {
-                            pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                        if (pushed_obj.x == x && pushed_obj.y == y)
                             draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        } else {
+                        else
                             draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        }
                     } break;
                     case T_DOOR:
                     case T_DOOR_OPEN: {
@@ -1988,7 +1993,6 @@ FUNCTION void game_render()
         s32 c        = dead? Color_RED : Color_WHITE;
         f32 alpha    = is_hitting_beam && !dead? 0.9f : 1.0f;
         b32 invert_x = pdir == Dir_W;
-        ppos = move_towards(ppos, v2(px, py), player_max_distance);
         draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, invert_x);
         immediate_end();
         

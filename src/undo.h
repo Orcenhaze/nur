@@ -130,7 +130,7 @@ FUNCTION void undo_perform_action(Undo_Action action)
         case ActionType_NONE: return;
         case ActionType_PLAYER_MOVE: {
             Player_Move c = action.player_move;
-            set_player_position(c.x, c.y, c.dir);
+            set_player_position(c.x, c.y, c.dir, true);
         } break;
         case ActionType_OBJ_MOVE: {
             Obj_Move c = action.obj_move;
