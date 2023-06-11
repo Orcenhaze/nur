@@ -16,7 +16,7 @@ TODO:
 */
 
 #include <d3d11.h>       // D3D interface
-#include <dxgi1_2.h>     // DirectX driver interface
+#include <dxgi1_3.h>     // DirectX driver interface
 #include <d3dcompiler.h> // Shader compiler
 
 //#pragma comment(lib, "dxgi.lib")        
@@ -86,6 +86,8 @@ GLOBAL Vertex_XCNU   immediate_vertices[MAX_IMMEDIATE_VERTICES];
 // D3D11 objects.
 //
 GLOBAL IDXGISwapChain1          *swap_chain;
+GLOBAL IDXGISwapChain2          *swap_chain2;
+GLOBAL HANDLE                    frame_latency_waitable_object;
 GLOBAL ID3D11Device             *device;
 GLOBAL ID3D11DeviceContext      *device_context;
 GLOBAL D3D11_VIEWPORT            viewport;
@@ -335,7 +337,8 @@ FUNCTION void d3d11_init(HWND window)
         desc.BufferUsage           = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         desc.BufferCount           = 2;
         desc.SwapEffect            = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        desc.Scaling               = DXGI_SCALING_NONE,
+        desc.Scaling               = DXGI_SCALING_NONE;
+        desc.Flags                 = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
         
         hr = factory->CreateSwapChainForHwnd((IUnknown*)device, window, &desc, NULL, NULL, &swap_chain);
         ASSERT_HR(hr);
@@ -346,6 +349,13 @@ FUNCTION void d3d11_init(HWND window)
         factory->Release();
         dxgi_adapter->Release();
         dxgi_device->Release();
+        
+        // Create swapchain2, set maximum frame latency and get waitable object.
+        hr = swap_chain->QueryInterface(IID_IDXGISwapChain2, (void**)&swap_chain2);
+        ASSERT_HR(hr);
+        
+        swap_chain2->SetMaximumFrameLatency(1);
+        frame_latency_waitable_object = swap_chain2->GetFrameLatencyWaitableObject();
     }
     
     //
@@ -488,7 +498,7 @@ FUNCTION void d3d11_resize()
     
     // Resize to new size for non-zero size.
     if ((window_width != 0) && (window_height != 0)) {
-        HRESULT hr = swap_chain->ResizeBuffers(0, window_width, window_height, DXGI_FORMAT_UNKNOWN, 0);
+        HRESULT hr = swap_chain->ResizeBuffers(0, window_width, window_height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
         ASSERT_HR(hr);
         
         //
@@ -576,7 +586,13 @@ FUNCTION HRESULT d3d11_present(b32 vsync)
     return hr;
 }
 
-
+FUNCTION DWORD d3d11_wait_on_swapchain()
+{
+    DWORD result = WaitForSingleObjectEx(frame_latency_waitable_object,
+                                         1000, // 1 second timeout (shouldn't ever occur)
+                                         true);
+    return result;
+}
 
 
 //

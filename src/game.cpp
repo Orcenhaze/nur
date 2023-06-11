@@ -1072,6 +1072,33 @@ FUNCTION void update_world()
         }
     }
     
+    
+    // Load new level if we step on teleporter.
+    if (player_is_at_rest()) {
+        Obj o = objmap[py][px];
+        if (o.type == T_TELEPORTER) {
+            load_level(level_names[o.color[0]]);
+        }
+    }
+    
+    // Update player pos.
+    f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
+    ppos = move_towards(ppos, v2(px, py), player_max_distance);
+    
+    // Update pushed obj pos.
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_MIRROR ||
+                o.type == T_BENDER ||
+                o.type == T_SPLITTER) {
+                if (pushed_obj.x == x && pushed_obj.y == y) {
+                    pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
+                }
+            }
+        }
+    }
+    
     if (dead)
         return;
     
@@ -1158,32 +1185,6 @@ FUNCTION void update_world()
         animation_timer = ANIMATION_FRAME_DURATION;
     }  else {
         animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
-    }
-    
-    // Load new level if we step on teleporter.
-    if (player_is_at_rest()) {
-        Obj o = objmap[py][px];
-        if (o.type == T_TELEPORTER) {
-            load_level(level_names[o.color[0]]);
-        }
-    }
-    
-    // Update player pos.
-    f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
-    ppos = move_towards(ppos, v2(px, py), player_max_distance);
-    
-    // Update pushed obj pos.
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            if (o.type == T_MIRROR ||
-                o.type == T_BENDER ||
-                o.type == T_SPLITTER) {
-                if (pushed_obj.x == x && pushed_obj.y == y) {
-                    pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
-                }
-            }
-        }
     }
     
     ////////////////////////////////

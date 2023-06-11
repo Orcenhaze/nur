@@ -22,6 +22,7 @@
 
 GLOBAL OS_State global_os;
 GLOBAL s64      global_performance_frequency;
+GLOBAL HANDLE   global_waitable_timer;
 GLOBAL char     global_exe_full_path[256];
 GLOBAL char     global_exe_parent_folder[256];
 GLOBAL char     global_data_folder[256];
@@ -36,7 +37,6 @@ inline LARGE_INTEGER win32_qpc()
 inline f64 win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 {
     f64 result = (f64)(end.QuadPart - start.QuadPart) / (f64)global_performance_frequency;
-    
     return result;
 }
 
@@ -394,6 +394,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     LARGE_INTEGER performance_frequency;
     QueryPerformanceFrequency(&performance_frequency);
     global_performance_frequency = performance_frequency.QuadPart;
+    
+    global_waitable_timer = CreateWaitableTimerExW(0, 0, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    ASSERT(global_waitable_timer != 0);
+    
     win32_build_paths();
     
     /////////////////////////////////////////////////////
@@ -419,7 +423,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     
     //
     // Create window.
-    HWND window = CreateWindowEx(0, //WS_EX_TOPMOST,
+    HWND window = CreateWindowEx(WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP, //WS_EX_TOPMOST,
                                  window_class.lpszClassName,
                                  "NUR",
                                  WS_OVERLAPPEDWINDOW,
@@ -466,10 +470,19 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.fullscreen        = true;
 #endif
         global_os.exit              = false;
+        
+        // @Note: I think this value is useless when using FLIP presentation model.
+        // If user has vsync in control panel set to "use 3D application setting", we will always
+        // limit fps to refresh rate, regardless of this value. Vsync is enforced on windowed and 
+        // possibly also borderless fullscreen.
+        // If the user has vsync in control panel set to "off", we will limit the FPS ourselves
+        // using the fps_max variable.
+        // For now, let's leave vsync here set to false.
         global_os.vsync             = false;
         global_os.fix_aspect_ratio  = true;
         global_os.render_size       = {1920, 1080};
-        global_os.dt                = 1.0f/144.0f;
+        global_os.dt                = 1.0f/120.0f;
+        global_os.fps_max           = 300;
         global_os.time              = 0.0f;
         
         // Functions.
@@ -527,7 +540,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         //
         RECT rect;
         GetClientRect(window, &rect);
-        V2u window_size    = {(u32)(rect.right - rect.left), (u32)(rect.bottom - rect.top)};
+        V2u window_size = {(u32)(rect.right - rect.left), (u32)(rect.bottom - rect.top)};
         Rect2 drawing_rect;
         if (global_os.fix_aspect_ratio) {
             drawing_rect = aspect_ratio_fit(global_os.render_size, window_size);
@@ -552,7 +565,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         // Process Inputs --> Update --> Render.
         //
         //
-        u32 num_updates_this_frame = 0;
+        //u32 num_updates_this_frame = 0;
         while (accumulator >= os->dt) {
             b32 last_fullscreen = global_os.fullscreen;
             win32_process_inputs(window);
@@ -561,24 +574,52 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             os->time    += os->dt;
             if (last_fullscreen != global_os.fullscreen)
                 win32_toggle_fullscreen(window);
-            
-            num_updates_this_frame++;
+            //num_updates_this_frame++;
         }
         
         // Render only if window size is non-zero.
         if ((window_size.x != 0) && (window_size.y != 0)) {
+            d3d11_wait_on_swapchain();
             d3d11_viewport(drawing_rect.min.x, drawing_rect.min.y, 
                            drawing_rect.max.x - drawing_rect.min.x, 
                            drawing_rect.max.y - drawing_rect.min.y);
             d3d11_clear(0.20f, 0.20f, 0.20f, 1.0f);
             game_render();
-            
 #if DEVELOPER
             ImGui::Render();
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 #endif
-            
             HRESULT hr = d3d11_present(global_os.vsync);
+        }
+        
+        //
+        //
+        // Framerate limiter (If vsync is not working).
+        //
+        //
+        if ((global_os.fps_max > 0)) {
+            f32 target_seconds_per_frame = 1.0f/(f32)global_os.fps_max;
+            f64 seconds_elapsed_so_far = win32_get_seconds_elapsed(last_counter, win32_qpc());
+            if (seconds_elapsed_so_far < target_seconds_per_frame) {
+                if (global_waitable_timer) {
+                    f64 us_to_sleep = (target_seconds_per_frame - seconds_elapsed_so_far) * 1000000.0f;
+                    us_to_sleep    -= 1000.0f; // -= 1ms;
+                    if (us_to_sleep > 1) {
+                        LARGE_INTEGER due_time;
+                        due_time.QuadPart = -(LONGLONG)us_to_sleep * 10; // *10 because 100 ns intervals.
+                        b32 set_ok = SetWaitableTimerEx(global_waitable_timer, &due_time, 0, 0, 0, 0, 0);
+                        ASSERT(set_ok != 0);
+                        
+                        WaitForSingleObject(global_waitable_timer, INFINITE);
+                    }
+                } else {
+                    // @Todo: Must use other methods of sleeping for older versions of Windows that don't have high resolution waitable timer.
+                }
+                
+                // Spin-lock the remaining amount.
+                while (seconds_elapsed_so_far < target_seconds_per_frame)
+                    seconds_elapsed_so_far = win32_get_seconds_elapsed(last_counter, win32_qpc());
+            }
         }
         
         //
@@ -590,7 +631,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         f64 seconds_elapsed_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
         last_counter                  = end_counter;
         accumulator                  += seconds_elapsed_for_frame;
-        print("Num updates this frame: %d\n", num_updates_this_frame);
+        //print("Num updates this frame: %d\n", num_updates_this_frame);
     }
     
     /////////////////////////////////////////////////////

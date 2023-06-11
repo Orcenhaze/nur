@@ -1,4 +1,4 @@
-/* orh.h - v0.46 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.47 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.47 - added fps_max option.
 0.46 - arena_init() now takes max size as parameter. And changed default auto_align from 8 to 1.
 0.45 - added f32 version of move_towards().
 0.44 - added fullscreen flag. OS layer has to check it after update and toggle fullscreen.
@@ -1434,7 +1435,8 @@ struct OS_State
     V2u render_size;         // Determines aspect ratio.
     V2u window_size;         // Client window width and height.
     Rect2 drawing_rect;      // In pixel space - relative to client window.
-    f32 dt;                  // The timestep - it should be fixed!
+    f32 dt;                  // The timestep - must be fixed!
+    s32 fps_max;             // FPS limiter when vsync is off. Set to 0 for unlimited.
     f64 time;                // Incremented by dt at the end of each update.
     
     // Functions.
