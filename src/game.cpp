@@ -1072,7 +1072,6 @@ FUNCTION void update_world()
         }
     }
     
-    
     // Load new level if we step on teleporter.
     if (player_is_at_rest()) {
         Obj o = objmap[py][px];
@@ -1097,6 +1096,22 @@ FUNCTION void update_world()
                 }
             }
         }
+    }
+    
+    // Update player sprite.
+    s32 base_s = pdir == Dir_N? 4 : 0;
+    if (pdir == Dir_S)
+        psprite.t = 6;
+    else
+        psprite.t = 5;
+    if (player_is_at_rest()) {
+        animation_timer = 0;
+        psprite.s = base_s;
+    } else if (animation_timer <= 0) {
+        psprite.s = base_s + ((psprite.s + 1) % NUM_ANIMATION_FRAMES);
+        animation_timer = ANIMATION_FRAME_DURATION;
+    }  else {
+        animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
     }
     
     if (dead)
@@ -1169,22 +1184,6 @@ FUNCTION void update_world()
         queued_moves_count--;
         
         move_player(queued_move.x, queued_move.y);
-    } 
-    
-    // Update player sprite.
-    s32 base_s = pdir == Dir_N? 4 : 0;
-    if (pdir == Dir_S)
-        psprite.t = 6;
-    else
-        psprite.t = 5;
-    if (player_is_at_rest()) {
-        animation_timer = 0;
-        psprite.s = base_s;
-    } else if (animation_timer <= 0) {
-        psprite.s = base_s + ((psprite.s + 1) % NUM_ANIMATION_FRAMES);
-        animation_timer = ANIMATION_FRAME_DURATION;
-    }  else {
-        animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
     }
     
     ////////////////////////////////
