@@ -481,8 +481,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.vsync             = false;
         global_os.fix_aspect_ratio  = true;
         global_os.render_size       = {1920, 1080};
-        global_os.dt                = 1.0f/60.0f;
-        global_os.fps_max           = 60;
+        global_os.dt                = 1.0f/120.0f;
+        global_os.fps_max           = 120;
         
         // @Note: Force fps_max to primary monitor refresh rate if possible.
         s32 refresh_hz = GetDeviceCaps(GetDC(window), VREFRESH);
