@@ -17,14 +17,14 @@ FUNCTION void set_default_zoom()
 
 FUNCTION void update_camera(b32 teleport = false)
 {
-    camera = v2(rx + SIZE_X/2, ry + SIZE_Y/2);
+    camera = v2((f32)(rx + SIZE_X/2), (f32)(ry + SIZE_Y/2));
     if (teleport)
         camera_pos = camera;
 }
 
 FUNCTION b32 player_is_at_rest()
 {
-    b32 result = length2(ppos - v2(px, py)) < SQUARE(0.001f);
+    b32 result = length2(ppos - v2((f32)px, (f32)py)) < SQUARE(0.001f);
     return result;
 }
 
@@ -42,11 +42,13 @@ FUNCTION void set_player_position(s32 x, s32 y, u8 dir, b32 teleport = false)
     }
     
     if (teleport) {
-        px = ppos.x = x;
-        py = ppos.y = y;
+        px = x;
+        py = y;
+        ppos.x = (f32)x;
+        ppos.y = (f32)y;
     } else {
-        ppos.x = px;
-        ppos.y = py;
+        ppos.x = (f32)px;
+        ppos.y = (f32)py;
         px = x;
         py = y;
     }
@@ -616,7 +618,7 @@ FUNCTION void do_editor(b32 is_first_call)
                     for(int name_index = 0; name_index < IM_ARRAYSIZE(level_names); name_index++) {
                         const bool is_selected = (game->level_teleport_to == name_index);
                         if(ImGui::Selectable((const char*)level_names[name_index].data, is_selected)) {
-                            game->level_teleport_to = name_index;
+                            game->level_teleport_to = (u8)name_index;
                         }
                         
                         // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -726,13 +728,13 @@ FUNCTION void game_init()
 FUNCTION void move_camera(s32 dir_x, s32 dir_y)
 {
     if (!dir_x && !dir_y) return;
-    s32 temp_x = camera.x + SIZE_X*dir_x;
-    s32 temp_y = camera.y + SIZE_Y*dir_y;
+    s32 temp_x = (s32)(camera.x + SIZE_X*dir_x);
+    s32 temp_y = (s32)(camera.y + SIZE_Y*dir_y);
     if (is_outside_map(temp_x, temp_y))
         return;
     
-    camera.x = temp_x;
-    camera.y = temp_y;
+    camera.x = (f32)temp_x;
+    camera.y = (f32)temp_y;
     
     camera_pos = camera;
 }
@@ -990,7 +992,7 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
 {
     if (!dir_x && !dir_y) return;
     u8 old_dir = pdir;
-    pdir       = dir_x? dir_x<0? Dir_W : Dir_E : dir_y<0? Dir_S : Dir_N;
+    pdir       = dir_x? dir_x<0? (u8)Dir_W : (u8)Dir_E : dir_y<0? (u8)Dir_S : (u8)Dir_N;
     
     s32 tempx = px + dir_x; 
     s32 tempy = py + dir_y;
@@ -1024,8 +1026,8 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
                 return;
             }
             
-            pushed_obj     = v2(nx, ny);
-            pushed_obj_pos = v2(tempx, tempy);
+            pushed_obj     = v2((f32)nx, (f32)ny);
+            pushed_obj_pos = v2((f32)tempx, (f32)tempy);
             undo_push_obj_move(&undo_handler, tempx, tempy, nx, ny);
             SWAP(objmap[tempy][tempx], objmap[ny][nx], Obj);
         }
@@ -1082,7 +1084,7 @@ FUNCTION void update_world()
     
     // Update player pos.
     f32 player_max_distance = PLAYER_ANIMATION_SPEED * os->dt;
-    ppos = move_towards(ppos, v2(px, py), player_max_distance);
+    ppos = move_towards(ppos, v2((f32)px, (f32)py), player_max_distance);
     
     // Update pushed obj pos.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
@@ -1337,12 +1339,12 @@ FUNCTION void update_editor()
                         objmap[my][mx].c = (u8)game->selected_color;
                     
                     if (objmap[my][mx].flags == ObjFlags_NONE) {
-                        objmap[my][mx].flags = game->selected_flag;
+                        objmap[my][mx].flags = (u8)game->selected_flag;
                         game->selected_flag = 0;
                     }
                     
                     if (game->selected_tile_or_obj == T_DOOR) {
-                        objmap[my][mx].color[0] = game->num_detectors_required;
+                        objmap[my][mx].color[0] = (u8)game->num_detectors_required;
                     }
                     
                     if (game->selected_tile_or_obj == T_TELEPORTER) {
@@ -1473,7 +1475,7 @@ FUNCTION void game_update()
                                     view_to_proj_matrix).xy;
     
     V2 m = round(game->mouse_world);
-    m    = clamp(v2(0), m, v2(NUM_X*SIZE_X-1, NUM_Y*SIZE_Y-1));
+    m    = clamp(v2(0), m, v2((f32)(NUM_X*SIZE_X-1), (f32)(NUM_Y*SIZE_Y-1)));
     mx   = (s32)m.x;
     my   = (s32)m.y;
     
@@ -1589,12 +1591,12 @@ FUNCTION s32 draw_text(s32 top_left_x, s32 top_left_y, f32 scale, V4 color, u8 *
     while (*text) {
         char *p = strchr(font, *text);
         if (p) {
-            s32 ch = p - font;
+            s32 ch = (s32)(p - font);
             s32 s  = ch % (font_tex.width / FONT_TILE_W);
             s32 t  = ch / (font_tex.width / FONT_TILE_W);
             
-            draw_sprite_text(top_left_x, top_left_y, FONT_TILE_W*scale, FONT_TILE_H*scale, s, t, &color, 1.0f);
-            top_left_x += FONT_TILE_W * scale;
+            draw_sprite_text((f32)top_left_x, (f32)top_left_y, FONT_TILE_W*scale, FONT_TILE_H*scale, s, t, &color, 1.0f);
+            top_left_x += (s32)(FONT_TILE_W * scale);
         }
         
         text++;
@@ -1772,14 +1774,14 @@ FUNCTION void game_render()
         set_texture(&font_tex);
         is_using_pixel_coords = true;
         // Start slightly above center.
-        s32 sx = w/2;
-        s32 sy = h/3;
+        s32 sx = (s32)(w/2);
+        s32 sy = (s32)(h/3);
         b32 is_enabled[MAX_CHOICES];
         get_enabled_choices(is_enabled);
         for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
             if (is_enabled[i]) {
                 b32 selected       = menu_selection == i;
-                f32 selected_scale = selected? 5 : 4;
+                f32 selected_scale = selected? 5.0f : 4.0f;
                 f32 final_scale    = selected_scale * w_scale;
                 f32 text_width     = choices[i].count * FONT_TILE_W * final_scale;
                 
@@ -1787,10 +1789,10 @@ FUNCTION void game_render()
                 if (selected)
                     c = v4(1);
                 
-                draw_text(sx - text_width/2, sy, final_scale, c, choices[i].data);
+                draw_text((s32)(sx - text_width/2), sy, final_scale, c, choices[i].data);
             }
             
-            sy += 80 * h_scale;
+            sy += (s32)(80 * h_scale);
         }
         immediate_end();
     } else {
@@ -1967,7 +1969,7 @@ FUNCTION void game_render()
                     if (pushed_obj.x == x && pushed_obj.y == y)
                         pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
                     else 
-                        pivot = v2(x, y);
+                        pivot = v2((f32)x, (f32)y);
                     
                     f32 duration = 3.0f;
                     V2 size      = v2(0.03f, 0.03f);
@@ -1977,7 +1979,7 @@ FUNCTION void game_render()
                         V2 max     = pivot + v2(radius);
                         V2 p       = min + random_rotation_particles[i]*(max - min);
                         duration  *= length2(random_rotation_particles[i]);
-                        f32 a      = repeat(os->time/duration, 1.0f);
+                        f32 a      = repeat((f32)os->time/duration, 1.0f);
                         Quaternion q = quaternion_from_axis_angle_turns(axis, a);
                         V2 c = rotate_point_around_pivot(p, pivot, q);
                         immediate_rect(c, size, color);
