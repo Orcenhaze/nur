@@ -84,7 +84,7 @@ enum
     M_EDITOR
 } GLOBAL main_mode = M_MENU;
 
-#define MAX_CHOICES 4
+#define MAX_CHOICES ARRAY_COUNT(choices)
 s32 menu_selection = 1;
 GLOBAL String8 choices[] = 
 {
@@ -262,8 +262,8 @@ GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos;
 #define NUM_ANIMATION_FRAMES   4
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
 GLOBAL f32 animation_timer;
-GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite;
-GLOBAL b32 dead = false; GLOBAL b32 is_hitting_beam;
+GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite; GLOBAL u8 pcolor;
+GLOBAL b32 dead;
 
 // Other state.
 GLOBAL f32 zoom_level; 

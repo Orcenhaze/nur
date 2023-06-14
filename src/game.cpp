@@ -858,7 +858,7 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
         return Color_WHITE;
 }
 
-FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
+FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *is_hitting_player)
 {
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
         return;
@@ -870,9 +870,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     // Advance until we hit a wall or an object.
     while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) && tilemap[test_y][test_x] != Tile_WALL) {
         if (test_x == px && test_y == py) {
-            is_hitting_beam = true;
-            if (src_color == Color_RED) 
-                dead = true;
+            *is_hitting_player = true;
         }
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
@@ -883,11 +881,9 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     if (tilemap[test_y][test_x] == Tile_WALL) 
         return;
     
-    // @Sanity:
+    // In case player is standing on some Obj like T_DETECTOR.
     if (test_x == px && test_y == py) {
-        is_hitting_beam = true;
-        if (src_color == Color_RED) 
-            dead = true;
+        *is_hitting_player = true;
     }
     
     // We hit an object, so we should determine which color to reflect in which dir.  
@@ -913,7 +909,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             // Write the color.
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
-            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
+            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
         } break;
         case T_BENDER: {
             u8 inv_d   = WRAP_D(src_dir + 4);
@@ -937,7 +933,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             // Write the color.
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
-            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
+            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
         } break;
         case T_SPLITTER: {
             u8 inv_d  = WRAP_D(src_dir + 4);
@@ -958,18 +954,18 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             
             // Write the color.
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
-            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
+            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
             
             if (do_reflect) {
                 objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
-                update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
+                update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
             }
         } break;
         case T_DETECTOR: {
             u8 inv_d  = WRAP_D(src_dir + 4);
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             
-            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
+            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
         } break;
     }
 }
@@ -1233,20 +1229,29 @@ FUNCTION void update_world()
                 MEMORY_ZERO_ARRAY(objmap[y][x].color);
         }
     }
+    pcolor = Color_WHITE;
     
-    // Update laser beams.
-    is_hitting_beam = false;
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_EMITTER) {
-                update_beams(x, y, o.dir, o.c);
-                
+                b32 is_hitting_player = false;
+                update_beams(x, y, o.dir, o.c, &is_hitting_player);
+                if (is_hitting_player) {
+                    if (o.c == Color_RED)
+                        dead = true;
+                    pcolor = mix_colors(pcolor, o.c);
+                }
+#if DEVELOPER
                 for (s32 i = 0; i < 8; i++)
                     ASSERT(o.color[i] == 0);
+#endif
             }
         }
     }
+    
+    if (pcolor == Color_WHITE)
+        dead = false;
     
     // Update doors and detectors.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
@@ -1385,7 +1390,7 @@ FUNCTION void update_editor()
 
 FUNCTION void get_enabled_choices(b32 is_enabled[MAX_CHOICES])
 {
-    for (s32 i = 0; i < 4; i++)
+    for (s32 i = 0; i < MAX_CHOICES; i++)
         is_enabled[i] = true;
     if (!game_started)
         is_enabled[0] = false;
@@ -1778,7 +1783,7 @@ FUNCTION void game_render()
         s32 sy = (s32)(h/3);
         b32 is_enabled[MAX_CHOICES];
         get_enabled_choices(is_enabled);
-        for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
+        for (s32 i = 0; i < MAX_CHOICES; i++) {
             if (is_enabled[i]) {
                 b32 selected       = menu_selection == i;
                 f32 selected_scale = selected? 5.0f : 4.0f;
@@ -1993,7 +1998,7 @@ FUNCTION void game_render()
         set_texture(&tex);
         // Draw player.
         s32 c        = dead? Color_RED : Color_WHITE;
-        f32 alpha    = is_hitting_beam && !dead? 0.9f : 1.0f;
+        f32 alpha    = (pcolor != Color_WHITE) && !dead? 0.8f : 1.0f;
         b32 invert_x = pdir == Dir_W;
         draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, invert_x);
         immediate_end();
