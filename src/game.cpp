@@ -1231,15 +1231,31 @@ FUNCTION void update_world()
     }
     pcolor = Color_WHITE;
     
+    // Update beams (do red emitters first).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if (o.type == T_EMITTER) {
+            if ((o.type == T_EMITTER) && (o.c == Color_RED)) {
                 b32 is_hitting_player = false;
                 update_beams(x, y, o.dir, o.c, &is_hitting_player);
                 if (is_hitting_player) {
-                    if (o.c == Color_RED)
-                        dead = true;
+                    dead   = true;
+                    pcolor = Color_RED;
+                }
+#if DEVELOPER
+                for (s32 i = 0; i < 8; i++)
+                    ASSERT(o.color[i] == 0);
+#endif
+            }
+        }
+    }
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if ((o.type == T_EMITTER) && (o.c != Color_RED)) {
+                b32 is_hitting_player = false;
+                update_beams(x, y, o.dir, o.c, &is_hitting_player);
+                if (is_hitting_player) {
                     pcolor = mix_colors(pcolor, o.c);
                 }
 #if DEVELOPER
