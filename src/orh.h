@@ -65,7 +65,7 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
-[] Remove data_folder and SetCurrentDirectory() instead.
+[] Remove data_folder and use working_folder (Get/SetCurrentDirectory()) instead.
 [] arenas never decommit memory. Find a good way to add that.
 
 */
