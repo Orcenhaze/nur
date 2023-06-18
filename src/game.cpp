@@ -162,9 +162,13 @@ get(&file, &field_name, size); \
     
     get(&file, &version);
     
-    // @Todo: In the future once we implement package manager, we don't need to copy data. Instead,
-    // we load the package in memory and just point to it, because the package will always be alive.
+    // @Todo: Once we implement package manager, we don't need to copy data. Instead, we load the 
+    // package in memory and just point to it, because the package will always be alive in memory.
     //
+    // @Todo: When writing strings to files, we should establish a convention to always write them
+    // null-terminated. When loading, we load count, then in case of memcpy, we copy count+1 to 
+    // account for null-terminator.
+    // When advancing, we advance count+1 to account for null.
     /* 
         IGNORE_FIELD(s32, id, LevelVersion_INIT, LevelVersion_REMOVE_ID);
         if (version >= (LevelVersion_ADD_NAME)) { 
@@ -181,6 +185,7 @@ get(&file, &field_name, size); \
     get(&file, &len);
     String8 stemp = string(file.data, len);
     advance(&file, len);
+    //advance(&file, len + 1); // Account for null terminator.
     lev->name = string_copy(stemp);
     get(&file, &lev->num_x);
     get(&file, &lev->num_y);
@@ -235,9 +240,6 @@ FUNCTION b32 load_game()
     }
     defer(os->free_file_memory(file.data));
     
-    // @Todo: In the future, once we implement a package manager, we don't need to copy data. Instead,
-    // we load the package in memory and just point to it, because the package will always be alive.
-    //
     u32 name_length;
     get(&file, &name_length);
     String8 name = string(file.data, name_length);
