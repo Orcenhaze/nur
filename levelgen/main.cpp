@@ -7,7 +7,7 @@
 
 #define ORH_STATIC
 #define ORH_IMPLEMENTATION
-#include "orh.h"
+#include "../src/orh.h"
 
 GLOBAL OS_State global_os;
 GLOBAL char *path_to_levels_wild = "../data/levels/*.nlf";
@@ -109,6 +109,9 @@ FUNCTION b32 write_level_names(File_Group_Names level_names)
     
     sb_appendf(&sb, "GLOBAL String8 level_names[] = \n{\n");
     sb_appendf(&sb, "S8LIT(\"invalid_level\"),\n");
+    sb_appendf(&sb, "S8LIT(\"aaa_placeholder1\"),\n");
+    sb_appendf(&sb, "S8LIT(\"aaa_placeholder2\"),\n");
+    sb_appendf(&sb, "S8LIT(\"aaa_placeholder3\"),\n");
     for (s32 i = 0; i < level_names.file_count; i++) {
         strip_extension(&level_names.file_names[i]);
         sb_appendf(&sb, "S8LIT(\"%S\"),\n", level_names.file_names[i]);

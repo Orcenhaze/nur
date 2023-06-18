@@ -237,7 +237,6 @@ struct Player
 
 // current_level metadata (we're storing each field independently).
 GLOBAL Arena current_level_arena;
-GLOBAL s32 CURRENT_LEVEL_ID;
 GLOBAL s32 NUM_X;
 GLOBAL s32 NUM_Y;
 GLOBAL s32 SIZE_X;
@@ -277,13 +276,15 @@ GLOBAL b32 draw_grid;
 enum
 {
     LevelVersion_INIT,
+    LevelVersion_REMOVE_ID,
+    LevelVersion_ADD_NAME,
     
     LevelVersion_COUNT,
 };
 
 struct Loaded_Level
 {
-    s32 id;             // Index to level_names[].
+    String8 name;
     s32 num_x, num_y;   // Number of rooms.
     s32 size_x, size_y; // Size of each room (in squares).
     Player player;

@@ -74,9 +74,11 @@ FUNCTION void save_game()
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
     
+    Loaded_Level *lev = &game->loaded_level;
+    
     //save_map();
-    s32 level_id = game->loaded_level.id;
-    sb_append(&sb, &level_id);
+    sb_append(&sb, &lev->name.count, sizeof(u32));
+    sb_append(&sb, lev->name.data, lev->name.count);
     os->write_entire_file(sprint("%Ssave.dat", os->data_folder), sb_to_string(&sb));
 }
 
@@ -86,7 +88,6 @@ FUNCTION void reload_map()
     Loaded_Level *lev = &game->loaded_level;
     arena_reset(a);
     
-    CURRENT_LEVEL_ID = lev->id;
     NUM_X            = lev->num_x;
     NUM_Y            = lev->num_y;
     SIZE_X           = lev->size_x;
@@ -161,7 +162,26 @@ get(&file, &field_name, size); \
     
     get(&file, &version);
     
-    get(&file, &lev->id);
+    // @Todo: In the future once we implement package manager, we don't need to copy data. Instead,
+    // we load the package in memory and just point to it, because the package will always be alive.
+    //
+    /* 
+        IGNORE_FIELD(s32, id, LevelVersion_INIT, LevelVersion_REMOVE_ID);
+        if (version >= (LevelVersion_ADD_NAME)) { 
+            u32 len;
+            get(&file, &len);
+            String8 stemp = string(file.data, len);
+            advance(&file, len);
+            lev->name = string_copy(stemp);
+        } else {
+            lev->name = string_copy(level_name);
+        }
+     */
+    u32 len;
+    get(&file, &len);
+    String8 stemp = string(file.data, len);
+    advance(&file, len);
+    lev->name = string_copy(stemp);
     get(&file, &lev->num_x);
     get(&file, &lev->num_y);
     get(&file, &lev->size_x);
@@ -215,12 +235,16 @@ FUNCTION b32 load_game()
     }
     defer(os->free_file_memory(file.data));
     
-    s32 level_id;
-    get(&file, &level_id);
-    if (!load_level(level_names[level_id])) {
+    // @Todo: In the future, once we implement a package manager, we don't need to copy data. Instead,
+    // we load the package in memory and just point to it, because the package will always be alive.
+    //
+    u32 name_length;
+    get(&file, &name_length);
+    String8 name = string(file.data, name_length);
+    //advance(&file, name_length + 1);
+    if (!load_level(name) || (name != game->loaded_level.name)) {
         return false;
     }
-    
     game_started = true;
     return true;
 }
@@ -232,7 +256,6 @@ FUNCTION void save_map()
     Loaded_Level *lev = &game->loaded_level;
     arena_reset(a);
     
-    lev->id     = CURRENT_LEVEL_ID;
     lev->num_x  = NUM_X;
     lev->num_y  = NUM_Y;
     lev->size_x = SIZE_X;
@@ -285,7 +308,8 @@ FUNCTION b32 save_level(String8 level_name)
     
     save_map();
     sb_append(&sb, &latest_version, sizeof(s32));
-    sb_append(&sb, &lev->id);
+    sb_append(&sb, &level_name.count, sizeof(u32));
+    sb_append(&sb, level_name.data, level_name.count);
     sb_append(&sb, &lev->num_x);
     sb_append(&sb, &lev->num_y);
     sb_append(&sb, &lev->size_x);
@@ -421,14 +445,15 @@ FUNCTION void do_editor(b32 is_first_call)
         }
         
         // Select level.
-        const char* combo_preview_value = (const char*)level_names[CURRENT_LEVEL_ID].data;
+        LOCAL_PERSIST s32 selected_level = 0;
+        const char* combo_preview_value = (const char*)level_names[selected_level].data;
         if(ImGui::BeginCombo("Choose level", combo_preview_value)) {
             for(int name_index = 0; name_index < IM_ARRAYSIZE(level_names); name_index++) {
-                const bool is_selected = (CURRENT_LEVEL_ID == name_index);
+                const bool is_selected = (selected_level == name_index);
                 if(ImGui::Selectable((const char*)level_names[name_index].data, is_selected)) {
-                    CURRENT_LEVEL_ID = name_index;
+                    selected_level = name_index;
                     
-                    if (!load_level(level_names[CURRENT_LEVEL_ID])) {
+                    if (!load_level(level_names[selected_level])) {
                         resize_current_level(1, 1, 8, 8);
                         make_empty_level();
                     }
@@ -466,7 +491,7 @@ FUNCTION void do_editor(b32 is_first_call)
         
         // Save level.
         if (ImGui::Button("Save level")) {
-            if (save_level(level_names[CURRENT_LEVEL_ID])) {
+            if (save_level(level_names[selected_level])) {
                 ImGui::SameLine(); 
                 ImGui::Text("Saved!");
             }
@@ -1528,7 +1553,7 @@ FUNCTION void game_update()
     }
     
     if (input_pressed(RESTART_LEVEL)) {
-        load_level(level_names[CURRENT_LEVEL_ID]);
+        load_level(game->loaded_level.name);
     }
     
     switch (main_mode) {

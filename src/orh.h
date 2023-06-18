@@ -1,4 +1,4 @@
-/* orh.h - v0.47 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.48 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.48 - added operator!= for String8.
 0.47 - added fps_max option.
 0.46 - arena_init() now takes max size as parameter. And changed default auto_align from 8 to 1.
 0.45 - added f32 version of move_towards().
@@ -65,6 +66,7 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
+[] Null-terminate strings when using string_format_list()!! 
 [] Remove data_folder and use working_folder (Get/SetCurrentDirectory()) instead.
 [] arenas never decommit memory. Find a good way to add that.
 
@@ -955,6 +957,10 @@ FUNCDEF b32        string_match(String8 a, String8 b);
 inline b32 operator==(String8 lhs, String8 rhs)
 {
     return string_match(lhs, rhs);
+}
+inline b32 operator!=(String8 lhs, String8 rhs)
+{
+    return !(lhs == rhs);
 }
 
 /////////////////////////////////////////
@@ -3037,6 +3043,7 @@ void put_char(String8 *dest, char c)
 void put_c_string(String8 *dest, const char *c_string)
 {
     while (*c_string) put_char(dest, *c_string++);
+    // @Todo: Null-terminate!
 }
 void u64_to_ascii(String8 *dest, u64 value, u32 base, char *digits)
 {
@@ -3137,6 +3144,7 @@ u64 string_format_list(char *dest_start, u64 dest_count, const char *format, va_
                 case 'S': {
                     String8 s = va_arg(arg_list, String8);
                     for(u64 i = 0; i < s.count; i++) put_char(&dest_buffer, s.data[i]);
+                    // @Todo: Null-terminate!
                 } break;
                 
                 case 'i':
