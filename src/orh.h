@@ -66,8 +66,9 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
-[] Establish convention to always write strings in files null-terminated.
 [] Null-terminate strings when using string_format_list()!! 
+[] Establish convention to always write strings in files null-terminated.
+[] Better way to handle temp arenas.
 [] Remove data_folder and use working_folder (Get/SetCurrentDirectory()) instead.
 [] arenas never decommit memory. Find a good way to add that.
 

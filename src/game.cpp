@@ -147,8 +147,11 @@ if (version >= (inclusion_version) && version < (removed_version)) \
 get(&file, &field_name, size); \
 } while(0)
     
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
-    String8 file = os->read_entire_file(sprint("%Slevels/%S.nlf", os->data_folder, level_name));
+    // @Cleanup: Better way to do temp arenas...
+    //
+    Arena_Temp temp_arena = arena_temp_begin(&current_level_arena);
+    defer(arena_temp_end(temp_arena));
+    String8 file = os->read_entire_file(sprint(&current_level_arena, "%Slevels/%S.nlf", os->data_folder, level_name));
     if (!file.data) {
         print("Couldn't load level: %S\n", level_name);
         return false;
@@ -497,10 +500,6 @@ FUNCTION void do_editor(b32 is_first_call)
                 ImGui::SameLine(); 
                 ImGui::Text("Saved!");
             }
-        }
-        
-        if (key_pressed(Key_F3)) {
-            reload_map();
         }
     }
     
@@ -1556,6 +1555,7 @@ FUNCTION void game_update()
     
     if (input_pressed(RESTART_LEVEL)) {
         load_level(game->loaded_level.name);
+        queued_moves_count = 0;
     }
     
     switch (main_mode) {
