@@ -70,7 +70,6 @@ FUNCTION void save_game()
     if (!game_started)
         return;
     
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
     
@@ -79,12 +78,15 @@ FUNCTION void save_game()
     //save_map();
     sb_append(&sb, &lev->name.count, sizeof(u32));
     sb_append(&sb, lev->name.data, lev->name.count);
-    os->write_entire_file(sprint("%Ssave.dat", os->data_folder), sb_to_string(&sb));
+    
+    Arena_Temp scratch = get_scratch(0, 0);
+    os->write_entire_file(sprint(scratch.arena, "%Ssave.dat", os->data_folder), sb_to_string(&sb));
+    free_scratch(scratch);
 }
 
 FUNCTION void reload_map()
 {
-    Arena *a          = &current_level_arena;
+    Arena *a          = current_level_arena;
     Loaded_Level *lev = &game->loaded_level;
     arena_reset(a);
     
@@ -147,18 +149,16 @@ if (version >= (inclusion_version) && version < (removed_version)) \
 get(&file, &field_name, size); \
 } while(0)
     
-    // @Cleanup: Better way to do temp arenas...
-    //
-    Arena_Temp temp_arena = arena_temp_begin(&current_level_arena);
-    defer(arena_temp_end(temp_arena));
-    String8 file = os->read_entire_file(sprint(&current_level_arena, "%Slevels/%S.nlf", os->data_folder, level_name));
+    Arena_Temp scratch = get_scratch(0, 0);
+    String8 file = os->read_entire_file(sprint(scratch.arena, "%Slevels/%S.nlf", os->data_folder, level_name));
+    free_scratch(scratch);
     if (!file.data) {
         print("Couldn't load level: %S\n", level_name);
         return false;
     }
     defer(os->free_file_memory(file.data));
     
-    Arena *a          = &game->loaded_level_arena;
+    Arena *a          = game->loaded_level_arena;
     Loaded_Level *lev = &game->loaded_level;
     s32 version       = 0;
     arena_reset(a);
@@ -235,8 +235,9 @@ get(&file, &field_name, size); \
 
 FUNCTION b32 load_game()
 {
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
-    String8 file = os->read_entire_file(sprint("%Ssave.dat", os->data_folder));
+    Arena_Temp scratch = get_scratch(0, 0);
+    String8 file = os->read_entire_file(sprint(scratch.arena, "%Ssave.dat", os->data_folder));
+    free_scratch(scratch);
     if (!file.data) {
         print("Save file not present!\n");
         return false;
@@ -257,7 +258,7 @@ FUNCTION b32 load_game()
 #if DEVELOPER
 FUNCTION void save_map()
 {
-    Arena *a          = &game->loaded_level_arena;
+    Arena *a          = game->loaded_level_arena;
     Loaded_Level *lev = &game->loaded_level;
     arena_reset(a);
     
@@ -304,7 +305,6 @@ FUNCTION b32 save_level(String8 level_name)
         return false;
     }
     
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
     
@@ -339,7 +339,11 @@ FUNCTION b32 save_level(String8 level_name)
         }
     }
     
-    return os->write_entire_file(sprint("%Slevels/%S.nlf", os->data_folder, level_name), sb_to_string(&sb));
+    Arena_Temp scratch = get_scratch(0, 0);
+    b32 result = os->write_entire_file(sprint(scratch.arena, "%Slevels/%S.nlf", os->data_folder, level_name), sb_to_string(&sb));
+    free_scratch(scratch);
+    
+    return result;
 }
 #endif
 
@@ -365,19 +369,19 @@ FUNCTION void resize_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
     set_default_zoom();
     update_camera(true);
     
-    arena_reset(&current_level_arena);
+    arena_reset(current_level_arena);
 	
     s32 num_rows = NUM_Y*SIZE_Y;
     s32 num_cols = NUM_X*SIZE_X;
     
     // Allocate memory for objmap.
-    objmap = PUSH_ARRAY(&current_level_arena, Obj*, num_rows);
+    objmap = PUSH_ARRAY(current_level_arena, Obj*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
-        objmap[i] = PUSH_ARRAY_ZERO(&current_level_arena, Obj, num_cols);
+        objmap[i] = PUSH_ARRAY_ZERO(current_level_arena, Obj, num_cols);
     // Allocate memory for tilemap.
-    tilemap = PUSH_ARRAY(&current_level_arena, u8*, num_rows);
+    tilemap = PUSH_ARRAY(current_level_arena, u8*, num_rows);
     for (s32 i = 0; i < num_rows; i++) 
-        tilemap[i] = PUSH_ARRAY_ZERO(&current_level_arena, u8, num_cols);
+        tilemap[i] = PUSH_ARRAY_ZERO(current_level_arena, u8, num_cols);
 }
 
 FUNCTION void make_empty_level()
@@ -395,19 +399,21 @@ FUNCTION void make_empty_level()
 
 FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
 {
-    USE_TEMP_ARENA_IN_THIS_SCOPE;
+    Arena_Temp scratch = get_scratch(0, 0);
+    defer(free_scratch(scratch));
+    
     u8  **old_tilemap;
     Obj **old_objmap;
     
     // Copy current level before resizing.
     s32 old_num_rows = NUM_Y*SIZE_Y;
     s32 old_num_cols = NUM_X*SIZE_X;
-    old_objmap = PUSH_ARRAY(&os->permanent_arena, Obj*, old_num_rows);
+    old_objmap = PUSH_ARRAY(scratch.arena, Obj*, old_num_rows);
     for (s32 i = 0; i < old_num_rows; i++) 
-        old_objmap[i] = PUSH_ARRAY_ZERO(&os->permanent_arena, Obj, old_num_cols);
-    old_tilemap = PUSH_ARRAY(&os->permanent_arena, u8*, old_num_rows);
+        old_objmap[i] = PUSH_ARRAY_ZERO(scratch.arena, Obj, old_num_cols);
+    old_tilemap = PUSH_ARRAY(scratch.arena, u8*, old_num_rows);
     for (s32 i = 0; i < old_num_rows; i++) 
-        old_tilemap[i] = PUSH_ARRAY_ZERO(&os->permanent_arena, u8, old_num_cols);
+        old_tilemap[i] = PUSH_ARRAY_ZERO(scratch.arena, u8, old_num_cols);
     
     for (s32 y = 0; y < old_num_rows; y++) {
         for (s32 x = 0; x < old_num_cols; x++) {
@@ -713,7 +719,7 @@ FUNCTION void game_init()
     //
 #endif
     
-    game = PUSH_STRUCT_ZERO(&os->permanent_arena, Game_State);
+    game = PUSH_STRUCT_ZERO(os->permanent_arena, Game_State);
     
     // Arenas init.
     // @Todo: If we notice that all levels are less than 1MB, we can simply decrease the max size
@@ -734,9 +740,10 @@ FUNCTION void game_init()
     }
     
     {
-        USE_TEMP_ARENA_IN_THIS_SCOPE;
-        d3d11_load_texture(&tex, sprint("%Ssprites.png", os->data_folder));
-        d3d11_load_texture(&font_tex, sprint("%Sfont_sprites.png", os->data_folder));
+        Arena_Temp scratch = get_scratch(0, 0);
+        d3d11_load_texture(&tex, sprint(scratch.arena, "%Ssprites.png", os->data_folder));
+        d3d11_load_texture(&font_tex, sprint(scratch.arena, "%Sfont_sprites.png", os->data_folder));
+        free_scratch(scratch);
     }
     
     load_game();

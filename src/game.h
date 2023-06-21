@@ -236,7 +236,7 @@ struct Player
 //
 
 // current_level metadata (we're storing each field independently).
-GLOBAL Arena current_level_arena;
+GLOBAL Arena *current_level_arena;
 GLOBAL s32 NUM_X;
 GLOBAL s32 NUM_Y;
 GLOBAL s32 SIZE_X;
@@ -294,7 +294,7 @@ struct Loaded_Level
 
 struct Game_State
 {
-    Arena loaded_level_arena;
+    Arena *loaded_level_arena;
     Loaded_Level loaded_level;
     
     V2 delta_mouse;

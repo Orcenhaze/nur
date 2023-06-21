@@ -1,4 +1,4 @@
-/* orh.h - v0.49 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.50 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.50 - Improved arenas and added thread local scratch arenas.
 0.49 - added context cracking.
 0.48 - added operator!= for String8.
 0.47 - added fps_max option.
@@ -67,11 +68,6 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
-[] Remove base ptr and auto-align from arena and make contents within the block itself.
-[] Linked-List macros.
-[] Thread contexts and scratch arena pools.
-// Check mr4th.
-
 [] Null-terminate strings when using string_format_list()!! 
 [] Establish convention to always write strings in files null-terminated.
 [] Remove data_folder and use working_folder (Get/SetCurrentDirectory()) instead.
@@ -244,6 +240,14 @@ typedef double             f64;
 #define F64_MIN            2.2250738585072014e-308
 #define F64_MAX            1.7976931348623157e+308
 
+#if COMPILER_CL
+#    define threadvar __declspec(thread)
+#elif COMPILER_CLANG
+#    define threadvar __thread
+#else
+#    error threadvar not defined for this compiler
+#endif
+
 // Nesting macros in if-statements that have no curly-brackets causes issues. Using DOWHILE() avoids all of them.
 #define DOWHILE(s)         do{s}while(0)
 #define SWAP(a, b, Type)   DOWHILE(Type _t = a; a = b; b = _t;)
@@ -259,14 +263,17 @@ typedef double             f64;
 #    endif
 #else
 #    define ASSERT(expr)   (void)(expr)
+#    define ASSERT_HR(expr)   (void)(expr)
 #endif
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
-#define STR(s) DO_STR(s)
-#define DO_STR(s) #s
-#define STR_JOIN2(arg1, arg2) DO_STR_JOIN2(arg1, arg2)
-#define DO_STR_JOIN2(arg1, arg2) arg1 ## arg2
+#define STRINGIFY_(S) #S
+#define STRINGIFY(s) STRINGIFY_(s)
+#define GLUE_(a, b) a##b
+#define GLUE(a, b) GLUE_(a, b)
+
+#define STATIC_ASSERT(cond, name) typedef u8 GLUE(name,__LINE__) [(cond)?1:-1]
 
 /////////////////////////////////////////
 //
@@ -310,7 +317,7 @@ template <typename F>
 DeferScope<F> MakeDeferScope(F f) { return DeferScope<F>(f); };
 
 #define defer(code) \
-auto STR_JOIN2(__defer_, __COUNTER__) = MakeDeferScope([&](){code;})
+auto GLUE(__defer_, __COUNTER__) = MakeDeferScope([&](){code;})
 
 /////////////////////////////////////////
 //
@@ -996,21 +1003,16 @@ FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, ma
 #define MEMORY_ZERO_ARRAY(a)         memory_set(a, 0, sizeof(a))
 #define MEMORY_COPY_STRUCT(d, s)     memory_copy(d, s, sizeof(*(d)));
 
-#define USE_TEMP_ARENA_IN_THIS_SCOPE \
-Arena_Temp __temp_arena = arena_temp_begin(&os->permanent_arena); \
-defer(arena_temp_end(__temp_arena))
+#define ARENA_MAX_DEFAULT GIGABYTES(8)
+#define ARENA_COMMIT_SIZE KILOBYTES(4)
 
-#define ARENA_AUTO_ALIGN_DEFAULT 1 // 8
-#define ARENA_MAX_DEFAULT        GIGABYTES(8)
-#define ARENA_COMMIT_SIZE        KILOBYTES(4)
+#define ARENA_SCRATCH_COUNT 2
 
 typedef struct Arena
 {
-    u8 *base;
     u64 max;
     u64 used;
     u64 commit_used;
-    u64 auto_align;
 } Arena;
 
 typedef struct Arena_Temp
@@ -1019,7 +1021,7 @@ typedef struct Arena_Temp
     u64    used;
 } Arena_Temp;
 
-FUNCDEF Arena      arena_init(u64 max_size = ARENA_MAX_DEFAULT, u64 auto_align = ARENA_AUTO_ALIGN_DEFAULT);
+FUNCDEF Arena*     arena_init(u64 max_size = ARENA_MAX_DEFAULT);
 FUNCDEF void       arena_free(Arena *arena);
 FUNCDEF void*      arena_push(Arena *arena, u64 size);
 FUNCDEF void*      arena_push_zero(Arena *arena, u64 size);
@@ -1027,6 +1029,8 @@ FUNCDEF void       arena_pop(Arena *arena, u64 size);
 FUNCDEF void       arena_reset(Arena *arena);
 FUNCDEF Arena_Temp arena_temp_begin(Arena *arena);
 FUNCDEF void       arena_temp_end(Arena_Temp temp);
+FUNCDEF Arena_Temp get_scratch(Arena **conflict_array, s32 count);
+#define            free_scratch(temp) arena_temp_end(temp)
 
 FUNCDEF void* memory_copy(void *dst, void *src, u64 size);
 FUNCDEF void* memory_set(void *dst, s32 val, u64 size);
@@ -1127,7 +1131,7 @@ FUNCDEF String8 sprint(Arena *arena, const char *format, ...);
 
 struct String_Builder
 {
-    Arena arena;
+    Arena *arena;
     String8 buffer;
     
     u8 *start;
@@ -1155,7 +1159,7 @@ void sb_append(String_Builder *builder, T *data)
 template<typename T>
 struct Array
 {
-    Arena arena;
+    Arena *arena;
     T    *data;
     s64   count;
     s64   capacity;
@@ -1179,7 +1183,7 @@ void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN)
 template<typename T>
 void array_free(Array<T> *array)
 {
-    arena_free(&array->arena);
+    arena_free(array->arena);
 }
 
 template<typename T>
@@ -1187,8 +1191,8 @@ void array_reserve(Array<T> *array, s64 desired_items)
 {
     array->capacity = desired_items;
     
-    arena_reset(&array->arena);
-    array->data = PUSH_ARRAY_ZERO(&array->arena, T, desired_items);
+    arena_reset(array->arena);
+    array->data = PUSH_ARRAY_ZERO(array->arena, T, desired_items);
 }
 
 template<typename T>
@@ -1531,7 +1535,7 @@ struct OS_State
     String8 data_folder;
     
     // Arenas.
-    Arena permanent_arena; // Default arena.
+    Arena *permanent_arena; // Default arena.
     
     // User Input.
     Array<Queued_Input> inputs_to_process;
@@ -1556,7 +1560,7 @@ struct OS_State
     // Functions.
     void*   (*reserve) (u64 size);
     void    (*release) (void *memory);
-    void    (*commit)  (void *memory, u64 size);
+    b32     (*commit)  (void *memory, u64 size);
     void    (*decommit)(void *memory, u64 size);
     void    (*print_to_console)(String8 text);
     void    (*free_file_memory)(void *memory);  // @Redundant: Does same thing as release().
@@ -2953,35 +2957,47 @@ void * memory_set(void *dst, s32 val, u64 size)
     return dst;
 }
 
-Arena arena_init(u64 max_size /*= ARENA_MAX_DEFAULT*/, u64 auto_align /*= ARENA_AUTO_ALIGN_DEFAULT*/)
+Arena* arena_init(u64 max_size)
 {
-    Arena result;
-    result.max         = max_size;
-    result.base        = (u8 *) os->reserve(result.max);
-    result.used        = 0;
-    result.commit_used = 0;
-    result.auto_align  = auto_align;
+    Arena *result = 0;
+    if (max_size > ARENA_COMMIT_SIZE) {
+        void *memory = os->reserve(max_size);
+        if (os->commit(memory, ARENA_COMMIT_SIZE)) {
+            result              = (Arena *)memory;
+            result->max         = max_size;
+            result->used        = ALIGN_UP(sizeof(Arena), 64);
+            result->commit_used = ARENA_COMMIT_SIZE;
+        }
+    }
+    ASSERT(result != 0);
     return result;
 }
 void arena_free(Arena *arena)
 {
-    os->release(arena->base);
+    os->release(arena);
 }
-void * arena_push(Arena *arena, u64 size)
+void* arena_push(Arena *arena, u64 size)
 {
-    if ((os->commit) && ((arena->used + size) > arena->commit_used)) {
-        // Commit more pages.
-        u64 commit_size     = (size + (ARENA_COMMIT_SIZE-1));
-        commit_size        -= (commit_size % ARENA_COMMIT_SIZE);
-        os->commit(arena->base + arena->commit_used, commit_size);
-        arena->commit_used += commit_size;
+    void *result = 0;
+    u64 s = arena->used + size; 
+    if (s < arena->max) {
+        if (s > arena->commit_used) {
+            // Commit more pages.
+            u64 commit_size     = (size + (ARENA_COMMIT_SIZE-1));
+            commit_size        -= (commit_size % ARENA_COMMIT_SIZE);
+            if (os->commit(((u8*)arena) + arena->commit_used, commit_size))
+                arena->commit_used += commit_size;
+        }
+        
+        if (s <= arena->commit_used) {
+            result      = ((u8*)arena) + arena->used;
+            arena->used = s;
+        }
     }
-    
-    void *result = arena->base + arena->used;
-    arena->used  = ALIGN_UP(arena->used + size, arena->auto_align);
+    ASSERT(result != 0);
     return result;
 }
-void * arena_push_zero(Arena *arena, u64 size)
+void* arena_push_zero(Arena *arena, u64 size)
 {
     void *result = arena_push(arena, size);
     MEMORY_ZERO(result, size);
@@ -2989,7 +3005,11 @@ void * arena_push_zero(Arena *arena, u64 size)
 }
 void arena_pop(Arena *arena, u64 size)
 {
-    size = CLAMP_UPPER(arena->used, size);
+    // @Todo: Decommit memory.
+    
+    // @Note: Make sure we don't clear arena details/header by accident.
+    u64 header_size = ALIGN_UP(sizeof(Arena), 64);
+    size = CLAMP_UPPER(arena->used - header_size, size);
     arena->used -= size;
 }
 void arena_reset(Arena *arena)
@@ -3005,6 +3025,35 @@ void arena_temp_end(Arena_Temp temp)
 {
     if (temp.arena->used >= temp.used)
         temp.arena->used = temp.used;
+}
+
+threadvar Arena *scratch_pool[ARENA_SCRATCH_COUNT] = {};
+Arena_Temp get_scratch(Arena **conflict_array, s32 count)
+{
+    // Initialize arenas on first visit.
+    if (scratch_pool[0] == 0) {
+        for (s32 i = 0; i < ARENA_SCRATCH_COUNT; i++)
+            scratch_pool[i] = arena_init();
+    }
+    
+    // Get non-conflicting arena.
+    Arena_Temp result = {};
+    for (s32 i = 0; i < ARENA_SCRATCH_COUNT; i++) {
+        b32 is_used = false;
+        for (s32 j = 0; j < count; j++) {
+            if (scratch_pool[i] == conflict_array[j]) {
+                is_used = true;
+                break;
+            }
+        }
+        
+        if (!is_used) {
+            result = arena_temp_begin(scratch_pool[i]);
+            break;
+        }
+    }
+    
+    return result;
 }
 
 /////////////////////////////////////////
@@ -3031,7 +3080,7 @@ u64 string_length(const char *c_string)
 }
 String8 string_copy(String8 s, Arena *arena /*= 0*/)
 {
-    arena = (arena? arena : &os->permanent_arena);
+    arena = (arena? arena : os->permanent_arena);
     
     String8 result;
     result.count = s.count;
@@ -3042,7 +3091,7 @@ String8 string_copy(String8 s, Arena *arena /*= 0*/)
 }
 String8 string_cat(String8 a, String8 b, Arena *arena /*= 0*/)
 {
-    arena = (arena? arena : &os->permanent_arena);
+    arena = (arena? arena : os->permanent_arena);
     
     String8 result;
     result.count = a.count + b.count;
@@ -3374,7 +3423,7 @@ String8 sprint(const char *format, ...)
     s.count = string_format_list(temp, sizeof(temp), format, arg_list);
     va_end(arg_list);
     
-    String8 result = string_copy(s, &os->permanent_arena);
+    String8 result = string_copy(s, os->permanent_arena);
     return result;
 }
 String8 sprint(Arena *arena, const char *format, ...)
@@ -3419,13 +3468,13 @@ String_Builder sb_init(u64 capacity /*= SB_BLOCK_SIZE*/)
 }
 void sb_free(String_Builder *builder)
 {
-    arena_free(&builder->arena);
+    arena_free(builder->arena);
 }
 void sb_reset(String_Builder *builder)
 {
-    arena_reset(&builder->arena);
+    arena_reset(builder->arena);
     builder->length = 0;
-    builder->start  = PUSH_ARRAY(&builder->arena, u8, builder->capacity);
+    builder->start  = PUSH_ARRAY(builder->arena, u8, builder->capacity);
     builder->buffer = {builder->start, builder->capacity};
 }
 void sb_append(String_Builder *builder, void *data, u64 size)

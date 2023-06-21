@@ -440,9 +440,10 @@ FUNCTION void d3d11_init(HWND window)
             device->CreateBuffer(&desc, 0, &default_shader.ps_cbuffer);
         }
         
-        USE_TEMP_ARENA_IN_THIS_SCOPE;
-        String8 hlsl_path = sprint("%Sdefault.hlsl", os->data_folder);
+        Arena_Temp scratch = get_scratch(0, 0);
+        String8 hlsl_path  = sprint(scratch.arena, "%Sdefault.hlsl", os->data_folder);
         d3d11_create_shader(&default_shader, hlsl_path, layout_desc, ARRAYSIZE(layout_desc));
+        free_scratch(scratch);
     }
     
     //

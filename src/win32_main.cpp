@@ -155,9 +155,10 @@ FUNCTION void  win32_release(void *memory)
 {
     VirtualFree(memory, 0, MEM_RELEASE);
 }
-FUNCTION void  win32_commit(void *memory, u64 size)
+FUNCTION b32  win32_commit(void *memory, u64 size)
 {
-    VirtualAlloc(memory, size, MEM_COMMIT, PAGE_READWRITE);
+    b32 result = (VirtualAlloc(memory, size, MEM_COMMIT, PAGE_READWRITE) != 0);
+    return result;
 }
 FUNCTION void  win32_decommit(void *memory, u64 size)
 {
