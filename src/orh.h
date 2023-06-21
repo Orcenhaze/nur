@@ -1,4 +1,4 @@
-/* orh.h - v0.48 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.49 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.49 - added context cracking.
 0.48 - added operator!= for String8.
 0.47 - added fps_max option.
 0.46 - arena_init() now takes max size as parameter. And changed default auto_align from 8 to 1.
@@ -66,9 +67,13 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
+[] Remove base ptr and auto-align from arena and make contents within the block itself.
+[] Linked-List macros.
+[] Thread contexts and scratch arena pools.
+// Check mr4th.
+
 [] Null-terminate strings when using string_format_list()!! 
 [] Establish convention to always write strings in files null-terminated.
-[] Better way to handle temp arenas.
 [] Remove data_folder and use working_folder (Get/SetCurrentDirectory()) instead.
 [] arenas never decommit memory. Find a good way to add that.
 
@@ -76,6 +81,106 @@ TODO:
 
 #ifndef ORH_H
 #define ORH_H
+
+/////////////////////////////////////////
+//
+// Context cracking
+//
+// @Note: From Allen "mr4th" Webster.
+#if defined(__clang__)
+#    define COMPILER_CLANG 1
+#    if defined(_WIN32)
+#        define OS_WINDOWS 1
+#    elif defined(__gnu_linux__)
+#        define OS_LINUX 1
+#    elif defined(__APPLE__) && defined(__MACH__)
+#        define OS_MAC 1
+#    else
+#        error missing OS detection
+#    endif
+#    if defined(__amd64__)
+#        define ARCH_X64 1
+#    elif defined(__i386__) // Verify this works on clang.
+#        define ARCH_X86 1
+#    elif defined(__arm__) // Verify this works on clang.
+#        define ARCH_ARM 1
+#    elif defined(__aarch64__) // Verify this works on clang.
+#        define ARCH_ARM64 1
+#    else
+#        error missing ARCH detection
+#    endif
+#elif defined(_MSC_VER)
+#    define COMPILER_CL 1
+#    if defined(_WIN32)
+#        define OS_WINDOWS 1
+#    else
+#        error missing OS detection
+#    endif
+#    if defined(_M_AMD64)
+#        define ARCH_X64 1
+#    elif defined(_M_I86)
+#        define ARCH_X86 1
+#    elif defined(_M_ARM)
+#        define ARCH_ARM 1
+#    else
+#        error missing ARCH detection
+#    endif
+#elif defined(__GNUC__)
+#    define COMPILER_GCC 1
+#    if defined(_WIN32)
+#        define OS_WINDOWS 1
+#    elif defined(__gnu_linux__)
+#        define OS_LINUX 1
+#    elif defined(__APPLE__) && defined(__MACH__)
+#        define OS_MAC 1
+#    else
+#        error missing OS detection
+#    endif
+#    if defined(__amd64__)
+#        define ARCH_X64 1
+#    elif defined(__i386__)
+#        define ARCH_X86 1
+#    elif defined(__arm__)
+#        define ARCH_ARM 1
+#    elif defined(__aarch64__)
+#        define ARCH_ARM64 1
+#    else
+#        error missing ARCH detection
+#    endif
+#else
+#    error no context cracking for this compiler
+#endif
+
+#if !defined(COMPILER_CL)
+#    define COMPILER_CL 0
+#endif
+#if !defined(COMPILER_CLANG)
+#    define COMPILER_CLANG 0
+#endif
+#if !defined(COMPILER_GCC)
+#    define COMPILER_GCC 0
+#endif
+#if !defined(OS_WINDOWS)
+#    define OS_WINDOWS 0
+#endif
+#if !defined(OS_LINUX)
+#    define OS_LINUX 0
+#endif
+#if !defined(OS_MAC)
+#    define OS_MAC 0
+#endif
+#if !defined(ARCH_X64)
+#    define ARCH_X64 0
+#endif
+#if !defined(ARCH_X86)
+#    define ARCH_X86 0
+#endif
+#if !defined(ARCH_ARM)
+#    define ARCH_ARM 0
+#endif
+#if !defined(ARCH_ARM64)
+#    define ARCH_ARM64 0
+#endif
 
 /////////////////////////////////////////
 //
@@ -144,19 +249,19 @@ typedef double             f64;
 #define SWAP(a, b, Type)   DOWHILE(Type _t = a; a = b; b = _t;)
 
 #if defined(_DEBUG)
-#    ifdef _MSC_VER
-#        define ASSERT(expr)   DOWHILE(if (!(expr)) __debugbreak();)
+#    if defined(COMPILER_CL)
+#        define ASSERT(expr) DOWHILE(if (!(expr)) __debugbreak();)
 #    else
-#        define ASSERT(expr)   DOWHILE(if (!(expr)) __builtin_trap();)
+#        define ASSERT(expr) DOWHILE(if (!(expr)) __builtin_trap();)
 #    endif
-#    ifdef _WIN32
-#        define ASSERT_HR(hr)  ASSERT(SUCCEEDED(hr))
+#    if defined(OS_WINDOWS)
+#        define ASSERT_HR(hr) ASSERT(SUCCEEDED(hr))
 #    endif
 #else
 #    define ASSERT(expr)   (void)(expr)
 #endif
 
-#define ARRAY_COUNT(a)     (sizeof(a) / sizeof((a)[0]))
+#define ARRAY_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
 #define STR(s) DO_STR(s)
 #define DO_STR(s) #s
