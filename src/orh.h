@@ -1,4 +1,4 @@
-/* orh.h - v0.50 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.51 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.51 - added array_find_index().
 0.50 - Improved arenas and added thread local scratch arenas.
 0.49 - added context cracking.
 0.48 - added operator!= for String8.
@@ -1292,6 +1293,21 @@ T array_pop_back(Array<T> *array)
     
     T result = array->data[array->count-1];
     array->count--;
+    
+    return result;
+}
+
+template<typename T>
+s32 array_find_index(Array<T> *array, T value)
+{
+    s32 result = -1;
+    
+    for (s32 index = 0; index < array->count; index++) {
+        if (array->data[index] == value) {
+            result = index;
+            break;
+        }
+    }
     
     return result;
 }

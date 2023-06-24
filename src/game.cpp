@@ -190,6 +190,15 @@ get(&file, &field_name, size); \
     advance(&file, len);
     //advance(&file, len + 1); // Account for null terminator.
     lev->name = string_copy(stemp);
+    
+#if DEVELOPER
+    if (lev->name != level_name) {
+        print("\nName mismatch!\n"
+              "expected %S but got %S\n"
+              "Save the game again to solve the issue!\n\n", level_name, lev->name);
+    }
+#endif
+    
     get(&file, &lev->num_x);
     get(&file, &lev->num_y);
     get(&file, &lev->size_x);
@@ -684,7 +693,7 @@ print("\n\n");\
 
 #define NUM_ROTATION_PARTICLES 5
 GLOBAL V2 random_rotation_particles[NUM_ROTATION_PARTICLES];
-
+GLOBAL Array<u32> unique_draw_beams_calls;
 FUNCTION void game_init()
 {
 #if 0
@@ -738,6 +747,8 @@ FUNCTION void game_init()
     for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
         random_rotation_particles[i] = random_range_v2(&game->rng, v2(0), v2(1));
     }
+    
+    array_init(&unique_draw_beams_calls);
     
     {
         Arena_Temp scratch = get_scratch(0, 0);
@@ -939,6 +950,9 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
                 return;
             }
             
+            if (src_color == test_o.color[reflected_d])
+                return;
+            
             // Write the color.
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
@@ -963,6 +977,9 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
                 return;
             }
             
+            if (src_color == test_o.color[reflected_d])
+                return;
+            
             // Write the color.
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
@@ -985,17 +1002,26 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
                 return;
             }
             
+            if (src_color == test_o.color[src_dir])
+                return;
+            
             // Write the color.
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
             
             if (do_reflect) {
+                if (src_color == test_o.color[reflected_d])
+                    return;
                 objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
                 update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
             }
         } break;
         case T_DETECTOR: {
             u8 inv_d  = WRAP_D(src_dir + 4);
+            
+            if (src_color == test_o.color[src_dir])
+                return;
+            
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
@@ -1669,10 +1695,24 @@ FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f
     immediate_line_2d(start, end, c, thickness);
 }
 
+GLOBAL b32 is_draw_beams_looping;
 FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
         return;
+    if (is_draw_beams_looping)
+        return;
+    u32 func_id = 0;
+    func_id |= (src_x     & 0xFF) << 24;
+    func_id |= (src_y     & 0xFF) << 16;
+    func_id |= (src_dir   & 0xFF) << 8; 
+    func_id |= (src_color & 0xFF);
+    if (array_find_index(&unique_draw_beams_calls, func_id) != -1) {
+        is_draw_beams_looping = true;
+        return;
+    } else {
+        array_add(&unique_draw_beams_calls, func_id);
+    }
     
     s32 test_x  = src_x + dirs[src_dir].x;
     s32 test_y  = src_y + dirs[src_dir].y;
@@ -1901,6 +1941,8 @@ FUNCTION void game_render()
             for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
                 Obj o = objmap[y][x];
                 if (o.type == T_EMITTER) {
+                    is_draw_beams_looping = false;
+                    array_reset(&unique_draw_beams_calls);
                     draw_beams(x, y, o.dir, o.c);
                 }
             }
