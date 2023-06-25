@@ -203,6 +203,7 @@ enum
     
     ObjFlags_ONLY_ROTATE_CCW = 1 << 0,
     ObjFlags_ONLY_ROTATE_CW  = 1 << 1,
+    ObjFlags_NEVER_ROTATE    = 1 << 2,
 };
 
 struct Obj

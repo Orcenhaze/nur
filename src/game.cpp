@@ -632,7 +632,8 @@ FUNCTION void do_editor(b32 is_first_call)
             //
             if (game->selected_tile_or_obj == T_EMITTER  || 
                 game->selected_tile_or_obj == T_DETECTOR ||
-                game->selected_tile_or_obj == T_DOOR) {
+                game->selected_tile_or_obj == T_DOOR     ||
+                game->selected_tile_or_obj == T_SPLITTER) {
                 ImGui::SameLine(0, ImGui::GetFrameHeight());
                 const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
                 const char* col = cols[game->selected_color];
@@ -642,9 +643,10 @@ FUNCTION void do_editor(b32 is_first_call)
             if (game->selected_tile_or_obj == T_MIRROR || 
                 game->selected_tile_or_obj == T_BENDER ||
                 game->selected_tile_or_obj == T_SPLITTER) {
-                ImGui::RadioButton("NONE", &game->selected_flag, 0); ImGui::SameLine();
-                ImGui::RadioButton("LOCK CCW", &game->selected_flag, 1); ImGui::SameLine();
-                ImGui::RadioButton("LOCK CW", &game->selected_flag, 2);
+                ImGui::RadioButton("NONE",     &game->selected_flag, 0);      ImGui::SameLine();
+                ImGui::RadioButton("LOCK CCW", &game->selected_flag, 1 << 0); ImGui::SameLine();
+                ImGui::RadioButton("LOCK CW",  &game->selected_flag, 1 << 1); ImGui::SameLine();
+                ImGui::RadioButton("LOCK OBJ", &game->selected_flag, 1 << 2);
             }
             
             if (game->selected_tile_or_obj == T_DOOR) {
@@ -1002,18 +1004,33 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
                 return;
             }
             
+            // Source direction.
+            //
             if (src_color == test_o.color[src_dir])
                 return;
+            if (test_o.c == Color_WHITE) {
+                // Write the color.
+                objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
+                update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
+            } else {
+                // @Note: Splitter forces a color.
+                objmap[test_y][test_x].color[src_dir] = test_o.c;
+                update_beams(test_x, test_y, src_dir, test_o.c, is_hitting_player);
+            }
             
-            // Write the color.
-            objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
-            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
-            
+            // Reflected direction.
+            //
             if (do_reflect) {
                 if (src_color == test_o.color[reflected_d])
                     return;
-                objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
-                update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
+                if (test_o.c == Color_WHITE) {
+                    objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
+                    update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
+                } else {
+                    // @Note: Splitter forces a color.
+                    objmap[test_y][test_x].color[reflected_d] = test_o.c;
+                    update_beams(test_x, test_y, reflected_d, test_o.c, is_hitting_player);
+                }
             }
         } break;
         case T_DETECTOR: {
@@ -1171,111 +1188,115 @@ FUNCTION void update_world()
         animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
     }
     
-    if (dead)
-        return;
     
     ////////////////////////////////
     // Player movement!
     //
-    if (input_pressed(MOVE_RIGHT)) {
-        move_hold_timer = 0.0f;
-        last_pressed = MOVE_RIGHT;
-    } else if (input_pressed(MOVE_UP)) {
-        move_hold_timer = 0.0f;
-        last_pressed = MOVE_UP;
-    } else if (input_pressed(MOVE_LEFT)) {
-        move_hold_timer = 0.0f;
-        last_pressed = MOVE_LEFT;
-    } else if (input_pressed(MOVE_DOWN)) {
-        move_hold_timer = 0.0f;
-        last_pressed = MOVE_DOWN;
-    }
-    
-    move_hold_timer = MAX(0, move_hold_timer - os->dt);
-    
-    V2s move_dir = {};
-    b32 move_input_held = false; 
-    if (input_held(MOVE_RIGHT) && last_pressed == MOVE_RIGHT) {
-        move_input_held = true;
-        if (move_hold_timer <= 0) {
-            move_dir.x = 1;
-            move_hold_timer = MOVE_HOLD_DURATION;
+    if (!dead) {
+        if (input_pressed(MOVE_RIGHT)) {
+            move_hold_timer = 0.0f;
+            last_pressed = MOVE_RIGHT;
+        } else if (input_pressed(MOVE_UP)) {
+            move_hold_timer = 0.0f;
+            last_pressed = MOVE_UP;
+        } else if (input_pressed(MOVE_LEFT)) {
+            move_hold_timer = 0.0f;
+            last_pressed = MOVE_LEFT;
+        } else if (input_pressed(MOVE_DOWN)) {
+            move_hold_timer = 0.0f;
+            last_pressed = MOVE_DOWN;
         }
-    } else if (input_held(MOVE_UP) && last_pressed == MOVE_UP) {
-        move_input_held = true;
-        if (move_hold_timer <= 0) {
-            move_dir.y = 1;
-            move_hold_timer = MOVE_HOLD_DURATION;
-        }
-    } else if (input_held(MOVE_LEFT) && last_pressed == MOVE_LEFT) {
-        move_input_held = true;
-        if (move_hold_timer <= 0) {
-            move_dir.x = -1;
-            move_hold_timer = MOVE_HOLD_DURATION;
-        }
-    } else if (input_held(MOVE_DOWN) && last_pressed == MOVE_DOWN) {
-        move_input_held = true;
-        if (move_hold_timer <= 0) {
-            move_dir.y = -1;
-            move_hold_timer = MOVE_HOLD_DURATION;
-        }
-    }
-    
-    if (move_input_held) {
-        undo_hold_timer  = UNDO_HOLD_DURATION;
-        undo_speed_scale = 1.0f;
-    }
-    
-    if (move_dir.x || move_dir.y) {
-        if (queued_moves_count < ARRAY_COUNT(queued_moves)) {
-            queued_moves[queued_moves_count++] = move_dir;
-        }
-    }
-    
-    if (player_is_at_rest() && queued_moves_count > 0) {
-        // Pop the next move.
-        V2s queued_move = queued_moves[0];
-        // Slide other moves down the array.
-        for (s32 i = 0; i < queued_moves_count-1; i++)
-            queued_moves[i] = queued_moves[i+1];
-        queued_moves_count--;
         
-        move_player(queued_move.x, queued_move.y);
+        move_hold_timer = MAX(0, move_hold_timer - os->dt);
+        
+        V2s move_dir = {};
+        b32 move_input_held = false; 
+        if (input_held(MOVE_RIGHT) && last_pressed == MOVE_RIGHT) {
+            move_input_held = true;
+            if (move_hold_timer <= 0) {
+                move_dir.x = 1;
+                move_hold_timer = MOVE_HOLD_DURATION;
+            }
+        } else if (input_held(MOVE_UP) && last_pressed == MOVE_UP) {
+            move_input_held = true;
+            if (move_hold_timer <= 0) {
+                move_dir.y = 1;
+                move_hold_timer = MOVE_HOLD_DURATION;
+            }
+        } else if (input_held(MOVE_LEFT) && last_pressed == MOVE_LEFT) {
+            move_input_held = true;
+            if (move_hold_timer <= 0) {
+                move_dir.x = -1;
+                move_hold_timer = MOVE_HOLD_DURATION;
+            }
+        } else if (input_held(MOVE_DOWN) && last_pressed == MOVE_DOWN) {
+            move_input_held = true;
+            if (move_hold_timer <= 0) {
+                move_dir.y = -1;
+                move_hold_timer = MOVE_HOLD_DURATION;
+            }
+        }
+        
+        if (move_input_held) {
+            undo_hold_timer  = UNDO_HOLD_DURATION;
+            undo_speed_scale = 1.0f;
+        }
+        
+        if (move_dir.x || move_dir.y) {
+            if (queued_moves_count < ARRAY_COUNT(queued_moves)) {
+                queued_moves[queued_moves_count++] = move_dir;
+            }
+        }
+        
+        if (player_is_at_rest() && queued_moves_count > 0) {
+            // Pop the next move.
+            V2s queued_move = queued_moves[0];
+            // Slide other moves down the array.
+            for (s32 i = 0; i < queued_moves_count-1; i++)
+                queued_moves[i] = queued_moves[i+1];
+            queued_moves_count--;
+            
+            move_player(queued_move.x, queued_move.y);
+        }
+        
+        // Rotate objs around player.
+        if (input_pressed(ROTATE_CCW) || input_pressed(ROTATE_CW)) {
+            for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
+                for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
+                    if (dy == py && dx == px)
+                        continue;
+                    
+                    switch (objmap[dy][dx].type) {
+                        case T_MIRROR:
+                        case T_BENDER:
+                        case T_SPLITTER: {
+                            if (is_set(objmap[dy][dx].flags, ObjFlags_NEVER_ROTATE)) 
+                                continue;
+                            
+                            if (input_pressed(ROTATE_CCW)) {
+                                undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
+                                if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
+                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                                else
+                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                            } else if (input_pressed(ROTATE_CW)) {
+                                undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
+                                if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
+                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                                else
+                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                            }
+                        } break;
+                    }
+                }
+            }
+        }
+        
     }
     
     ////////////////////////////////
     // Update map.
     //
-    
-    // Rotate objs around player.
-    if (input_pressed(ROTATE_CCW) || input_pressed(ROTATE_CW)) {
-        for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
-            for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
-                if (dy == py && dx == px)
-                    continue;
-                
-                switch (objmap[dy][dx].type) {
-                    case T_MIRROR:
-                    case T_BENDER:
-                    case T_SPLITTER: {
-                        if (input_pressed(ROTATE_CCW)) {
-                            undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
-                            if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
-                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
-                            else
-                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
-                        } else if (input_pressed(ROTATE_CW)) {
-                            undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
-                            if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
-                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
-                            else
-                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
-                        }
-                    } break;
-                }
-            }
-        }
-    }
     
     // Clear colors for all objs (except ones that use it specially).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
@@ -1298,6 +1319,11 @@ FUNCTION void update_world()
                 b32 is_hitting_player = false;
                 update_beams(x, y, o.dir, o.c, &is_hitting_player);
                 if (is_hitting_player) {
+                    // @Todo: 
+                    // @Todo: 
+                    // @Todo: Now that we have splitters that force a color, find a better way
+                    // to handle this. Because we don't always die anymore if red emitter beam is hitting
+                    // the player.
                     dead   = true;
                     pcolor = Color_RED;
                 }
@@ -1412,10 +1438,11 @@ FUNCTION void update_editor()
                 if (tilemap[my][mx] != Tile_WALL) {
                     objmap[my][mx].type = game->selected_tile_or_obj;
                     
-                    if (game->selected_tile_or_obj == T_EMITTER || 
-                        game->selected_tile_or_obj == T_DETECTOR ||
-                        game->selected_tile_or_obj == T_DOOR ||
-                        game->selected_tile_or_obj == T_DOOR_OPEN)
+                    if (game->selected_tile_or_obj == T_EMITTER   || 
+                        game->selected_tile_or_obj == T_DETECTOR  ||
+                        game->selected_tile_or_obj == T_DOOR      ||
+                        game->selected_tile_or_obj == T_DOOR_OPEN ||
+                        game->selected_tile_or_obj == T_SPLITTER)
                         objmap[my][mx].c = (u8)game->selected_color;
                     
                     if (objmap[my][mx].flags == ObjFlags_NONE) {
@@ -2027,9 +2054,9 @@ FUNCTION void game_render()
                     case T_SPLITTER: {
                         sprite.s = (sprite.s + o.dir) % 4;
                         if (pushed_obj.x == x && pushed_obj.y == y)
-                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                         else
-                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                     } break;
                     case T_DOOR:
                     case T_DOOR_OPEN: {
@@ -2049,38 +2076,56 @@ FUNCTION void game_render()
         for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
             for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
                 Obj o = objmap[y][x];
-                if (o.type == T_EMPTY) continue;
+                if (o.type == T_EMPTY  &&
+                    o.type != T_MIRROR &&
+                    o.type != T_BENDER &&
+                    o.type != T_SPLITTER) 
+                    continue;
                 
-                // Locked rotation particles.
-                V3 axis = {};
-                V4 color = {};
-                if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
-                    axis = v3(0,0,1);
-                    color = v4(0.7f, 0.8f, 0.3f, 0.8f);
-                } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                    axis = v3(0,0,-1);
-                    color = v4(0.7f, 0.4f, 0.6f, 0.8f);
-                }
-                if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                    V2 pivot;
-                    if (pushed_obj.x == x && pushed_obj.y == y)
-                        pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
-                    else 
-                        pivot = v2((f32)x, (f32)y);
-                    
-                    f32 duration = 3.0f;
-                    V2 size      = v2(0.03f, 0.03f);
-                    for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
-                        f32 radius = 0.4f;
-                        V2 min     = pivot - v2(radius); 
-                        V2 max     = pivot + v2(radius);
-                        V2 p       = min + random_rotation_particles[i]*(max - min);
-                        duration  *= length2(random_rotation_particles[i]);
-                        f32 a      = repeat((f32)os->time/duration, 1.0f);
-                        Quaternion q = quaternion_from_axis_angle_turns(axis, a);
-                        V2 c = rotate_point_around_pivot(p, pivot, q);
-                        immediate_rect(c, size, color);
+                // @Todo: These are all temporary and ugly particles.
+                //
+                if (is_set(o.flags, ObjFlags_NEVER_ROTATE)) {
+                    V4 color   = v4(0.3f, 0.3f, 0.3f, 0.8f);
+                    V2 size    = v2(0.06f, 0.06f);
+                    V2 c       = v2((f32)x, (f32)y);
+                    f32 offset = 0.35f;
+                    immediate_rect(c + v2(-offset, -offset), size, color);
+                    immediate_rect(c + v2( offset, -offset), size, color);
+                    immediate_rect(c + v2( offset,  offset), size, color);
+                    immediate_rect(c + v2(-offset,  offset), size, color);
+                } else {
+                    // Locked rotation particles.
+                    V3 axis = {};
+                    V4 color = {};
+                    if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
+                        axis = v3(0,0,1);
+                        color = v4(0.7f, 0.8f, 0.3f, 0.8f);
+                    } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
+                        axis = v3(0,0,-1);
+                        color = v4(0.7f, 0.4f, 0.6f, 0.8f);
+                    } 
+                    if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
+                        V2 pivot;
+                        if (pushed_obj.x == x && pushed_obj.y == y)
+                            pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
+                        else 
+                            pivot = v2((f32)x, (f32)y);
+                        
+                        f32 duration = 3.0f;
+                        V2 size      = v2(0.03f, 0.03f);
+                        for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
+                            f32 radius = 0.4f;
+                            V2 min     = pivot - v2(radius); 
+                            V2 max     = pivot + v2(radius);
+                            V2 p       = min + random_rotation_particles[i]*(max - min);
+                            duration  *= length2(random_rotation_particles[i]);
+                            f32 a      = repeat((f32)os->time/duration, 1.0f);
+                            Quaternion q = quaternion_from_axis_angle_turns(axis, a);
+                            V2 c = rotate_point_around_pivot(p, pivot, q);
+                            immediate_rect(c, size, color);
+                        }
                     }
+                    
                 }
             }
         }
