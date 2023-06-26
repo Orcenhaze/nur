@@ -904,7 +904,7 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
         return Color_WHITE;
 }
 
-FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *is_hitting_player)
+FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
         return;
@@ -916,7 +916,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
     // Advance until we hit a wall or an object.
     while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) && tilemap[test_y][test_x] != Tile_WALL) {
         if (test_x == px && test_y == py) {
-            *is_hitting_player = true;
+            pcolor = mix_colors(pcolor, src_color);
         }
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
@@ -929,7 +929,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
     
     // In case player is standing on some Obj like T_DETECTOR.
     if (test_x == px && test_y == py) {
-        *is_hitting_player = true;
+        pcolor = mix_colors(pcolor, src_color);
     }
     
     // We hit an object, so we should determine which color to reflect in which dir.  
@@ -958,7 +958,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
             // Write the color.
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
-            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
+            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
         } break;
         case T_BENDER: {
             u8 inv_d   = WRAP_D(src_dir + 4);
@@ -985,7 +985,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
             // Write the color.
             objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
             
-            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
+            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
         } break;
         case T_SPLITTER: {
             u8 inv_d  = WRAP_D(src_dir + 4);
@@ -1011,11 +1011,11 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
             if (test_o.c == Color_WHITE) {
                 // Write the color.
                 objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
-                update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
+                update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
             } else {
                 // @Note: Splitter forces a color.
                 objmap[test_y][test_x].color[src_dir] = test_o.c;
-                update_beams(test_x, test_y, src_dir, test_o.c, is_hitting_player);
+                update_beams(test_x, test_y, src_dir, test_o.c);
             }
             
             // Reflected direction.
@@ -1025,11 +1025,11 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
                     return;
                 if (test_o.c == Color_WHITE) {
                     objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
-                    update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d], is_hitting_player);
+                    update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
                 } else {
                     // @Note: Splitter forces a color.
                     objmap[test_y][test_x].color[reflected_d] = test_o.c;
-                    update_beams(test_x, test_y, reflected_d, test_o.c, is_hitting_player);
+                    update_beams(test_x, test_y, reflected_d, test_o.c);
                 }
             }
         } break;
@@ -1041,7 +1041,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color, b32 *
             
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             
-            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir], is_hitting_player);
+            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
         } break;
     }
 }
@@ -1311,47 +1311,18 @@ FUNCTION void update_world()
     }
     pcolor = Color_WHITE;
     
-    // Update beams (do red emitters first).
+    // Update beams.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if ((o.type == T_EMITTER) && (o.c == Color_RED)) {
-                b32 is_hitting_player = false;
-                update_beams(x, y, o.dir, o.c, &is_hitting_player);
-                if (is_hitting_player) {
-                    // @Todo: 
-                    // @Todo: 
-                    // @Todo: Now that we have splitters that force a color, find a better way
-                    // to handle this. Because we don't always die anymore if red emitter beam is hitting
-                    // the player.
-                    dead   = true;
-                    pcolor = Color_RED;
-                }
-#if DEVELOPER
-                for (s32 i = 0; i < 8; i++)
-                    ASSERT(o.color[i] == 0);
-#endif
-            }
-        }
-    }
-    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            Obj o = objmap[y][x];
-            if ((o.type == T_EMITTER) && (o.c != Color_RED)) {
-                b32 is_hitting_player = false;
-                update_beams(x, y, o.dir, o.c, &is_hitting_player);
-                if (is_hitting_player) {
-                    pcolor = mix_colors(pcolor, o.c);
-                }
-#if DEVELOPER
-                for (s32 i = 0; i < 8; i++)
-                    ASSERT(o.color[i] == 0);
-#endif
-            }
+            if (o.type == T_EMITTER)
+                update_beams(x, y, o.dir, o.c);
         }
     }
     
-    if (pcolor == Color_WHITE)
+    if (pcolor == Color_RED || pcolor == Color_MAGENTA || pcolor == Color_YELLOW)
+        dead = true;
+    else
         dead = false;
     
     // Update doors and detectors.
