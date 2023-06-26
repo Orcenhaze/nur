@@ -1311,11 +1311,18 @@ FUNCTION void update_world()
     }
     pcolor = Color_WHITE;
     
-    // Update beams.
+    // Update beams (do red emitters first).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if (o.type == T_EMITTER)
+            if ((o.type == T_EMITTER) && (o.c == Color_RED))
+                update_beams(x, y, o.dir, o.c);
+        }
+    }
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if ((o.type == T_EMITTER) && (o.c != Color_RED))
                 update_beams(x, y, o.dir, o.c);
         }
     }
