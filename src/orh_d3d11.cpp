@@ -11,7 +11,8 @@ CONVENTIONS:
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
 
 TODO:
-[] Make a generic orh_draw.h that the game can use without directly talking to specific graphics API.
+[] Make a generic orh_renderer.h that the game can use without directly talking to specific graphics API.
+[] Support for multiple shaders. HLSL pre-pass to parse @pipeline?
 
 */
 
