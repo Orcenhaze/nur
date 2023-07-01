@@ -162,6 +162,7 @@ enum
     T_DOOR,
     T_DOOR_OPEN,
     T_TELEPORTER,
+    T_GHOST
 };
 
 V2s obj_sprite[] = {
@@ -174,6 +175,7 @@ V2s obj_sprite[] = {
     v2s(5, 4),
     v2s(6, 4),
     v2s(2, 0),
+    v2s(3, 0),
 };
 
 enum
@@ -204,6 +206,7 @@ enum
     ObjFlags_ONLY_ROTATE_CCW = 1 << 0,
     ObjFlags_ONLY_ROTATE_CW  = 1 << 1,
     ObjFlags_NEVER_ROTATE    = 1 << 2,
+    ObjFlags_IS_DEAD         = 1 << 3,
 };
 
 struct Obj

@@ -633,7 +633,8 @@ FUNCTION void do_editor(b32 is_first_call)
             if (game->selected_tile_or_obj == T_EMITTER  || 
                 game->selected_tile_or_obj == T_DETECTOR ||
                 game->selected_tile_or_obj == T_DOOR     ||
-                game->selected_tile_or_obj == T_SPLITTER) {
+                game->selected_tile_or_obj == T_SPLITTER ||
+                game->selected_tile_or_obj == T_GHOST) {
                 ImGui::SameLine(0, ImGui::GetFrameHeight());
                 const char* cols[] = { "WHITE", "RED", "GREEN", "BLUE", "YELLOW", "MAGENTA", "CYAN", };
                 const char* col = cols[game->selected_color];
@@ -1034,13 +1035,15 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
         } break;
         case T_DETECTOR: {
-            u8 inv_d  = WRAP_D(src_dir + 4);
-            
             if (src_color == test_o.color[src_dir])
                 return;
-            
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
-            
+            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
+        } break;
+        case T_GHOST: {
+            if (src_color == test_o.color[src_dir])
+                return;
+            objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
         } break;
     }
@@ -1060,12 +1063,63 @@ FUNCTION b32 is_obj_collides(u8 type)
     }
 }
 
+// @Cleanup:
+// @Cleanup:
+// @Cleanup:
+//
+GLOBAL b32 ghost_death;
+FUNCTION void move_ghost(s32 ghost_x, s32 ghost_y)
+{
+    if (ghost_x == px && ghost_y == py) {
+        ghost_death = true;
+        return;
+    } 
+    
+    //s32 offset_x = (px - ghost_x) == 0? 0 : SIGN(px - ghost_x);
+    //s32 offset_y = (py - ghost_y) == 0? 0 : SIGN(py - ghost_y);
+    
+    s32 dx = ABS(px - ghost_x);
+    s32 dy = ABS(py - ghost_y);
+    
+    s32 offset_x = 0;
+    s32 offset_y = 0;
+    
+    if (((dx == 1) && (dy == 1)) ||
+        ((dx == 1) && (dy == 0)) ||
+        ((dx == 0) && (dy == 1))) {
+        // Ghost and player are adjacent, go for the kill.
+        offset_x = dx == 0? 0 : (ghost_x < px) ? 1 : -1;  // Move East/West
+        offset_y = dy == 0? 0 : (ghost_y < py) ? 1 : -1;  // Move North/South
+    } else if (dx > dy) {
+        offset_x = (ghost_x < px) ? 1 : -1;  // Move East/West
+    } else {
+        offset_y = (ghost_y < py) ? 1 : -1;  // Move North/South
+    }
+    
+    s32 nx = ghost_x + offset_x;
+    s32 ny = ghost_y + offset_y;
+    if (is_outside_map(nx, ny))
+        return;
+    
+    undo_push_obj_move(&undo_handler, ghost_x, ghost_y, nx, ny);
+    SWAP(objmap[ghost_y][ghost_x], objmap[ny][nx], Obj);
+    
+    if (nx == px && ny == py) {
+        ghost_death = true;
+    } else {
+        ghost_death = false;
+    }
+}
+
 FUNCTION void move_player(s32 dir_x, s32 dir_y)
 {
     if (!dir_x && !dir_y) return;
     u8 old_dir = pdir;
     pdir       = dir_x? dir_x<0? (u8)Dir_W : (u8)Dir_E : dir_y<0? (u8)Dir_S : (u8)Dir_N;
     
+    // @Cleanup:
+    // @Cleanup:
+    // @Cleanup:
     s32 tempx = px + dir_x; 
     s32 tempy = py + dir_y;
     if (is_outside_map(tempx, tempy))
@@ -1107,6 +1161,23 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
     
     undo_push_player_move(&undo_handler, px, py, old_dir);
     set_player_position(tempx, tempy, pdir);
+    
+    // @Cleanup:
+    // @Cleanup:
+    // @Cleanup:
+    // @Todo: Multiple ghosts.
+    V2s ghost = v2s(S32_MIN);
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_GHOST && is_cleared(o.flags, ObjFlags_IS_DEAD)) {
+                ghost = v2s(x, y);
+            }
+        }
+    }
+    
+    if (ghost != v2s(S32_MIN))
+        move_ghost(ghost.x, ghost.y);
 }
 
 #define MOVE_HOLD_DURATION 0.20f
@@ -1143,6 +1214,7 @@ FUNCTION void update_world()
             
             // @Hardcoded:
             dead = false;
+            ghost_death = false;
         }
     }
     
@@ -1327,10 +1399,27 @@ FUNCTION void update_world()
         }
     }
     
-    if (pcolor == Color_RED || pcolor == Color_MAGENTA || pcolor == Color_YELLOW)
+    if (pcolor == Color_RED || pcolor == Color_MAGENTA || pcolor == Color_YELLOW || ghost_death)
         dead = true;
     else
         dead = false;
+    
+    // Update ghost
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj ghost = objmap[y][x];
+            if (ghost.type == T_GHOST) {
+                u8 final_c = Color_WHITE;
+                for (s32 i = 0; i < 8; i++)
+                    final_c = mix_colors(final_c, ghost.color[i]);
+                
+                if (final_c == ghost.c)
+                    set((u32*)&objmap[y][x].flags, ObjFlags_IS_DEAD);
+                else
+                    clear((u32*)&objmap[y][x].flags, ObjFlags_IS_DEAD);
+            }
+        }
+    }
     
     // Update doors and detectors.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
@@ -1420,7 +1509,8 @@ FUNCTION void update_editor()
                         game->selected_tile_or_obj == T_DETECTOR  ||
                         game->selected_tile_or_obj == T_DOOR      ||
                         game->selected_tile_or_obj == T_DOOR_OPEN ||
-                        game->selected_tile_or_obj == T_SPLITTER)
+                        game->selected_tile_or_obj == T_SPLITTER  ||
+                        game->selected_tile_or_obj == T_GHOST)
                         objmap[my][mx].c = (u8)game->selected_color;
                     
                     if (objmap[my][mx].flags == ObjFlags_NONE) {
@@ -1837,6 +1927,12 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
             draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
         } break;
+        case T_GHOST: {
+            u8 inv_d  = WRAP_D(src_dir + 4);
+            u8 c = mix_colors(test_o.color[inv_d], src_color);
+            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
+            draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
+        } break;
     }
 }
 
@@ -2042,6 +2138,9 @@ FUNCTION void game_render()
                     } break;
                     case T_TELEPORTER: {
                         draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
+                    } break;
+                    case T_GHOST: {
+                        draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 0.65f);
                     } break;
                 }
             }
