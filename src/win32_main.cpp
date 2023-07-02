@@ -605,23 +605,29 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         //
         //
         if ((global_os.fps_max > 0)) {
-            f32 target_seconds_per_frame = 1.0f/(f32)global_os.fps_max;
+            f64 target_seconds_per_frame = 1.0/(f64)global_os.fps_max;
             f64 seconds_elapsed_so_far = win32_get_seconds_elapsed(last_counter, win32_qpc());
             if (seconds_elapsed_so_far < target_seconds_per_frame) {
                 if (global_waitable_timer) {
-                    f64 us_to_sleep = (target_seconds_per_frame - seconds_elapsed_so_far) * 1000000.0f;
-                    us_to_sleep    -= 1000.0f; // -= 1ms;
+                    // @DEBUG: Fix this, something's wrong! We are sometimes capping at 64.
+                    // @DEBUG: Fix this, something's wrong! We are sometimes capping at 64.
+                    // @DEBUG: Fix this, something's wrong! We are sometimes capping at 64.
+                    f64 us_to_sleep = (target_seconds_per_frame - seconds_elapsed_so_far) * 1000000.0;
+                    us_to_sleep    -= 1000.0; // -= 1ms;
                     if (us_to_sleep > 1) {
                         LARGE_INTEGER due_time;
-                        due_time.QuadPart = -(LONGLONG)us_to_sleep * 10; // *10 because 100 ns intervals.
+                        due_time.QuadPart = -(s64)us_to_sleep * 10; // *10 because 100 ns intervals.
                         b32 set_ok = SetWaitableTimerEx(global_waitable_timer, &due_time, 0, 0, 0, 0, 0);
                         ASSERT(set_ok != 0);
                         
-                        WaitForSingleObject(global_waitable_timer, INFINITE);
+                        WaitForSingleObjectEx(global_waitable_timer, INFINITE, 0);
                     }
-                } else {
-                    // @Todo: Must use other methods of sleeping for older versions of Windows that don't have high resolution waitable timer.
-                }
+                } 
+                /* 
+                                else {
+                                    // @Todo: Must use other methods of sleeping for older versions of Windows that don't have high resolution waitable timer.
+                                }
+                                 */
                 
                 // Spin-lock the remaining amount.
                 while (seconds_elapsed_so_far < target_seconds_per_frame)
@@ -639,6 +645,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         last_counter                  = end_counter;
         accumulator                  += seconds_elapsed_for_frame;
         //print("Num updates this frame: %d\n", num_updates_this_frame);
+        print("FPS: %d\n", (s32)(1.0/seconds_elapsed_for_frame));
     }
     
     /////////////////////////////////////////////////////

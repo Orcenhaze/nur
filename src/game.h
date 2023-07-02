@@ -162,7 +162,6 @@ enum
     T_DOOR,
     T_DOOR_OPEN,
     T_TELEPORTER,
-    T_GHOST
 };
 
 V2s obj_sprite[] = {
@@ -175,7 +174,6 @@ V2s obj_sprite[] = {
     v2s(5, 4),
     v2s(6, 4),
     v2s(2, 0),
-    v2s(3, 0),
 };
 
 enum
@@ -261,8 +259,8 @@ GLOBAL V2 camera; GLOBAL V2 camera_pos;
 GLOBAL V2 pushed_obj; GLOBAL V2 pushed_obj_pos;
 
 // Player state.
-#define PLAYER_ANIMATION_SPEED 8.0f
-#define NUM_ANIMATION_FRAMES   4
+GLOBAL f32 PLAYER_ANIMATION_SPEED = 8.0f;
+#define NUM_ANIMATION_FRAMES 4
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
 GLOBAL f32 animation_timer;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite; GLOBAL u8 pcolor;

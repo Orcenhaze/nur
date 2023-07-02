@@ -486,6 +486,7 @@ FUNCDEF V3 floor(V3 v);
 FUNCDEF V3 ceil(V3 v);
 
 FUNCDEF f32 frac(f32 x);
+FUNCDEF V2  frac(V2 v);
 FUNCDEF V3  frac(V3 v);
 
 FUNCDEF f32 safe_div(f32 x, f32 y, f32 n);
@@ -1968,6 +1969,13 @@ f32 frac(f32 x)
     s32 i = (s32) x;
     
     f32 result = x - (f32)i;
+    return result;
+}
+V2 frac(V2 v)
+{
+    V2 result = {};
+    result.x  = frac(v.x);
+    result.y  = frac(v.y);
     return result;
 }
 V3 frac(V3 v)

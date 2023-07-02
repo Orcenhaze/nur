@@ -135,6 +135,7 @@ FUNCTION void undo_perform_action(Undo_Action action)
         case ActionType_OBJ_MOVE: {
             Obj_Move c = action.obj_move;
             SWAP(objmap[c.to_y][c.to_x], objmap[c.from_y][c.from_x], Obj);
+            pushed_obj = pushed_obj_pos = {};
         } break;
         case ActionType_OBJ_ROTATE: {
             Obj_Rotate c = action.obj_rotate;
