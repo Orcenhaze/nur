@@ -128,7 +128,6 @@ enum
     Dir_SE
 };
 
-// @Todo: Separate to xdir and ydir.
 V2s dirs[8] = {
     v2s( 1,  0),
     v2s( 1,  1),
@@ -140,15 +139,30 @@ V2s dirs[8] = {
     v2s( 1, -1),
 };
 
+V2 fdirs[8] = {
+    v2( 1.0f,  0.0f),
+    v2( 1.0f,  1.0f),
+    v2( 0.0f,  1.0f),
+    v2(-1.0f,  1.0f),
+    v2(-1.0f,  0.0f),
+    v2(-1.0f, -1.0f),
+    v2( 0.0f, -1.0f),
+    v2( 1.0f, -1.0f),
+};
+
 enum
 {
     Tile_FLOOR,
     Tile_WALL,
+    Tile_OBJ_FRAME_CLOSED,
+    Tile_OBJ_FRAME_OPEN,
 };
 
 V2s tile_sprite[] = {
     v2s(0, 0),
     v2s(1, 0),
+    v2s(3, 0),
+    v2s(4, 0),
 };
 
 enum 

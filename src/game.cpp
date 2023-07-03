@@ -919,11 +919,26 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     s32 test_y = src_y + dirs[src_dir].y;
     Obj test_o = objmap[test_y][test_x];
     
+    b32 is_obj_aligned = (((src_x == pushed_obj.x) && (src_x == pushed_obj_pos.x)) || 
+                          ((src_y == pushed_obj.y) && (src_y == pushed_obj_pos.y)));
+    
     // Advance until we hit a wall or an object.
     while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) && tilemap[test_y][test_x] != Tile_WALL) {
+        
+        // We hit the player.
         if (test_x == px && test_y == py) {
             pcolor = mix_colors(pcolor, src_color);
+            b32 is_player_aligned = ((src_x == px) || (src_y == py)) ;
+            
+            // @Note: Obj was hitting beam and we are now pushing it. 
+            // Could be pushing it off OR pushing it along beam.
+            // Either way stop updating.
+            if (is_player_aligned && (length2(pushed_obj_pos - pushed_obj) > SQUARE(0.5f))) {
+                return;
+            }
         }
+        
+        jump:
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
         test_x += dirs[src_dir].x;
@@ -938,110 +953,87 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         pcolor = mix_colors(pcolor, src_color);
     }
     
+    b32 is_pushed_obj  = ((test_x == pushed_obj.x) && (test_y == pushed_obj.y));
+    
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
         case T_DOOR:
         case T_EMITTER: {
-            return;
         } break;
-        case T_MIRROR: {
-            u8 inv_d  = WRAP_D(src_dir + 4);
-            u8 ninv_d = WRAP_D(inv_d + 1);
-            u8 pinv_d = WRAP_D(inv_d - 1 );
-            u8 reflected_d;
-            if (test_o.dir == ninv_d)
-                reflected_d = WRAP_D(ninv_d + 1);
-            else if (test_o.dir == pinv_d)
-                reflected_d = WRAP_D(pinv_d - 1);
-            else {
-                // This mirror is not facing the light source OR directly facing the light source. 
-                return;
-            }
-            
-            if (src_color == test_o.color[reflected_d])
-                return;
-            
-            // Write the color.
-            objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
-            
-            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
-        } break;
-        case T_BENDER: {
-            u8 inv_d   = WRAP_D(src_dir + 4);
-            u8 ninv_d  = WRAP_D(inv_d + 1);
-            u8 pinv_d  = WRAP_D(inv_d - 1);
-            u8 p2inv_d = WRAP_D(inv_d - 2);
-            u8 reflected_d;
-            if (test_o.dir == inv_d)
-                reflected_d = ninv_d;
-            else if (test_o.dir == ninv_d)
-                reflected_d = WRAP_D(ninv_d + 2);
-            else if (test_o.dir == pinv_d)
-                reflected_d = pinv_d;
-            else if (test_o.dir == p2inv_d)
-                reflected_d = WRAP_D(p2inv_d - 1);
-            else {
-                // This mirror is not facing the light source. 
-                return;
-            }
-            
-            if (src_color == test_o.color[reflected_d])
-                return;
-            
-            // Write the color.
-            objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
-            
-            update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
-        } break;
+        case T_MIRROR:
+        case T_BENDER:
         case T_SPLITTER: {
-            u8 inv_d  = WRAP_D(src_dir + 4);
-            u8 ninv_d = WRAP_D(inv_d + 1);
-            u8 pinv_d = WRAP_D(inv_d - 1);
-            u8 reflected_d = 0;
-            b32 do_reflect = true;
-            if (test_o.dir == inv_d || test_o.dir == src_dir)
-                do_reflect = false;
-            else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
-                reflected_d = WRAP_D(ninv_d + 1);
-            else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
-                reflected_d = WRAP_D(pinv_d - 1);
-            else {
-                // This mirror is not facing the light source. 
-                return;
+            u8 inv_d       = WRAP_D(src_dir + 4);
+            u8 ninv_d      = WRAP_D(inv_d + 1);
+            u8 pinv_d      = WRAP_D(inv_d - 1 );
+            u8 p2inv_d     = WRAP_D(inv_d - 2);
+            u8 reflected_d = U8_MAX;
+            b32 penetrate  = true;
+            
+            if (is_pushed_obj && !pushed_obj_is_at_rest()) {
+                if (is_obj_aligned)
+                    break;
+                else if (length2(pushed_obj_pos - pushed_obj) <= SQUARE(0.5f))
+                    break;
+                else
+                    goto jump;
             }
             
-            // Source direction.
-            //
-            if (src_color == test_o.color[src_dir])
-                return;
-            if (test_o.c == Color_WHITE) {
+            if (src_color == test_o.color[reflected_d])
+                break;
+            
+            if (test_o.type == T_MIRROR) {
+                if (test_o.dir == ninv_d)      reflected_d = WRAP_D(ninv_d + 1);
+                else if (test_o.dir == pinv_d) reflected_d = WRAP_D(pinv_d - 1);
+                
                 // Write the color.
-                objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
-                update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
-            } else {
-                // @Note: Splitter forces a color.
-                objmap[test_y][test_x].color[src_dir] = test_o.c;
-                update_beams(test_x, test_y, src_dir, test_o.c);
-            }
-            
-            // Reflected direction.
-            //
-            if (do_reflect) {
-                if (src_color == test_o.color[reflected_d])
-                    return;
-                if (test_o.c == Color_WHITE) {
+                if (reflected_d != U8_MAX) {
                     objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
                     update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
-                } else {
-                    // @Note: Splitter forces a color.
-                    objmap[test_y][test_x].color[reflected_d] = test_o.c;
-                    update_beams(test_x, test_y, reflected_d, test_o.c);
+                }
+            } else if (test_o.type == T_BENDER) {
+                if (test_o.dir == inv_d)        reflected_d = ninv_d;
+                else if (test_o.dir == ninv_d)  reflected_d = WRAP_D(ninv_d + 2);
+                else if (test_o.dir == pinv_d)  reflected_d = pinv_d;
+                else if (test_o.dir == p2inv_d) reflected_d = WRAP_D(p2inv_d - 1);
+                
+                // Write the color.
+                if (reflected_d != U8_MAX) {
+                    objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
+                    update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
+                }
+            } else {
+                if (test_o.dir == inv_d || test_o.dir == src_dir)
+                    penetrate = true;
+                else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
+                    reflected_d = WRAP_D(ninv_d + 1);
+                else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
+                    reflected_d = WRAP_D(pinv_d - 1);
+                else 
+                    penetrate = false;
+                
+                // Source direction.
+                //
+                if (penetrate) {
+                    u8 c = test_o.c == Color_WHITE? mix_colors(test_o.color[src_dir], src_color) : test_o.c;
+                    objmap[test_y][test_x].color[src_dir] = c;
+                    update_beams(test_x, test_y, src_dir, c);
+                }
+                
+                // Reflected direction.
+                //
+                if (reflected_d != U8_MAX) {
+                    if (src_color == test_o.color[reflected_d])
+                        break;
+                    u8 c = test_o.c == Color_WHITE? mix_colors(test_o.color[reflected_d], src_color) : test_o.c;
+                    objmap[test_y][test_x].color[reflected_d] = c;
+                    update_beams(test_x, test_y, reflected_d, c);
                 }
             }
         } break;
         case T_DETECTOR: {
             if (src_color == test_o.color[src_dir])
-                return;
+                break;
             objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
             update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
         } break;
@@ -1723,7 +1715,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
         return;
     
-    V2 src = {(f32)src_x, (f32)src_y};
+    V2 src_pos = {(f32)src_x, (f32)src_y};
     
     u32 func_id = 0;
     func_id |= (src_x     & 0xFF) << 24;
@@ -1740,30 +1732,45 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     s32 test_x  = src_x + dirs[src_dir].x;
     s32 test_y  = src_y + dirs[src_dir].y;
     Obj test_o  = objmap[test_y][test_x];
+    V2 test_pos = {(f32)test_x, (f32)test_y};
+    
+    b32 is_obj_aligned = (((src_x == pushed_obj.x) && (src_x == pushed_obj_pos.x)) || 
+                          ((src_y == pushed_obj.y) && (src_y == pushed_obj_pos.y)));
     
     // Advance until we hit a wall or an object.
     while ((test_o.type == T_EMPTY || test_o.type == T_DOOR_OPEN) &&
            tilemap[test_y][test_x] != Tile_WALL) { 
+        
+        // We hit the player.
+        if (test_x == px && test_y == py) {
+            b32 is_player_aligned = ((src_x == px) || (src_y == py)) ;
+            
+            // @Note: Obj was hitting beam and we are now pushing it off completely.
+            if (!is_obj_aligned && is_player_aligned && (length2(pushed_obj_pos - pushed_obj) > SQUARE(0.5f))) {
+                V2 dest = v2((f32)px, (f32)py) + 0.5f*fdirs[WRAP_D(src_dir + 4)];
+                draw_line(src_pos, dest, &colors[src_color], 1.0f);
+                return;
+            }
+        }
+        
         jump:
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y)) {
-            V2 edge = {test_x + 0.5f*dirs[src_dir].x, test_y + 0.5f*dirs[src_dir].y};
-            draw_line(src, edge, &colors[src_color], 1.0f);
+            V2 edge = test_pos + 0.5f*fdirs[src_dir];
+            draw_line(src_pos, edge, &colors[src_color], 1.0f);
             return;
         }
         
-        test_x += dirs[src_dir].x;
-        test_y += dirs[src_dir].y;
-        test_o  = objmap[test_y][test_x];
+        test_x  += dirs[src_dir].x;
+        test_y  += dirs[src_dir].y;
+        test_o   = objmap[test_y][test_x];
+        test_pos = {(f32)test_x, (f32)test_y};
     }
     if (tilemap[test_y][test_x] == Tile_WALL) {
         draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
         return;
     }
     
-    f32 unaligned_threshold = 0.20f;
     b32 is_pushed_obj = ((test_x == pushed_obj.x) && (test_y == pushed_obj.y));
-    b32 is_aligned    = (((src_x == pushed_obj.x) && (src_x == pushed_obj_pos.x)) || 
-                         ((src_y == pushed_obj.y) && (src_y == pushed_obj_pos.y)));
     
     // We hit an object, so we should determine which color to draw in which dir.  
     switch (test_o.type) {
@@ -1774,88 +1781,65 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 c = (test_o.dir == WRAP_D(src_dir + 4))? mix_colors(test_o.c, src_color) : src_color;
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
         } break;
-        case T_MIRROR: {
-            u8 inv_d  = WRAP_D(src_dir + 4);
-            u8 ninv_d = WRAP_D(inv_d + 1);
-            u8 pinv_d = WRAP_D(inv_d - 1);
-            u8 reflected_d = U8_MAX;
-            if (test_o.dir == ninv_d)      reflected_d = WRAP_D(ninv_d + 1);
-            else if (test_o.dir == pinv_d) reflected_d = WRAP_D(pinv_d - 1);
-            
-            u8 c = mix_colors(test_o.color[inv_d], src_color);
-            
-            if (is_pushed_obj) {
-                if (is_aligned && !pushed_obj_is_at_rest()) {
-                    // @Note: When we're in same col/row as source, draw smooth/float line 
-                    // during push while ignoring possible reflected lines.
-                    draw_line(src, pushed_obj_pos, &colors[c], 1.0f);
-                    break;
-                }
-                else if (length2(pushed_obj_pos - pushed_obj) > SQUARE(unaligned_threshold))
-                    goto jump;
-            }
-            
-            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            if (reflected_d != U8_MAX)
-                draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
-        } break;
-        case T_BENDER: {
-            u8 inv_d   = WRAP_D(src_dir + 4);
-            u8 ninv_d  = WRAP_D(inv_d + 1);
-            u8 pinv_d  = WRAP_D(inv_d - 1);
-            u8 p2inv_d = WRAP_D(inv_d - 2);
-            u8 reflected_d = U8_MAX;
-            if (test_o.dir == inv_d)        reflected_d = ninv_d;
-            else if (test_o.dir == ninv_d)  reflected_d = WRAP_D(ninv_d + 2);
-            else if (test_o.dir == pinv_d)  reflected_d = pinv_d;
-            else if (test_o.dir == p2inv_d) reflected_d = WRAP_D(p2inv_d - 1);
-            
-            u8 c = mix_colors(test_o.color[inv_d], src_color);
-            
-            if (is_pushed_obj) {
-                if (is_aligned && !pushed_obj_is_at_rest()) {
-                    draw_line(src, pushed_obj_pos, &colors[c], 1.0f);
-                    break;
-                }
-                else if (length2(pushed_obj_pos - pushed_obj) > SQUARE(unaligned_threshold))
-                    goto jump;
-            }
-            
-            draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            if (reflected_d != U8_MAX)
-                draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
-        } break;
+        case T_MIRROR: 
+        case T_BENDER:
         case T_SPLITTER: {
-            u8 inv_d  = WRAP_D(src_dir + 4);
-            u8 ninv_d = WRAP_D(inv_d + 1);
-            u8 pinv_d = WRAP_D(inv_d - 1);
+            u8 inv_d       = WRAP_D(src_dir + 4);
+            u8 ninv_d      = WRAP_D(inv_d + 1);
+            u8 pinv_d      = WRAP_D(inv_d - 1);
+            u8 p2inv_d     = WRAP_D(inv_d - 2);
             u8 reflected_d = U8_MAX;
-            b32 penetrate = true;
-            if (test_o.dir == inv_d || test_o.dir == src_dir)
-                penetrate = true;
-            else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
-                reflected_d = WRAP_D(ninv_d + 1);
-            else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
-                reflected_d = WRAP_D(pinv_d - 1);
-            else
-                penetrate = false;
+            b32 penetrate  = true;
             
             u8 c = mix_colors(test_o.color[inv_d], src_color);
             
-            if (is_pushed_obj) {
-                if (is_aligned && !pushed_obj_is_at_rest()) {
-                    draw_line(src, pushed_obj_pos, &colors[c], 1.0f);
+            // Draw differently if this obj is being pushed.
+            if (is_pushed_obj && !pushed_obj_is_at_rest()) {
+                if (is_obj_aligned) {
+                    // When we're in same col/row as source.
+                    V2 dest = pushed_obj_pos + 0.5f*fdirs[inv_d];
+                    draw_line(src_pos, dest, &colors[c], 1.0f);
                     break;
                 }
-                else if (length2(pushed_obj_pos - pushed_obj) > SQUARE(unaligned_threshold))
+                else if (length2(pushed_obj_pos - pushed_obj) <= SQUARE(0.5f)) {
+                    V2 dest = test_pos + 0.5f*fdirs[inv_d];
+                    draw_line(src_pos, dest, &colors[c], 1.0f);
+                    break;
+                } else
                     goto jump;
             }
             
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
-            if (penetrate)
-                draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
-            if (reflected_d != U8_MAX)
-                draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
+            
+            if (test_o.type == T_MIRROR) {
+                if (test_o.dir == ninv_d)      reflected_d = WRAP_D(ninv_d + 1);
+                else if (test_o.dir == pinv_d) reflected_d = WRAP_D(pinv_d - 1);
+                
+                if (reflected_d != U8_MAX)
+                    draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
+            } else if (test_o.type == T_BENDER) {
+                if (test_o.dir == inv_d)        reflected_d = ninv_d;
+                else if (test_o.dir == ninv_d)  reflected_d = WRAP_D(ninv_d + 2);
+                else if (test_o.dir == pinv_d)  reflected_d = pinv_d;
+                else if (test_o.dir == p2inv_d) reflected_d = WRAP_D(p2inv_d - 1);
+                
+                if (reflected_d != U8_MAX)
+                    draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
+            } else {
+                if (test_o.dir == inv_d || test_o.dir == src_dir)
+                    penetrate = true;
+                else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
+                    reflected_d = WRAP_D(ninv_d + 1);
+                else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
+                    reflected_d = WRAP_D(pinv_d - 1);
+                else
+                    penetrate = false;
+                
+                if (penetrate)
+                    draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
+                if (reflected_d != U8_MAX)
+                    draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
+            }
         } break;
         case T_DETECTOR: {
             u8 inv_d  = WRAP_D(src_dir + 4);
@@ -2031,35 +2015,35 @@ FUNCTION void game_render()
             for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
                 Obj o = objmap[y][x];
                 V2s sprite = obj_sprite[o.type];
+                b32 is_pushed_obj = (pushed_obj.x == x && pushed_obj.y == y);
                 switch (o.type) {
                     case T_EMPTY: continue;
                     case T_EMITTER: {
                         sprite.s += o.dir;
                         draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                     } break;
-                    //
-                    // @Todo:  Combine T_MIRROR and T_BENDER and T_SPLITTER if they remain the same.
-                    //
-                    case T_MIRROR: {
-                        sprite.s += o.dir;
-                        if (pushed_obj.x == x && pushed_obj.y == y)
-                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        else
-                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    } break;
-                    case T_BENDER: {
-                        sprite.s += o.dir;
-                        if (pushed_obj.x == x && pushed_obj.y == y)
-                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                        else
-                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
-                    } break;
+                    case T_MIRROR:
+                    case T_BENDER:
                     case T_SPLITTER: {
-                        sprite.s = (sprite.s + o.dir) % 4;
-                        if (pushed_obj.x == x && pushed_obj.y == y)
-                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                        V2s frame_closed = tile_sprite[Tile_OBJ_FRAME_CLOSED];
+                        V2s frame_open   = tile_sprite[Tile_OBJ_FRAME_OPEN];
+                        V4 c = v4(1);
+                        if (o.type == T_SPLITTER) {
+                            sprite.s = (sprite.s + o.dir) % 4;
+                            c = colors[o.c];
+                        } else {
+                            sprite.s += o.dir;
+                        }
+                        
+                        if (is_pushed_obj && !pushed_obj_is_at_rest())
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, frame_closed.s, frame_closed.t, 0, 1.0f);
                         else
-                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                            draw_sprite(x, y, 1, 1, frame_open.s, frame_open.t, 0, 1.0f);
+                        
+                        if (is_pushed_obj)
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, &c, 1.0f);
+                        else
+                            draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &c, 1.0f);
                     } break;
                     case T_DOOR:
                     case T_DOOR_OPEN: {
