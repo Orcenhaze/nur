@@ -910,6 +910,10 @@ FUNCTION u8 mix_colors(u8 cur, u8 src)
         return Color_WHITE;
 }
 
+// @Cleanup:
+// @Todo: Keep for now, but eventually remove it if we settle on discrete pushing animation,
+#define CONTINUOUS_PUSHING 0
+
 FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
     if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
@@ -928,17 +932,20 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         // We hit the player.
         if (test_x == px && test_y == py) {
             pcolor = mix_colors(pcolor, src_color);
+#if CONTINUOUS_PUSHING
             b32 is_player_aligned = ((src_x == px) || (src_y == py)) ;
-            
             // @Note: Obj was hitting beam and we are now pushing it. 
             // Could be pushing it off OR pushing it along beam.
             // Either way stop updating.
             if (is_player_aligned && (length2(pushed_obj_pos - pushed_obj) > SQUARE(0.5f))) {
                 return;
             }
+#endif
         }
         
+#if CONTINUOUS_PUSHING
         jump:
+#endif
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y))
             return;
         test_x += dirs[src_dir].x;
@@ -970,6 +977,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 reflected_d = U8_MAX;
             b32 penetrate  = true;
             
+#if CONTINUOUS_PUSHING
             if (is_pushed_obj && !pushed_obj_is_at_rest()) {
                 if (is_obj_aligned)
                     break;
@@ -978,6 +986,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
                 else
                     goto jump;
             }
+#endif
             
             if (src_color == test_o.color[reflected_d])
                 break;
@@ -1095,15 +1104,24 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
                 return;
             }
             
+#if 1
             pushed_obj     = v2((f32)nx, (f32)ny);
             pushed_obj_pos = v2((f32)tempx, (f32)tempy);
+#else
+            pushed_obj_pos = pushed_obj = v2((f32)nx, (f32)ny);
+#endif
             undo_push_obj_move(&undo_handler, tempx, tempy, nx, ny);
             SWAP(objmap[tempy][tempx], objmap[ny][nx], Obj);
         }
     }
     
     undo_push_player_move(&undo_handler, px, py, old_dir);
+    
+#if 1
     set_player_position(tempx, tempy, pdir);
+#else
+    set_player_position(tempx, tempy, pdir, true);
+#endif
 }
 
 #define MOVE_HOLD_DURATION 0.20f
@@ -1743,17 +1761,20 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         
         // We hit the player.
         if (test_x == px && test_y == py) {
+#if CONTINUOUS_PUSHING
             b32 is_player_aligned = ((src_x == px) || (src_y == py)) ;
-            
             // @Note: Obj was hitting beam and we are now pushing it off completely.
             if (!is_obj_aligned && is_player_aligned && (length2(pushed_obj_pos - pushed_obj) > SQUARE(0.5f))) {
                 V2 dest = v2((f32)px, (f32)py) + 0.5f*fdirs[WRAP_D(src_dir + 4)];
                 draw_line(src_pos, dest, &colors[src_color], 1.0f);
                 return;
             }
+#endif
         }
         
+#if CONTINUOUS_PUSHING
         jump:
+#endif
         if (is_outside_map(test_x + dirs[src_dir].x, test_y + dirs[src_dir].y)) {
             V2 edge = test_pos + 0.5f*fdirs[src_dir];
             draw_line(src_pos, edge, &colors[src_color], 1.0f);
@@ -1793,6 +1814,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             
             u8 c = mix_colors(test_o.color[inv_d], src_color);
             
+#if CONTINUOUS_PUSHING
             // Draw differently if this obj is being pushed.
             if (is_pushed_obj && !pushed_obj_is_at_rest()) {
                 if (is_obj_aligned) {
@@ -1808,6 +1830,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
                 } else
                     goto jump;
             }
+#endif
             
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
             
