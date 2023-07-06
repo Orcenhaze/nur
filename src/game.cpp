@@ -1998,39 +1998,6 @@ FUNCTION void game_render()
         }
         immediate_end();
         
-#if 0
-        immediate_begin();
-        set_texture(&tex);
-        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-                Obj o = objmap[y][x];
-                if (o.type == T_MIRROR) {
-                    //
-                    // @Todo: We can use quaternions to draw rotated objs instead of having separate
-                    // sprite for each Dir. It's slower, but it looks much better.
-                    //
-                    // @Fix: When moving from Dir_SE to Dir_E, we move_towards in opposite direction.
-                    //
-                    V2 p = {};
-                    if (pushed_obj.x == x && pushed_obj.y == y) {
-                        pushed_obj_pos = move_towards(pushed_obj_pos, pushed_obj, player_max_distance);
-                        p = pushed_obj_pos;
-                    } else {
-                        p = v2(x, y);
-                    }
-                    
-                    V2s sprite = obj_sprite[o.type];
-                    LOCAL_PERSIST f32 turns = o.dir / 8.0f;
-                    turns = move_towards(turns, o.dir / 8.0f, os->dt);
-                    print("turns: %f\n", turns);
-                    Quaternion q = quaternion_from_axis_angle_turns(v3(0,0,1), turns);
-                    draw_sprite_rotated(p, v2(1), q, sprite.s, sprite.t, &colors[o.c], 1.0f);
-                }
-            }
-        }
-        immediate_end();
-#endif
-        
         immediate_begin();
         set_texture(&tex);
         // Draw objs.
@@ -2048,8 +2015,7 @@ FUNCTION void game_render()
                     case T_MIRROR:
                     case T_BENDER:
                     case T_SPLITTER: {
-                        V2s frame_closed = tile_sprite[Tile_OBJ_FRAME_CLOSED];
-                        V2s frame_open   = tile_sprite[Tile_OBJ_FRAME_OPEN];
+                        V2s frame = tile_sprite[Tile_OBJ_FRAME];
                         V4 c = v4(1);
                         if (o.type == T_SPLITTER) {
                             sprite.s = (sprite.s + o.dir) % 4;
@@ -2058,15 +2024,13 @@ FUNCTION void game_render()
                             sprite.s += o.dir;
                         }
                         
-                        if (is_pushed_obj && !pushed_obj_is_at_rest())
-                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, frame_closed.s, frame_closed.t, 0, 1.0f);
-                        else
-                            draw_sprite(x, y, 1, 1, frame_open.s, frame_open.t, 0, 1.0f);
-                        
-                        if (is_pushed_obj)
+                        if (is_pushed_obj) {
+                            draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, frame.s, frame.t, 0, 1.0f);
                             draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, &c, 1.0f);
-                        else
+                        } else {
+                            draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
                             draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &c, 1.0f);
+                        }
                     } break;
                     case T_DOOR:
                     case T_DOOR_OPEN: {

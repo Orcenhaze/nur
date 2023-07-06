@@ -154,15 +154,13 @@ enum
 {
     Tile_FLOOR,
     Tile_WALL,
-    Tile_OBJ_FRAME_CLOSED,
-    Tile_OBJ_FRAME_OPEN,
+    Tile_OBJ_FRAME,
 };
 
 V2s tile_sprite[] = {
     v2s(0, 0),
     v2s(1, 0),
     v2s(3, 0),
-    v2s(4, 0),
 };
 
 enum 
