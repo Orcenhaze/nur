@@ -2,7 +2,7 @@
 FUNCTION void set_default_zoom()
 {
     f32 level_ar  = (f32)SIZE_X/(f32)SIZE_Y;
-    f32 render_ar = (f32)os->render_size.width / (f32)os->render_size.height;
+    f32 render_ar = (f32)os->render_size.w / (f32)os->render_size.h;
     
     if (level_ar >= render_ar)
         zoom_level = ((f32)SIZE_X + 1.0f) / (2.0f * render_ar);
@@ -1631,11 +1631,10 @@ FUNCTION void game_update()
     set_world_to_view(v3(camera_pos, 0));
 }
 
-//
-// @Todo: Combine draw_sprite and draw_spritef?
-//
-FUNCTION void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, Texture *texture = &tex)
+FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 invert_x = false)
 {
+    Texture *texture = &tex;
+    
     // Offsetting uv-coords with 0.05f to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
@@ -1644,41 +1643,17 @@ FUNCTION void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f
     f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
     f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
     
-    immediate_rect(v2((f32)x, (f32)y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
-}
-FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 invert_u = false, Texture *texture = &tex)
-{
-    // Offsetting uv-coords with 0.05f to avoid texture bleeding.
-    //
-    V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / texture->width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / texture->height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
-    
-    if (invert_u) {
+    if (invert_x) 
         SWAP(u0, u1, f32);
-    }
     
-    immediate_rect(v2(x, y), v2(w/2, h/2), v2(u0, v0), v2(u1, v1), c);
-}
-FUNCTION void draw_sprite_rotated(V2 position, V2 size, Quaternion q, s32 s, s32 t, V4 *color, f32 a, Texture *texture = &tex)
-{
-    // Offsetting uv-coords with 0.05f to avoid texture bleeding.
-    //
-    V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / texture->width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / texture->height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
-    
-    set_object_to_world(v3(position, 0.0f), q);
-    immediate_rect(v2(0), size/2, v2(u0, v0), v2(u1, v1), c);
+    immediate_rect(v2(x, y), v2(w*0.5f, h*0.5f), v2(u0, v0), v2(u1, v1), c);
 }
 
-//
-// @Cleanup:
-//
+FUNCTION inline void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
+{
+    draw_spritef((f32)x, (f32)y, w, h, s, t, color, a);
+}
+
 FUNCTION void draw_sprite_text(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
 {
     // @Note: We use this for text because we draw text with top_left position instead of center.
@@ -1714,7 +1689,7 @@ FUNCTION s32 draw_text(s32 top_left_x, s32 top_left_y, f32 scale, V4 color, u8 *
     return top_left_x;
 }
 
-FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.06f)
+FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.03f)
 {
     V4 c     = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
     V2 start = v2((f32)src_x, (f32)src_y);
@@ -1722,7 +1697,7 @@ FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f
     
     immediate_line_2d(start, end, c, thickness);
 }
-FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a, f32 thickness = 0.06f)
+FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a, f32 thickness = 0.03f)
 {
     V4 c = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
     immediate_line_2d(start, end, c, thickness);
@@ -1876,12 +1851,12 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 FUNCTION void game_render()
 {
     if (main_mode == M_MENU) {
-        f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
-        f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
+        f32 w = get_width(os->drawing_rect);
+        f32 h = get_height(os->drawing_rect);
         
         // @Note: Multiply these values with pixels, so that pixel sizes scale with drawing_rect size.
-        f32 w_scale = w / os->render_size.width;
-        f32 h_scale = h / os->render_size.height;
+        f32 w_scale = w / os->render_size.w;
+        f32 h_scale = h / os->render_size.h;
         
         // Gradient background.
         immediate_begin();

@@ -3,12 +3,12 @@
 #include "orh.h" before this file.
 
 CONVENTIONS:
-* When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
-* Right-handed coordinate system. +Y is up.
 * CCW winding order for front faces.
+* Right-handed coordinate system. +Y is up.
 * Matrices are row-major with column vectors.
 * First pixel pointed to is top-left-most pixel in image.
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
+* When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
 [] Make a generic orh_renderer.h that the game can use without directly talking to specific graphics API.
@@ -231,7 +231,7 @@ FUNCTION void set_texture(Texture *map)
 
 FUNCTION void set_view_to_proj(f32 zoom)
 {
-    f32 ar = (f32)os->render_size.width / (f32)os->render_size.height;
+    f32 ar = (f32)os->render_size.w / (f32)os->render_size.h;
     view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
 }
 
@@ -495,8 +495,8 @@ FUNCTION void d3d11_resize()
         render_target_view = 0;
     }
     
-    UINT window_width  = os->window_size.width; 
-    UINT window_height = os->window_size.height;
+    UINT window_width  = os->window_size.w; 
+    UINT window_height = os->window_size.h;
     
     // Resize to new size for non-zero size.
     if ((window_width != 0) && (window_height != 0)) {
@@ -549,9 +549,9 @@ FUNCTION void d3d11_resize()
 FUNCTION void d3d11_viewport(FLOAT top_left_x, FLOAT top_left_y, FLOAT width, FLOAT height)
 {
     // Resize swap chain if needed.
-    if ((render_target_view == 0)                        || 
-        (os->window_size.width  != current_window_width) || 
-        (os->window_size.height != current_window_height)) {
+    if ((render_target_view == 0)                   || 
+        (os->window_size.w != current_window_width) || 
+        (os->window_size.h != current_window_height)) {
         d3d11_resize();
     }
     
@@ -604,8 +604,8 @@ FUNCTION DWORD d3d11_wait_on_swapchain()
 //
 FUNCTION V2 pixel_to_ndc(V2 pixel)
 {
-    f32 w = os->drawing_rect.max.x - os->drawing_rect.min.x;
-    f32 h = os->drawing_rect.max.y - os->drawing_rect.min.y;
+    f32 w = get_width(os->drawing_rect);
+    f32 h = get_height(os->drawing_rect);
     
     V2 p = hadamard_div(pixel, v2(w, h));
     p    = 2.0f*p - v2(1.0f);
@@ -745,16 +745,6 @@ FUNCTION void immediate_quad(V2 p0, V2 p1, V2 p2, V2 p3, V4 color)
     immediate_triangle(p0, p2, p3, color);
 }
 
-FUNCTION void immediate_rect(V2 center, V2 half_size, V4 color)
-{
-    V2 p0 = center - half_size;
-    V2 p2 = center + half_size;
-    V2 p1 = v2(p2.x, p0.y);
-    V2 p3 = v2(p0.x, p2.y);
-    
-    immediate_quad(p0, p1, p2, p3, color);
-}
-
 FUNCTION void immediate_quad(V2 p0, V2 p1, V2 p2, V2 p3, 
                              V2 uv0, V2 uv1, V2 uv2, V2 uv3, 
                              V4 color)
@@ -772,26 +762,14 @@ FUNCTION void immediate_quad(V2 p0, V2 p1, V2 p2, V2 p3,
     immediate_vertex(p3, uv3, color);
 }
 
-// @Cleanup:
-//
-FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 color)
+FUNCTION void immediate_rect(V2 center, V2 half_size, V4 color)
 {
-    // @Note: We provide top left position, so we need to be careful with winding order.
+    V2 p0 = center - half_size;
+    V2 p2 = center + half_size;
+    V2 p1 = v2(p2.x, p0.y);
+    V2 p3 = v2(p0.x, p2.y);
     
-    // CCW starting bottom-left.
-    
-    V2 p3 = top_left;
-    V2 p1 = top_left + size;
-    V2 p0 = v2(p3.x, p1.y);
-    V2 p2 = v2(p1.x, p3.y);
-    
-    // @Note: UV coordinates origin is top-left corner.
-    V2 uv3 = uv_min;
-    V2 uv1 = uv_max;
-    V2 uv0 = v2(uv3.x, uv1.y);
-    V2 uv2 = v2(uv1.x, uv3.y);
-    
-    immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
+    immediate_quad(p0, p1, p2, p3, color);
 }
 
 FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv_min, V2 uv_max, V4 color)
@@ -802,6 +780,26 @@ FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv_min, V2 uv_max, V4 c
     V2 p2 = center + half_size;
     V2 p1 = v2(p2.x, p0.y);
     V2 p3 = v2(p0.x, p2.y);
+    
+    // @Note: UV coordinates origin is top-left corner.
+    V2 uv3 = uv_min;
+    V2 uv1 = uv_max;
+    V2 uv0 = v2(uv3.x, uv1.y);
+    V2 uv2 = v2(uv1.x, uv3.y);
+    
+    immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
+}
+
+FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 color)
+{
+    // @Note: We provide top left position, so we need to be careful with winding order.
+    
+    // CCW starting bottom-left.
+    
+    V2 p3 = top_left;
+    V2 p1 = top_left + size;
+    V2 p0 = v2(p3.x, p1.y);
+    V2 p2 = v2(p1.x, p3.y);
     
     // @Note: UV coordinates origin is top-left corner.
     V2 uv3 = uv_min;

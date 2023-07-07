@@ -1,4 +1,4 @@
-/* orh.h - v0.51 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.52 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.52 - cleaned up rect functions.
 0.51 - added array_find_index().
 0.50 - Improved arenas and added thread local scratch arenas.
 0.49 - added context cracking.
@@ -61,12 +62,12 @@ REVISION HISTORY:
 0.02 - added V2u, expanded OS_State, added aspect_ratio_fit().
 
 CONVENTIONS:
-* When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
-* Right-handed coordinate system. +Y is up.
 * CCW winding order for front faces.
+* Right-handed coordinate system. +Y is up.
 * Matrices are row-major with column vectors.
 * First pixel pointed to is top-left-most pixel in image.
 * UV-coords origin is at top-left corner (DOESN'T match with vertex coordinates).
+* When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
 [] Null-terminate strings when using string_format_list()!! 
@@ -365,7 +366,7 @@ union V2
 union V2u
 {
     struct { u32 x, y; };
-    struct { u32 width, height; };
+    struct { u32 w, h; };
     u32 I[2];
 };
 
@@ -512,10 +513,11 @@ FUNCDEF V4 v4(V3 xyz, f32 w);
 FUNCDEF V4 v4(V2 xy, V2 zw);
 
 FUNCDEF V2 hadamard_mul(V2 a, V2 b);
-FUNCDEF V2 hadamard_div(V2 a, V2 b);
 FUNCDEF V3 hadamard_mul(V3 a, V3 b);
-FUNCDEF V3 hadamard_div(V3 a, V3 b);
 FUNCDEF V4 hadamard_mul(V4 a, V4 b);
+
+FUNCDEF V2 hadamard_div(V2 a, V2 b);
+FUNCDEF V3 hadamard_div(V3 a, V3 b);
 FUNCDEF V4 hadamard_div(V4 a, V4 b);
 
 FUNCDEF f32 dot(V2 a, V2 b);
@@ -597,21 +599,25 @@ FUNCDEF inline V3  smoother_step(V3 a, f32 t, V3 b);
 FUNCDEF inline V4  smoother_step(V4 a, f32 t, V4 b);
 
 FUNCDEF f32 move_towards(f32 current, f32 target, f32 max_distance);
-FUNCDEF V2 move_towards(V2 current, V2 target, f32 max_distance);
-FUNCDEF V3 move_towards(V3 current, V3 target, f32 max_distance);
-FUNCDEF V2 rotate_point_around_pivot(V2 point, V2 pivot, Quaternion q);
-FUNCDEF V3 rotate_point_around_pivot(V3 point, V3 pivot, Quaternion q);
+FUNCDEF V2  move_towards(V2 current, V2 target, f32 max_distance);
+FUNCDEF V3  move_towards(V3 current, V3 target, f32 max_distance);
+FUNCDEF V2  rotate_point_around_pivot(V2 point, V2 pivot, Quaternion q);
+FUNCDEF V3  rotate_point_around_pivot(V3 point, V3 pivot, Quaternion q);
 
 FUNCDEF inline Range range(f32 min, f32 max);
 FUNCDEF inline Rect2 rect2(V2  min, V2  max);
+FUNCDEF inline Rect2 rect2(f32 x0, f32 y0, f32 x1, f32 y1);
 FUNCDEF inline Rect3 rect3(V3  min, V3  max);
-FUNCDEF inline Rect2 rect2_from_center(V2 center, V2 half_size);
-FUNCDEF inline Rect3 rect3_from_center(V3 center, V3 half_size);
+FUNCDEF inline Rect3 rect3(f32 x0, f32 y0, f32 z0, f32 x1, f32 y1, f32 z1);
 
-FUNCDEF inline V2 get_size(Rect2 r);
-FUNCDEF inline V2 get_center(Rect2 r);
-FUNCDEF inline V3 get_size(Rect3 r);
-FUNCDEF inline V3 get_center(Rect3 r);
+FUNCDEF inline V2 get_center(Rect2 rect);
+FUNCDEF inline V3 get_center(Rect3 rect);
+
+FUNCDEF inline V2 get_size(Rect2 rect);
+FUNCDEF inline V3 get_size(Rect3 rect);
+
+FUNCDEF inline f32 get_width(Rect2 rect);
+FUNCDEF inline f32 get_height(Rect2 rect);
 
 FUNCDEF f32 repeat(f32 x, f32 max_y);
 FUNCDEF f32 ping_pong(f32 x, f32 max_y);
@@ -1569,7 +1575,7 @@ struct OS_State
     b32 fix_aspect_ratio;
     V2u render_size;         // Determines aspect ratio.
     V2u window_size;         // Client window width and height.
-    Rect2 drawing_rect;      // In pixel space - relative to client window.
+    Rect2 drawing_rect;      // In pixel space (min top-left) - relative to client window.
     f32 dt;                  // The timestep - must be fixed!
     s32 fps_max;             // FPS limiter when vsync is off. Set to 0 for unlimited.
     f64 time;                // Incremented by dt at the end of each update.
@@ -2079,24 +2085,25 @@ V2 hadamard_mul(V2 a, V2 b)
     V2 v = {a.x*b.x, a.y*b.y}; 
     return v; 
 }
-V2 hadamard_div(V2 a, V2 b)
-{
-    V2 v = {a.x/b.x, a.y/b.y}; 
-    return v; 
-}
 V3 hadamard_mul(V3 a, V3 b)
 {
     V3 v = {a.x*b.x, a.y*b.y, a.z*b.z}; 
     return v; 
 }
-V3 hadamard_div(V3 a, V3 b)
-{
-    V3 v = {a.x/b.x, a.y/b.y, a.z/b.z}; 
-    return v; 
-}
 V4 hadamard_mul(V4 a, V4 b)
 {
     V4 v = {a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w}; 
+    return v; 
+}
+
+V2 hadamard_div(V2 a, V2 b)
+{
+    V2 v = {a.x/b.x, a.y/b.y}; 
+    return v; 
+}
+V3 hadamard_div(V3 a, V3 b)
+{
+    V3 v = {a.x/b.x, a.y/b.y, a.z/b.z}; 
     return v; 
 }
 V4 hadamard_div(V4 a, V4 b)
@@ -2615,42 +2622,52 @@ Rect2 rect2(V2  min, V2  max)
     Rect2 result = {min, max}; 
     return result; 
 }
+Rect2 rect2(f32 x0, f32 y0, f32 x1, f32 y1)
+{
+    Rect2 result = {x0, y0, x1, y1}; 
+    return result; 
+}
 Rect3 rect3(V3  min, V3  max)
 { 
     Rect3 result = {min, max}; 
     return result; 
 }
-Rect2 rect2_from_center(V2 center, V2 half_size)
+Rect3 rect3(f32 x0, f32 y0, f32 z0, f32 x1, f32 y1, f32 z1)
 {
-    Rect2 result = { center - half_size, center + half_size };
+    Rect3 result = {x0, y0, z0, x1, y1, z1}; 
+    return result; 
+}
+
+V2 get_center(Rect2 rect)
+{
+    V2 result = (rect.min + rect.max) * 0.5f;
     return result;
 }
-Rect3 rect3_from_center(V3 center, V3 half_size)
+V3 get_center(Rect3 rect)
 {
-    Rect3 result = { center - half_size, center + half_size };
+    V3 result = (rect.min + rect.max) * 0.5f;
     return result;
 }
 
-V2 get_size(Rect2 r)
+V2 get_size(Rect2 rect)
 {
-    V2 result = r.max - r.min;
+    V2 result = rect.max - rect.min;
     return result;
 }
-V2 get_center(Rect2 r)
+V3 get_size(Rect3 rect)
 {
-    V2 size   = r.max - r.min;
-    V2 result = r.min + (size * 0.5f);
+    V3 result = rect.max - rect.min;
     return result;
 }
-V3 get_size(Rect3 r)
+
+f32 get_width(Rect2 rect)
 {
-    V3 result = r.max - r.min;
+    f32 result = rect.max.x - rect.min.x;
     return result;
 }
-V3 get_center(Rect3 r)
+f32 get_height(Rect2 rect)
 {
-    V3 size   = r.max - r.min;
-    V3 result = r.min + (size * 0.5f);
+    f32 result = rect.max.y - rect.min.y;
     return result;
 }
 
@@ -3585,10 +3602,10 @@ Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim)
     // @Note: From Handmade Hero E.322.
     
     Rect2 result = {};
-    f32 rw = (f32)render_dim.width;
-    f32 rh = (f32)render_dim.height;
-    f32 ww = (f32)window_dim.width;
-    f32 wh = (f32)window_dim.height;
+    f32 rw = (f32)render_dim.w;
+    f32 rh = (f32)render_dim.h;
+    f32 ww = (f32)window_dim.w;
+    f32 wh = (f32)window_dim.h;
     
     if ((rw > 0) && (rh > 0) && (ww > 0) && (wh > 0)) {
         f32 optimal_ww = wh * (rw / rh);

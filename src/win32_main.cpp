@@ -339,7 +339,7 @@ FUNCTION void win32_process_inputs(HWND window)
     ScreenToClient(window, &cursor);
     V2 mouse_client = {
         (f32) cursor.x,
-        ((f32)global_os.window_size.height - 1.0f) - cursor.y,
+        ((f32)global_os.window_size.h - 1.0f) - cursor.y,
     };
     global_os.mouse_ndc = {
         2.0f*CLAMP01_RANGE(global_os.drawing_rect.min.x, mouse_client.x, global_os.drawing_rect.max.x) - 1.0f,
@@ -587,9 +587,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         // Render only if window size is non-zero.
         if ((window_size.x != 0) && (window_size.y != 0)) {
             d3d11_wait_on_swapchain();
-            d3d11_viewport(drawing_rect.min.x, drawing_rect.min.y, 
-                           drawing_rect.max.x - drawing_rect.min.x, 
-                           drawing_rect.max.y - drawing_rect.min.y);
+            d3d11_viewport(drawing_rect.min.x, 
+                           drawing_rect.min.y, 
+                           get_width(drawing_rect), 
+                           get_height(drawing_rect));
             d3d11_clear(0.20f, 0.20f, 0.20f, 1.0f);
             game_render();
 #if DEVELOPER
@@ -609,9 +610,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             f64 seconds_elapsed_so_far = win32_get_seconds_elapsed(last_counter, win32_qpc());
             if (seconds_elapsed_so_far < target_seconds_per_frame) {
                 if (global_waitable_timer) {
-                    // @DEBUG: Fix this, something's wrong! We are sometimes capping at 64.
-                    // @DEBUG: Fix this, something's wrong! We are sometimes capping at 64.
-                    // @DEBUG: Fix this, something's wrong! We are sometimes capping at 64.
                     f64 us_to_sleep = (target_seconds_per_frame - seconds_elapsed_so_far) * 1000000.0;
                     us_to_sleep    -= 1000.0; // -= 1ms;
                     if (us_to_sleep > 1) {
@@ -622,12 +620,9 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                         
                         WaitForSingleObjectEx(global_waitable_timer, INFINITE, 0);
                     }
-                } 
-                /* 
-                                else {
-                                    // @Todo: Must use other methods of sleeping for older versions of Windows that don't have high resolution waitable timer.
-                                }
-                                 */
+                } else {
+                    // @Todo: Must use other methods of sleeping for older versions of Windows that don't have high resolution waitable timer.
+                }
                 
                 // Spin-lock the remaining amount.
                 while (seconds_elapsed_so_far < target_seconds_per_frame)
