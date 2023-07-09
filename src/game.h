@@ -166,7 +166,7 @@ V2s tile_sprite[] = {
 enum 
 {
     T_EMPTY,
-    T_EMITTER,
+    T_LASER,
     T_MIRROR,
     T_BENDER, // For this one: the reflected light is always compatible with Dir, but the object itself is visaully 30 degrees off of Dir.
     T_SPLITTER,
@@ -306,10 +306,34 @@ struct Loaded_Level
     u8  **tile_map;
 };
 
+
+
+struct Particle
+{
+    V2  position;
+    V2  velocity;
+    V4  color;
+    f32 life;
+};
+
+struct Particle_Emitter
+{
+    Array<Particle> particles;
+    s32 amount;
+    
+    Texture texture;
+    
+    // @Todo: Add own Random_PCG.
+};
+
+
+
 struct Game_State
 {
     Arena *loaded_level_arena;
     Loaded_Level loaded_level;
+    
+    Particle_Emitter obj_emitter;
     
     V2 delta_mouse;
     V2 mouse_ndc_old;

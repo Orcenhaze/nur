@@ -636,7 +636,7 @@ FUNCTION void do_editor(b32 is_first_call)
             
             // Choose color
             //
-            if (game->selected_tile_or_obj == T_EMITTER  || 
+            if (game->selected_tile_or_obj == T_LASER  || 
                 game->selected_tile_or_obj == T_DETECTOR ||
                 game->selected_tile_or_obj == T_DOOR     ||
                 game->selected_tile_or_obj == T_SPLITTER) {
@@ -691,51 +691,183 @@ FUNCTION b32 is_outside_map(s32 x, s32 y)
     return result;
 }
 
-#define PRINT_ARR(a, message) {\
-print(#message); \
-print("\n");\
-for (s32 i = 0; i < a.count; i++) \
-print("%v3\n", a[i]);\
-print("\n\n");\
+
+
+
+// @Cleanup: Move to specific file.
+//
+FUNCTION V2 random_on_border(V2 min, V2 max)
+{
+    u32 side = random_range(&game->rng, 0, 4);
+    
+    switch (side) {
+        case 0: {
+            // Right.
+            f32 r = random_rangef(&game->rng, min.y, max.y);
+            return v2(max.x, r);
+        };
+        case 1: {
+            // Top.
+            f32 r = random_rangef(&game->rng, min.x, max.x);
+            return v2(r, max.y);
+        };
+        case 2: {
+            // Left.
+            f32 r = random_rangef(&game->rng, min.y, max.y);
+            return v2(min.x, r);
+        };
+        case 3: {
+            // Bottom.
+            f32 r = random_rangef(&game->rng, min.x, max.x);
+            return v2(r, min.y);
+        };
+        default: {
+            ASSERT(0);
+        }
+    }
+    
+    return v2(0);
 }
+
+FUNCTION void obj_emitter_init(s32 amount)
+{
+    Particle_Emitter *e = &game->obj_emitter;
+    
+    array_init(&e->particles, amount);
+    e->amount = amount;
+    
+    if (e->texture.view == 0)
+        e->texture = white_texture;
+    
+    for (s32 i = 0; i < amount; i++) {
+        Particle p = {};
+        p.color    = v4(1.0f);
+        array_add(&e->particles, p);
+    }
+}
+
+FUNCTION s32 obj_emitter_get_first_unused()
+{
+    Particle_Emitter *e = &game->obj_emitter;
+    
+    // Quick check.
+    LOCAL_PERSIST s32 last_used = 0;
+    for (s32 i = last_used; i < e->amount; i++) {
+        if (e->particles[i].life <= 0.0f) {
+            last_used = i;
+            return i;
+        }
+    }
+    
+    // Linear check.
+    for (s32 i = 0; i < e->amount; i++) {
+        if (e->particles[i].life <= 0.0f) {
+            last_used = i;
+            return i;
+        }
+    }
+    
+    // All particles are being used. Overwrite the first one.
+    last_used = 0;
+    return 0;
+}
+
+FUNCTION void obj_emitter_respawn_particle(Particle *p, V2 offset)
+{
+    //V2 random   = random_on_border(v2(-0.45f), v2(0.45f));
+    V2 random   = random_range_v2(&game->rng, v2(-0.45f), v2(0.45f));
+    f32 r_col   = random_nextf(&game->rng);
+    p->position = offset + random;
+    p->color    = v4(r_col, r_col, r_col, 1.0f);
+    p->life     = 1.0f;
+    p->velocity = v2(0.0f, 0.5f);
+}
+
+FUNCTION void obj_emitter_emit(s32 num_new_particles, V2 offset = v2(0))
+{
+    Particle_Emitter *e = &game->obj_emitter;
+    
+    // Add new particles.
+    for (s32 i = 0; i < num_new_particles; i++) {
+        s32 unused_particle = obj_emitter_get_first_unused();
+        obj_emitter_respawn_particle(&e->particles[unused_particle], offset);
+    }
+}
+
+FUNCTION void obj_emitter_update_particles()
+{
+    Particle_Emitter *e = &game->obj_emitter;
+    
+    // Update all particles.
+    for (s32 i = 0; i < e->amount; i++) {
+        Particle *p = &e->particles[i];
+        p->life -= os->dt;
+        if (p->life > 0.0f) {
+            f32 intensity = 0.5f;
+            V2 shake      = intensity * random_range_v2(&game->rng, v2(-1), v2(1));
+            
+            p->position += (p->velocity + shake) * os->dt;
+            p->velocity += shake * os->dt * 0.6f;
+            p->color.a  -= 1.0f * os->dt;
+        }
+    }
+}
+
+FUNCTION void obj_emitter_draw_particles()
+{
+    Particle_Emitter *e = &game->obj_emitter;
+    
+    // Bind Input Assembler.
+    device_context->IASetInputLayout(particle_input_layout);
+    device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    UINT stride = sizeof(V4);
+    UINT offset = 0;
+    device_context->IASetVertexBuffers(0, 1, &particle_vbo, &stride, &offset);
+    
+    // Vertex shader.
+    device_context->VSSetConstantBuffers(0, 1, &particle_vs_cbuffer);
+    device_context->VSSetShader(particle_vs, 0, 0);
+    
+    // Rasterizer Stage.
+    device_context->RSSetViewports(1, &viewport);
+    device_context->RSSetState(rasterizer_state);
+    
+    // Pixel Shader.
+    device_context->PSSetSamplers(0, 1, &sampler0);
+    device_context->PSSetShaderResources(0, 1, &e->texture.view);
+    device_context->PSSetShader(particle_ps, 0, 0);
+    
+    // Output Merger.
+    device_context->OMSetBlendState(blend_state_one, 0, 0XFFFFFFFFU);
+    device_context->OMSetDepthStencilState(depth_state, 0);
+    device_context->OMSetRenderTargets(1, &render_target_view, depth_stencil_view);
+    
+    // For each alive particle.
+    for (s32 i = 0; i < e->amount; i++) {
+        Particle *p = &e->particles[i];
+        if (p->life > 0.0f) {
+            D3D11_MAPPED_SUBRESOURCE mapped;
+            device_context->Map(particle_vs_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+            Particle_Constants *constants = (Particle_Constants *) mapped.pData;
+            
+            constants->object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward;
+            constants->color  = p->color;
+            constants->offset = p->position;
+            
+            device_context->Unmap(particle_vs_cbuffer, 0);
+            
+            // Draw.
+            device_context->Draw(6, 0);
+        }
+    }
+}
+
 
 #define NUM_ROTATION_PARTICLES 5
 GLOBAL V2 random_rotation_particles[NUM_ROTATION_PARTICLES];
 GLOBAL Array<u32> unique_draw_beams_calls;
 FUNCTION void game_init()
 {
-#if 0
-    //
-    // @TESTING ARRAYS
-    //
-    Array<V3> arr1;
-    array_init(&arr1, 10);
-    
-    Array<V3> arr2;
-    array_init(&arr2, 2);
-    
-    array_add(&arr1, v3(1));
-    array_add(&arr1, v3(2));
-    array_add(&arr1, v3(3));
-    array_add(&arr1, v3(4));
-    
-    PRINT_ARR(arr1, "arr1 first:");
-    
-    array_copy(&arr2, arr1);
-    
-    array_add(&arr2, v3(69));
-    array_add(&arr2, v3(898));
-    
-    PRINT_ARR(arr2, "arr2 first:");
-    
-    array_copy(&arr1, arr2);
-    
-    PRINT_ARR(arr1, "arr1 AFTER22:");
-    //
-    // @TESTING
-    //
-#endif
-    
     game = PUSH_STRUCT_ZERO(os->permanent_arena, Game_State);
     
     // Arenas init.
@@ -762,8 +894,11 @@ FUNCTION void game_init()
         Arena_Temp scratch = get_scratch(0, 0);
         d3d11_load_texture(&tex, sprint(scratch.arena, "%Ssprites.png", os->data_folder));
         d3d11_load_texture(&font_tex, sprint(scratch.arena, "%Sfont_sprites.png", os->data_folder));
+        d3d11_load_texture(&game->obj_emitter.texture, sprint(scratch.arena, "%Sobj_particle.png", os->data_folder));
         free_scratch(scratch);
     }
+    
+    obj_emitter_init(500);
     
     load_game();
     if (game_started)
@@ -965,7 +1100,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     // We hit an object, so we should determine which color to reflect in which dir.  
     switch (test_o.type) {
         case T_DOOR:
-        case T_EMITTER: {
+        case T_LASER: {
         } break;
         case T_MIRROR:
         case T_BENDER:
@@ -1052,7 +1187,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 FUNCTION b32 is_obj_collides(u8 type)
 {
     switch (type) {
-        case T_EMITTER:
+        case T_LASER:
         case T_MIRROR:
         case T_BENDER:
         case T_SPLITTER:
@@ -1081,7 +1216,7 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
         return;
     }
     
-    if (objmap[tempy][tempx].type == T_EMITTER) {
+    if (objmap[tempy][tempx].type == T_LASER) {
         return;
     }
     if (objmap[tempy][tempx].type == T_DOOR) {
@@ -1275,38 +1410,47 @@ FUNCTION void update_world()
         }
         
         // Rotate objs around player.
-        if (input_pressed(ROTATE_CCW) || input_pressed(ROTATE_CW)) {
-            for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
-                for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
-                    if (dy == py && dx == px)
-                        continue;
-                    
-                    switch (objmap[dy][dx].type) {
-                        case T_MIRROR:
-                        case T_BENDER:
-                        case T_SPLITTER: {
-                            if (is_set(objmap[dy][dx].flags, ObjFlags_NEVER_ROTATE)) 
-                                continue;
-                            
-                            if (input_pressed(ROTATE_CCW)) {
-                                undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
-                                if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
-                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
-                                else
-                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
-                            } else if (input_pressed(ROTATE_CW)) {
-                                undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
-                                if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
-                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
-                                else
-                                    objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
-                            }
-                        } break;
-                    }
+        for (s32 dy = CLAMP_LOWER(py-1, 0); dy <= CLAMP_UPPER(NUM_Y*SIZE_Y-1, py+1); dy++) {
+            for (s32 dx = CLAMP_LOWER(px-1, 0); dx <= CLAMP_UPPER(NUM_X*SIZE_X-1, px+1); dx++) {
+                if (dy == py && dx == px)
+                    continue;
+                
+                switch (objmap[dy][dx].type) {
+                    case T_MIRROR:
+                    case T_BENDER:
+                    case T_SPLITTER: {
+                        if (is_set(objmap[dy][dx].flags, ObjFlags_NEVER_ROTATE)) 
+                            continue;
+                        
+                        // Perform rotation.
+                        if (input_pressed(ROTATE_CCW)) {
+                            undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
+                            if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                            else
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                        } else if (input_pressed(ROTATE_CW)) {
+                            undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
+                            if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
+                            else
+                                objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
+                        }
+                        
+                        // Add particles every `interval` seconds.
+                        f64 interval = 0.7;
+                        if (_mod(os->time, interval) >= interval - 0.01) {
+                            if ((dx == pushed_obj.x) && (dy == pushed_obj.y))
+                                obj_emitter_emit(5, pushed_obj_pos);
+                            else
+                                obj_emitter_emit(5, v2((f32)dx, (f32)dy));
+                        }
+                    } break;
                 }
             }
         }
         
+        undo_end_frame(&undo_handler);
     }
     
     ////////////////////////////////
@@ -1326,18 +1470,18 @@ FUNCTION void update_world()
     }
     pcolor = Color_WHITE;
     
-    // Update beams (do red emitters first).
+    // Update beams (do red lasers first).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if ((o.type == T_EMITTER) && (o.c == Color_RED))
+            if ((o.type == T_LASER) && (o.c == Color_RED))
                 update_beams(x, y, o.dir, o.c);
         }
     }
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if ((o.type == T_EMITTER) && (o.c != Color_RED))
+            if ((o.type == T_LASER) && (o.c != Color_RED))
                 update_beams(x, y, o.dir, o.c);
         }
     }
@@ -1383,7 +1527,7 @@ FUNCTION void update_world()
         }
     }
     
-    undo_end_frame(&undo_handler);
+    obj_emitter_update_particles();
 }
 
 #if DEVELOPER
@@ -1431,7 +1575,7 @@ FUNCTION void update_editor()
                 if (tilemap[my][mx] != Tile_WALL) {
                     objmap[my][mx].type = game->selected_tile_or_obj;
                     
-                    if (game->selected_tile_or_obj == T_EMITTER   || 
+                    if (game->selected_tile_or_obj == T_LASER   || 
                         game->selected_tile_or_obj == T_DETECTOR  ||
                         game->selected_tile_or_obj == T_DOOR      ||
                         game->selected_tile_or_obj == T_DOOR_OPEN ||
@@ -1773,7 +1917,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
         case T_DOOR: {
             draw_line(src_x, src_y, test_x, test_y, &colors[src_color], 1.0f);
         } break;
-        case T_EMITTER: {
+        case T_LASER: {
             u8 c = (test_o.dir == WRAP_D(src_dir + 4))? mix_colors(test_o.c, src_color) : src_color;
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
         } break;
@@ -1953,7 +2097,7 @@ FUNCTION void game_render()
         for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
             for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
                 Obj o = objmap[y][x];
-                if (o.type == T_EMITTER) {
+                if (o.type == T_LASER) {
                     array_reset(&unique_draw_beams_calls);
                     draw_beams(x, y, o.dir, o.c);
                 }
@@ -1983,7 +2127,7 @@ FUNCTION void game_render()
                 b32 is_pushed_obj = (pushed_obj.x == x && pushed_obj.y == y);
                 switch (o.type) {
                     case T_EMPTY: continue;
-                    case T_EMITTER: {
+                    case T_LASER: {
                         sprite.s += o.dir;
                         draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
                     } break;
@@ -2088,6 +2232,9 @@ FUNCTION void game_render()
         b32 invert_x = pdir == Dir_W;
         draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, invert_x);
         immediate_end();
+        
+        
+        obj_emitter_draw_particles();
         
 #if DEVELOPER
         // Draw debugging stuff.

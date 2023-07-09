@@ -1,4 +1,4 @@
-/* orh.h - v0.52 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.53 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.53 - added random_rangef().
 0.52 - cleaned up rect functions.
 0.51 - added array_find_index().
 0.50 - Improved arenas and added thread local scratch arenas.
@@ -986,6 +987,7 @@ FUNCDEF inline Random_PCG random_seed(u64 seed = 78953890);
 FUNCDEF inline u32 random_next(Random_PCG *rng);
 FUNCDEF inline f32 random_nextf(Random_PCG *rng);         // [0, 1) interval
 FUNCDEF inline u32 random_range(Random_PCG *rng, u32 min, u32 max);  // [min, max) interval.
+FUNCDEF inline f32 random_rangef(Random_PCG *rng, f32 min, f32 max); // [min, max) interval.
 FUNCDEF inline V2  random_range_v2(Random_PCG *rng, V2 min, V2 max); // [min, max) interval.
 FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, max) interval.
 
@@ -1629,6 +1631,11 @@ f32 _pow(f32 x, f32 y)
     f32 result = powf(x, y); 
     return result;
 }
+f64 _mod(f64 x, f64 y)     
+{
+    f64 result = fmod(x, y); 
+    return result;
+}
 f32 _mod(f32 x, f32 y)     
 {
     f32 result = fmodf(x, y); 
@@ -1721,6 +1728,11 @@ f32 _ceil(f32 x)
 f32 _pow(f32 x, f32 y)     
 {
     f32 result = __builtin_powf(x, y); 
+    return result;
+}
+f64 _mod(f64 x, f64 y)     
+{
+    f64 result = __builtin_fmod(x, y);
     return result;
 }
 f32 _mod(f32 x, f32 y)     
@@ -1816,6 +1828,11 @@ f32 _ceil(f32 x)
 f32 _pow(f32 x, f32 y)     
 {
     f32 result = powf(x, y); 
+    return result;
+}
+f64 _mod(f64 x, f64 y)     
+{
+    f64 result = fmod(x, y);
     return result;
 }
 f32 _mod(f32 x, f32 y)     
@@ -2952,6 +2969,12 @@ u32 random_range(Random_PCG *rng, u32 min, u32 max)
             return min + (r % bound);
         }
     }
+}
+f32 random_rangef(Random_PCG *rng, f32 min, f32 max)
+{
+    // @Note: Returns value in [min, max) interval.
+    f32 result = lerp(min, random_nextf(rng), max);
+    return result;
 }
 V2 random_range_v2(Random_PCG *rng, V2 min, V2 max)
 {
