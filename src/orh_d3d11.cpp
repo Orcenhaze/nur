@@ -12,7 +12,6 @@ CONVENTIONS:
 
 TODO:
 [] Make a generic orh_renderer.h that the game can use without directly talking to specific graphics API.
-[] Support for multiple shaders. HLSL pre-pass to parse @pipeline?
 
 */
 
@@ -29,31 +28,37 @@ TODO:
 #include "stb/stb_image.h"
 
 //
-// Shaders.
+// Window dimensions.
 //
-struct VS_Constants
-{
-    M4x4 object_to_proj_matrix;
-};
+GLOBAL DWORD current_window_width;
+GLOBAL DWORD current_window_height;
 
-struct PS_Constants
-{
-    V4  placeholder;
-};
+// Projection matrices.
+//
+GLOBAL M4x4         object_to_world_matrix = m4x4_identity();
+GLOBAL M4x4_Inverse world_to_view_matrix   = {m4x4_identity(), m4x4_identity()};
+GLOBAL M4x4_Inverse view_to_proj_matrix    = {m4x4_identity(), m4x4_identity()};;
+GLOBAL M4x4         object_to_proj_matrix  = m4x4_identity();
 
-struct Shader
-{
-    ID3D11InputLayout  *input_layout;
-    ID3D11VertexShader *vs;
-    ID3D11PixelShader  *ps;
-    
-    VS_Constants        vs_constants;
-    ID3D11Buffer       *vs_cbuffer;
-    
-    PS_Constants        ps_constants;
-    ID3D11Buffer       *ps_cbuffer;
-};
-GLOBAL Shader default_shader;
+//
+// D3D11 objects.
+//
+GLOBAL ID3D11Device             *device;
+GLOBAL ID3D11DeviceContext      *device_context;
+GLOBAL IDXGISwapChain1          *swap_chain;
+GLOBAL IDXGISwapChain2          *swap_chain2;
+GLOBAL ID3D11DepthStencilView   *depth_stencil_view;
+GLOBAL ID3D11RenderTargetView   *render_target_view;
+GLOBAL D3D11_VIEWPORT            viewport;
+GLOBAL HANDLE                    frame_latency_waitable_object;
+
+GLOBAL ID3D11RasterizerState    *rasterizer_state;
+GLOBAL ID3D11RasterizerState    *rasterizer_state_solid;
+GLOBAL ID3D11RasterizerState    *rasterizer_state_wireframe;
+GLOBAL ID3D11BlendState         *blend_state;
+GLOBAL ID3D11DepthStencilState  *depth_state;
+GLOBAL ID3D11SamplerState       *sampler0;
+GLOBAL ID3D11ShaderResourceView *texture0;
 
 //
 // Textures.
@@ -70,7 +75,32 @@ struct Texture
 GLOBAL Texture white_texture;
 
 //
-// Immediate vertex info.
+// Common constant buffers.
+//
+struct VS_Constants
+{
+    M4x4 object_to_proj_matrix;
+};
+
+struct PS_Constants
+{
+    V4  placeholder;
+};
+
+
+////////////////////////////////
+// Immediate mode renderer info.
+//
+// Shader. 
+//
+GLOBAL ID3D11InputLayout  *immediate_input_layout;
+GLOBAL ID3D11Buffer       *immediate_vbo;
+GLOBAL ID3D11Buffer       *immediate_vs_cbuffer;
+GLOBAL ID3D11Buffer       *immediate_ps_cbuffer;
+GLOBAL ID3D11VertexShader *immediate_vs;
+GLOBAL ID3D11PixelShader  *immediate_ps;
+
+// Vertex info.
 //
 struct Vertex_XCNU
 {
@@ -83,46 +113,14 @@ GLOBAL s32           num_immediate_vertices;
 GLOBAL const s32     MAX_IMMEDIATE_VERTICES = 2400;
 GLOBAL Vertex_XCNU   immediate_vertices[MAX_IMMEDIATE_VERTICES];
 
-//
-// D3D11 objects.
-//
-GLOBAL IDXGISwapChain1          *swap_chain;
-GLOBAL IDXGISwapChain2          *swap_chain2;
-GLOBAL HANDLE                    frame_latency_waitable_object;
-GLOBAL ID3D11Device             *device;
-GLOBAL ID3D11DeviceContext      *device_context;
-GLOBAL D3D11_VIEWPORT            viewport;
-GLOBAL ID3D11RasterizerState    *rasterizer_state;
-GLOBAL ID3D11RasterizerState    *rasterizer_state_solid;
-GLOBAL ID3D11RasterizerState    *rasterizer_state_wireframe;
-GLOBAL ID3D11BlendState         *blend_state;
-GLOBAL ID3D11DepthStencilState  *depth_state;
-GLOBAL ID3D11DepthStencilView   *depth_stencil_view;
-GLOBAL ID3D11RenderTargetView   *render_target_view;
-GLOBAL ID3D11Buffer             *immediate_vbo;
-GLOBAL ID3D11SamplerState       *sampler0;
-GLOBAL ID3D11ShaderResourceView *texture0;
-
-//
-// Projection matrices.
-//
-GLOBAL M4x4         object_to_world_matrix = m4x4_identity();
-GLOBAL M4x4_Inverse world_to_view_matrix   = {m4x4_identity(), m4x4_identity()};
-GLOBAL M4x4_Inverse view_to_proj_matrix    = {m4x4_identity(), m4x4_identity()};;
-GLOBAL M4x4         object_to_proj_matrix  = m4x4_identity();
-
-//
-// Window dimensions.
-//
-GLOBAL DWORD current_window_width;
-GLOBAL DWORD current_window_height;
-
-//
 // State.
 //
 GLOBAL b32 is_using_pixel_coords;
 
-FUNCTION void d3d11_create_shader(Shader *shader, const String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC *desc, UINT desc_num_elements)
+////////////////////////////////
+////////////////////////////////
+
+FUNCTION void d3d11_compile_shader(String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC element_desc[], UINT element_count, ID3D11InputLayout **input_layout_out, ID3D11VertexShader **vs_out, ID3D11PixelShader **ps_out)
 {
     String8 file = os->read_entire_file(hlsl_path);
     
@@ -148,9 +146,9 @@ FUNCTION void d3d11_create_shader(Shader *shader, const String8 hlsl_path, D3D11
         ASSERT(!"Failed to compile pixel shader!");
     }
     
-    device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), 0, &shader->vs);
-    device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), 0, &shader->ps);
-    device->CreateInputLayout(desc, desc_num_elements, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), &shader->input_layout);
+    device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), 0, vs_out);
+    device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), 0, ps_out);
+    device->CreateInputLayout(element_desc, element_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout_out);
     
     vs_blob->Release(); ps_blob->Release();
     os->free_file_memory(file.data);
@@ -221,61 +219,52 @@ FUNCTION void d3d11_load_texture(Texture *map, String8 full_path)
     stbi_image_free(color_data);
 }
 
-FUNCTION void set_texture(Texture *map)
+FUNCTION void create_immediate_shader()
 {
-    if (map)
-        texture0 = map->view;
-    else   
-        texture0 = white_texture.view;
-}
-
-FUNCTION void set_view_to_proj(f32 zoom)
-{
-    f32 ar = (f32)os->render_size.w / (f32)os->render_size.h;
-    view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
-}
-
-FUNCTION void set_world_to_view(V3 camera_position)
-{
-    world_to_view_matrix = look_at(camera_position,
-                                   camera_position + v3(0, 0, -1),
-                                   v3(0, 1, 0));
-}
-
-FUNCTION void set_object_to_world(V3 position, Quaternion orientation)
-{
-    // @Note: immediate_() family functions (like immediate_quad(), immediate_triangle(), etc.. ) MUST 
-    // use object-space coordinates for their geometry after calling this function. 
-    // Points are usually passed in world space to immediate_() functions. But after using this function,
-    // you should pass the world position here and use local-space points in the immediate_() functions.
-    //
-    // Example:
-    //
-    // USUALLY:
-    // V3 center = v3(5, 7, 0);  // POINT IN WORLD SPACE
-    // immediate_begin();
-    // immediate_quad(center, v3(1, 1, 0), v4(1));
-    // immediate_end();
-    //
-    //
-    // WHEN WE WANT TO USE set_object_transform():
-    // immediate_begin();
-    // set_object_transform(center, quaternion_identity());
-    // immediate_quad(v3(0), v3(1, 1, 0), v4(1));
-    // immediate_end();
-    //
-    // Notice that we passed v3(0) to immediate_quad() after using set_object_transform(), which means
-    // that the quad object is in it's own local space and it will be transformed to the world in the
-    // vertex shader.
+    // Immediate shader input layout.
+    D3D11_INPUT_ELEMENT_DESC layout_desc[] = 
+    {
+        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XCNU, position), D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_XCNU, color),    D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XCNU, normal),   D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XCNU, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0},
+    };
     
-    M4x4 m = m4x4_identity();
-    m._14  = position.x;
-    m._24  = position.y;
-    m._34  = position.z;
+    //
+    // Immediate vertex buffer.
+    {
+        D3D11_BUFFER_DESC desc = {};
+        desc.ByteWidth      = sizeof(immediate_vertices);
+        desc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
+        desc.Usage          = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        device->CreateBuffer(&desc, 0, &immediate_vbo);
+    }
     
-    M4x4 r = m4x4_from_quaternion(orientation);
+    //
+    // Constant buffers.
+    {
+        D3D11_BUFFER_DESC desc = {};
+        desc.ByteWidth      = ALIGN_UP(sizeof(VS_Constants), 16);
+        desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+        desc.Usage          = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        
+        device->CreateBuffer(&desc, 0, &immediate_vs_cbuffer);
+    }
+    {
+        D3D11_BUFFER_DESC desc = {};
+        desc.ByteWidth      = ALIGN_UP(sizeof(PS_Constants), 16);
+        desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+        desc.Usage          = D3D11_USAGE_DYNAMIC;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        device->CreateBuffer(&desc, 0, &immediate_ps_cbuffer);
+    }
     
-    object_to_world_matrix = m * r;
+    Arena_Temp scratch = get_scratch(0, 0);
+    String8 hlsl_path  = sprint(scratch.arena, "%Simmediate.hlsl", os->data_folder);
+    d3d11_compile_shader(hlsl_path, layout_desc, ARRAYSIZE(layout_desc), &immediate_input_layout, &immediate_vs, &immediate_ps);
+    free_scratch(scratch);
 }
 
 FUNCTION void d3d11_init(HWND window)
@@ -411,54 +400,6 @@ FUNCTION void d3d11_init(HWND window)
     }
     
     //
-    // Shaders.
-    {    
-        D3D11_INPUT_ELEMENT_DESC layout_desc[] = 
-        {
-            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XCNU, position), D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex_XCNU, color),    D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(Vertex_XCNU, normal),   D3D11_INPUT_PER_VERTEX_DATA, 0},
-            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex_XCNU, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0},
-        };
-        
-        //
-        // Constant buffers.
-        {
-            D3D11_BUFFER_DESC desc = {};
-            desc.ByteWidth      = ALIGN_UP(sizeof(VS_Constants), 16);
-            desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-            desc.Usage          = D3D11_USAGE_DYNAMIC;
-            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-            
-            device->CreateBuffer(&desc, 0, &default_shader.vs_cbuffer);
-        }
-        {
-            D3D11_BUFFER_DESC desc = {};
-            desc.ByteWidth      = ALIGN_UP(sizeof(PS_Constants), 16);
-            desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-            desc.Usage          = D3D11_USAGE_DYNAMIC;
-            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-            device->CreateBuffer(&desc, 0, &default_shader.ps_cbuffer);
-        }
-        
-        Arena_Temp scratch = get_scratch(0, 0);
-        String8 hlsl_path  = sprint(scratch.arena, "%Sdefault.hlsl", os->data_folder);
-        d3d11_create_shader(&default_shader, hlsl_path, layout_desc, ARRAYSIZE(layout_desc));
-        free_scratch(scratch);
-    }
-    
-    //
-    // Create immediate vertex buffer.
-    {
-        D3D11_BUFFER_DESC desc = {};
-        desc.ByteWidth      = sizeof(immediate_vertices);
-        desc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
-        desc.Usage          = D3D11_USAGE_DYNAMIC;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-        device->CreateBuffer(&desc, 0, &immediate_vbo);
-    }
-    
-    //
     // Create texture sampler state.
     {
         D3D11_SAMPLER_DESC desc = {};
@@ -478,9 +419,9 @@ FUNCTION void d3d11_init(HWND window)
     }
     
     //
-    // Projection transform.
-    {
-        set_view_to_proj(5.0f);
+    // Shaders.
+    {    
+        create_immediate_shader();
     }
 }
 
@@ -596,12 +537,69 @@ FUNCTION DWORD d3d11_wait_on_swapchain()
     return result;
 }
 
+////////////////////////////////
+////////////////////////////////
 
+////////////////////////////////
+// Immediate mode renderer functions.
 //
-//
-// Immediate mode stuff.
-//
-//
+FUNCTION void set_texture(Texture *map)
+{
+    if (map)
+        texture0 = map->view;
+    else   
+        texture0 = white_texture.view;
+}
+
+FUNCTION void set_view_to_proj(f32 zoom)
+{
+    f32 ar = (f32)os->render_size.w / (f32)os->render_size.h;
+    view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
+}
+
+FUNCTION void set_world_to_view(V3 camera_position)
+{
+    world_to_view_matrix = look_at(camera_position,
+                                   camera_position + v3(0, 0, -1),
+                                   v3(0, 1, 0));
+}
+
+FUNCTION void set_object_to_world(V3 position, Quaternion orientation)
+{
+    // @Note: immediate_() family functions (like immediate_quad(), immediate_triangle(), etc.. ) MUST 
+    // use object-space coordinates for their geometry after calling this function. 
+    // Points are usually passed in world space to immediate_() functions. But after using this function,
+    // you should pass the world position here and use local-space points in the immediate_() functions.
+    //
+    // Example:
+    //
+    // USUALLY:
+    // V3 center = v3(5, 7, 0);  // POINT IN WORLD SPACE
+    // immediate_begin();
+    // immediate_quad(center, v3(1, 1, 0), v4(1));
+    // immediate_end();
+    //
+    //
+    // WHEN WE WANT TO USE set_object_transform():
+    // immediate_begin();
+    // set_object_transform(center, quaternion_identity());
+    // immediate_quad(v3(0), v3(1, 1, 0), v4(1));
+    // immediate_end();
+    //
+    // Notice that we passed v3(0) to immediate_quad() after using set_object_transform(), which means
+    // that the quad object is in it's own local space and it will be transformed to the world in the
+    // vertex shader.
+    
+    M4x4 m = m4x4_identity();
+    m._14  = position.x;
+    m._24  = position.y;
+    m._34  = position.z;
+    
+    M4x4 r = m4x4_from_quaternion(orientation);
+    
+    object_to_world_matrix = m * r;
+}
+
 FUNCTION V2 pixel_to_ndc(V2 pixel)
 {
     f32 w = get_width(os->drawing_rect);
@@ -621,12 +619,13 @@ FUNCTION void update_render_transform()
     else
         object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward * object_to_world_matrix;
     
-    default_shader.vs_constants.object_to_proj_matrix = object_to_proj_matrix;
+    VS_Constants constants;
+    constants.object_to_proj_matrix = object_to_proj_matrix;
     
     D3D11_MAPPED_SUBRESOURCE mapped;
-    device_context->Map(default_shader.vs_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    memory_copy(mapped.pData, &default_shader.vs_constants, sizeof(default_shader.vs_constants));
-    device_context->Unmap(default_shader.vs_cbuffer, 0);
+    device_context->Map(immediate_vs_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    memory_copy(mapped.pData, &constants, sizeof(constants));
+    device_context->Unmap(immediate_vs_cbuffer, 0);
 }
 
 FUNCTION void immediate_end()
@@ -636,7 +635,7 @@ FUNCTION void immediate_end()
     }
     
     // Bind Input Assembler.
-    device_context->IASetInputLayout(default_shader.input_layout);
+    device_context->IASetInputLayout(immediate_input_layout);
     device_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     UINT stride = sizeof(Vertex_XCNU);
     UINT offset = 0;
@@ -648,21 +647,22 @@ FUNCTION void immediate_end()
     
     // Vertex Shader.
     update_render_transform();
-    device_context->VSSetConstantBuffers(0, 1, &default_shader.vs_cbuffer);
-    device_context->VSSetShader(default_shader.vs, 0, 0);
+    device_context->VSSetConstantBuffers(0, 1, &immediate_vs_cbuffer);
+    device_context->VSSetShader(immediate_vs, 0, 0);
     
     // Rasterizer Stage.
     device_context->RSSetViewports(1, &viewport);
     device_context->RSSetState(rasterizer_state);
     
     // Pixel Shader.
-    device_context->Map(default_shader.ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    memory_copy(mapped.pData, &default_shader.ps_constants, sizeof(default_shader.ps_constants));
-    device_context->Unmap(default_shader.ps_cbuffer, 0);
-    device_context->PSSetConstantBuffers(1, 1, &default_shader.ps_cbuffer);
+    PS_Constants constants {};
+    device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    memory_copy(mapped.pData, &constants, sizeof(constants));
+    device_context->Unmap(immediate_ps_cbuffer, 0);
+    device_context->PSSetConstantBuffers(1, 1, &immediate_ps_cbuffer);
     device_context->PSSetSamplers(0, 1, &sampler0);
     device_context->PSSetShaderResources(0, 1, &texture0);
-    device_context->PSSetShader(default_shader.ps, 0, 0);
+    device_context->PSSetShader(immediate_ps, 0, 0);
     
     // Output Merger.
     device_context->OMSetBlendState(blend_state, 0, 0XFFFFFFFFU);
