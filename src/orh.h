@@ -1,4 +1,4 @@
-/* orh.h - v0.53 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.54 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.54 - added random_next64() and random_nextd().
 0.53 - added random_rangef().
 0.52 - cleaned up rect functions.
 0.51 - added array_find_index().
@@ -985,7 +986,9 @@ struct Random_PCG
 };
 FUNCDEF inline Random_PCG random_seed(u64 seed = 78953890);
 FUNCDEF inline u32 random_next(Random_PCG *rng);
+FUNCDEF inline u64 random_next64(Random_PCG *rng);
 FUNCDEF inline f32 random_nextf(Random_PCG *rng);         // [0, 1) interval
+FUNCDEF inline f64 random_nextd(Random_PCG *rng);         // [0, 1) interval
 FUNCDEF inline u32 random_range(Random_PCG *rng, u32 min, u32 max);  // [min, max) interval.
 FUNCDEF inline f32 random_rangef(Random_PCG *rng, f32 min, f32 max); // [min, max) interval.
 FUNCDEF inline V2  random_range_v2(Random_PCG *rng, V2 min, V2 max); // [min, max) interval.
@@ -2947,12 +2950,26 @@ u32 random_next(Random_PCG *rng)
     s32 rot   = state >> 59;
     return rot ? (value >> rot) | (value << (32 - rot)) : value;
 }
+u64 random_next64(Random_PCG *rng)
+{
+	u64 value = random_next(rng);
+	value   <<= 32;
+	value    |= random_next(rng);
+	return value;
+}
 f32 random_nextf(Random_PCG *rng)
 {
     // @Note: returns float in [0, 1) interval.
     
     u32 x = random_next(rng);
     return (f32)(s32)(x >> 8) * 0x1.0p-24f;
+}
+f64 random_nextd(Random_PCG *rng)
+{
+	// @Note: returns double in [0, 1) interval.
+    
+    u64 x = random_next64(rng);
+    return (f64)(s64)(x >> 11) * 0x1.0p-53;
 }
 u32 random_range(Random_PCG *rng, u32 min, u32 max)
 {
