@@ -131,6 +131,7 @@ struct Particle_Constants
     M4x4 object_to_proj_matrix;
     V4   color;
     V2   offset;
+    f32  scale;
 };
 GLOBAL ID3D11InputLayout  *particle_input_layout;
 GLOBAL ID3D11Buffer       *particle_vbo;

@@ -306,14 +306,25 @@ struct Loaded_Level
     u8  **tile_map;
 };
 
-
+enum Particle_Emitter_Texture_Slot
+{
+    SLOT0,
+    SLOT1,
+    SLOT2,
+    
+    SLOT_COUNT
+};
 
 struct Particle
 {
     V2  position;
     V2  velocity;
     V4  color;
+    f32 scale;
     f32 life;
+    
+    // @Note: Emitters can store 3 textures and this tells us which texture to render for this particle.
+    s32 texture_slot;
 };
 
 struct Particle_Emitter
@@ -321,7 +332,8 @@ struct Particle_Emitter
     Array<Particle> particles;
     s32 amount;
     
-    Texture texture;
+    // @Cleanup: Maybe there's a better way to do this..?
+    Texture texture[SLOT_COUNT];
     
     // @Todo: Add own Random_PCG.
 };

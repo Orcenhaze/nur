@@ -16,6 +16,7 @@ cbuffer Particle_Constant : register(b0)
 	float4x4 object_to_proj_matrix;
     float4   color;
     float2   offset;
+	float    scale;
 }
 
 sampler sampler0 : register(s0);
@@ -24,7 +25,6 @@ Texture2D<float4> texture0 : register(t0);
 PS_INPUT vs(VS_INPUT input)
 {
 	PS_INPUT output;
-	float scale  = 0.2f;
 	output.pos   = mul(object_to_proj_matrix, float4((input.pos * scale) + offset, 0.0f, 1.0f));
 	output.uv    = input.uv;
 	output.color = color;

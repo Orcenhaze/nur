@@ -736,8 +736,10 @@ FUNCTION void obj_emitter_init(s32 amount)
     array_init(&e->particles, amount);
     e->amount = amount;
     
-    if (e->texture.view == 0)
-        e->texture = white_texture;
+    for (s32 i = 0; i < SLOT_COUNT; i++) {
+        if (e->texture[i].view == 0)
+            e->texture[i] = white_texture;
+    }
     
     for (s32 i = 0; i < amount; i++) {
         Particle p = {};
@@ -772,25 +774,29 @@ FUNCTION s32 obj_emitter_get_first_unused()
     return 0;
 }
 
-FUNCTION void obj_emitter_respawn_particle(Particle *p, V2 offset)
+FUNCTION void obj_emitter_respawn_particle(Particle *p, s32 texture_slot, V2 offset)
 {
     //V2 random   = random_on_border(v2(-0.45f), v2(0.45f));
     V2 random   = random_range_v2(&game->rng, v2(-0.45f), v2(0.45f));
-    f32 r_col   = random_nextf(&game->rng);
+    f32 r_col   = random_rangef(&game->rng, 0.5f, 1.0f);
     p->position = offset + random;
     p->color    = v4(r_col, r_col, r_col, 1.0f);
-    p->life     = 1.0f;
     p->velocity = v2(0.0f, 0.5f);
+    
+    p->life     = 1.0f;
+    
+    p->scale    = random_rangef(&game->rng, 0.15f, 0.25f);
+    p->texture_slot = texture_slot;
 }
 
-FUNCTION void obj_emitter_emit(s32 num_new_particles, V2 offset = v2(0))
+FUNCTION void obj_emitter_emit(s32 num_new_particles, s32 texture_slot, V2 offset = v2(0))
 {
     Particle_Emitter *e = &game->obj_emitter;
     
     // Add new particles.
     for (s32 i = 0; i < num_new_particles; i++) {
         s32 unused_particle = obj_emitter_get_first_unused();
-        obj_emitter_respawn_particle(&e->particles[unused_particle], offset);
+        obj_emitter_respawn_particle(&e->particles[unused_particle], texture_slot, offset);
     }
 }
 
@@ -834,7 +840,7 @@ FUNCTION void obj_emitter_draw_particles()
     
     // Pixel Shader.
     device_context->PSSetSamplers(0, 1, &sampler0);
-    device_context->PSSetShaderResources(0, 1, &e->texture.view);
+    //device_context->PSSetShaderResources(0, 1, &e->texture.view);
     device_context->PSSetShader(particle_ps, 0, 0);
     
     // Output Merger.
@@ -853,8 +859,12 @@ FUNCTION void obj_emitter_draw_particles()
             constants->object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward;
             constants->color  = p->color;
             constants->offset = p->position;
+            constants->scale  = p->scale;
             
             device_context->Unmap(particle_vs_cbuffer, 0);
+            
+            // Set texture.
+            device_context->PSSetShaderResources(0, 1, &e->texture[p->texture_slot].view);
             
             // Draw.
             device_context->Draw(6, 0);
@@ -863,8 +873,6 @@ FUNCTION void obj_emitter_draw_particles()
 }
 
 
-#define NUM_ROTATION_PARTICLES 5
-GLOBAL V2 random_rotation_particles[NUM_ROTATION_PARTICLES];
 GLOBAL Array<u32> unique_draw_beams_calls;
 FUNCTION void game_init()
 {
@@ -884,9 +892,6 @@ FUNCTION void game_init()
 #endif
     
     game->rng = random_seed();
-    for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
-        random_rotation_particles[i] = random_range_v2(&game->rng, v2(0), v2(1));
-    }
     
     array_init(&unique_draw_beams_calls);
     
@@ -894,7 +899,9 @@ FUNCTION void game_init()
         Arena_Temp scratch = get_scratch(0, 0);
         d3d11_load_texture(&tex, sprint(scratch.arena, "%Ssprites.png", os->data_folder));
         d3d11_load_texture(&font_tex, sprint(scratch.arena, "%Sfont_sprites.png", os->data_folder));
-        d3d11_load_texture(&game->obj_emitter.texture, sprint(scratch.arena, "%Sobj_particle.png", os->data_folder));
+        d3d11_load_texture(&game->obj_emitter.texture[SLOT0], sprint(scratch.arena, "%Sobj_particle.png", os->data_folder));
+        d3d11_load_texture(&game->obj_emitter.texture[SLOT1], sprint(scratch.arena, "%Sobj_particle_ccw.png", os->data_folder));
+        d3d11_load_texture(&game->obj_emitter.texture[SLOT2], sprint(scratch.arena, "%Sobj_particle_cw.png", os->data_folder));
         free_scratch(scratch);
     }
     
@@ -1437,13 +1444,18 @@ FUNCTION void update_world()
                                 objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
                         }
                         
+                        V2 pos = ((dx == pushed_obj.x) && (dy == pushed_obj.y))? pushed_obj_pos : v2((f32)dx, (f32)dy);
+                        
+                        s32 slot = SLOT0;
+                        if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
+                            slot = SLOT1;
+                        else if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
+                            slot = SLOT2;
+                        
                         // Add particles every `interval` seconds.
                         f64 interval = 0.7;
                         if (_mod(os->time, interval) >= interval - 0.01) {
-                            if ((dx == pushed_obj.x) && (dy == pushed_obj.y))
-                                obj_emitter_emit(5, pushed_obj_pos);
-                            else
-                                obj_emitter_emit(5, v2((f32)dx, (f32)dy));
+                            obj_emitter_emit(5, slot, pos);
                         }
                     } break;
                 }
@@ -2158,67 +2170,6 @@ FUNCTION void game_render()
                     case T_TELEPORTER: {
                         draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
                     } break;
-                }
-            }
-        }
-        immediate_end();
-        
-        immediate_begin();
-        set_texture(0);
-        // Draw particles
-        for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
-            for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-                Obj o = objmap[y][x];
-                if (o.type == T_EMPTY  &&
-                    o.type != T_MIRROR &&
-                    o.type != T_BENDER &&
-                    o.type != T_SPLITTER) 
-                    continue;
-                
-                // @Todo: These are all temporary and ugly particles.
-                //
-                if (is_set(o.flags, ObjFlags_NEVER_ROTATE)) {
-                    V4 color   = v4(0.3f, 0.3f, 0.3f, 0.8f);
-                    V2 size    = v2(0.06f, 0.06f);
-                    V2 c       = v2((f32)x, (f32)y);
-                    f32 offset = 0.35f;
-                    immediate_rect(c + v2(-offset, -offset), size, color);
-                    immediate_rect(c + v2( offset, -offset), size, color);
-                    immediate_rect(c + v2( offset,  offset), size, color);
-                    immediate_rect(c + v2(-offset,  offset), size, color);
-                } else {
-                    // Locked rotation particles.
-                    V3 axis = {};
-                    V4 color = {};
-                    if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW)) {
-                        axis = v3(0,0,1);
-                        color = v4(0.7f, 0.8f, 0.3f, 0.8f);
-                    } else if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                        axis = v3(0,0,-1);
-                        color = v4(0.7f, 0.4f, 0.6f, 0.8f);
-                    } 
-                    if (is_set(o.flags, ObjFlags_ONLY_ROTATE_CCW) || is_set(o.flags, ObjFlags_ONLY_ROTATE_CW)) {
-                        V2 pivot;
-                        if (pushed_obj.x == x && pushed_obj.y == y)
-                            pivot = v2(pushed_obj_pos.x, pushed_obj_pos.y);
-                        else 
-                            pivot = v2((f32)x, (f32)y);
-                        
-                        f32 duration = 3.0f;
-                        V2 size      = v2(0.03f, 0.03f);
-                        for (s32 i = 0; i < NUM_ROTATION_PARTICLES; i++) {
-                            f32 radius = 0.4f;
-                            V2 min     = pivot - v2(radius); 
-                            V2 max     = pivot + v2(radius);
-                            V2 p       = min + random_rotation_particles[i]*(max - min);
-                            duration  *= length2(random_rotation_particles[i]);
-                            f32 a      = repeat((f32)os->time/duration, 1.0f);
-                            Quaternion q = quaternion_from_axis_angle_turns(axis, a);
-                            V2 c = rotate_point_around_pivot(p, pivot, q);
-                            immediate_rect(c, size, color);
-                        }
-                    }
-                    
                 }
             }
         }
