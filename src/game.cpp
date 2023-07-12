@@ -360,21 +360,17 @@ FUNCTION b32 save_level(String8 level_name)
     
     return result;
 }
-#endif
 
 FUNCTION b32 mouse_over_ui()
 {
     b32 result = false;
     
-#if DEVELOPER
     ImGuiIO& io = ImGui::GetIO();
     if(io.WantCaptureMouse) result = true;
-#endif
     
     return result;
 }
 
-#if DEVELOPER
 FUNCTION void resize_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
 {
     NUM_X  = num_x;
@@ -438,7 +434,6 @@ FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
     }
     
     ////////////////////////////////
-    ////////////////////////////////
     
     resize_current_level(num_x, num_y, size_x, size_y);
     
@@ -449,6 +444,28 @@ FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
         for (s32 x = 0; x < num_cols; x++) {
             tilemap[y][x] = old_tilemap[y][x];
             objmap[y][x]  = old_objmap[y][x];
+        }
+    }
+}
+
+FUNCTION void bake_next_level_in_teleporter()
+{
+    for (s32 y = 0; y < SIZE_Y*NUM_Y; y++) {
+        for (s32 x = 0; x < SIZE_X*NUM_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_TELEPORTER) {
+                u8 current_level_index = 0;
+                for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
+                    if (level_names[i] == game->loaded_level.name) {
+                        current_level_index = (u8)i;
+                        break;
+                    }
+                }
+                ASSERT(current_level_index != 0);
+                
+                u8 next = (current_level_index + 1) % ARRAY_COUNT(level_names);
+                objmap[y][x].color[0] = next;
+            }
         }
     }
 }
@@ -482,6 +499,8 @@ FUNCTION void do_editor(b32 is_first_call)
                     if (!load_level(level_names[selected_level])) {
                         resize_current_level(1, 1, 8, 8);
                         make_empty_level();
+                    } else {
+                        bake_next_level_in_teleporter();
                     }
                     
                     num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
@@ -517,6 +536,8 @@ FUNCTION void do_editor(b32 is_first_call)
         
         // Save level.
         if (ImGui::Button("Save level")) {
+            ASSERT(game->loaded_level.name == level_names[selected_level]);
+            
             if (save_level(level_names[selected_level])) {
                 ImGui::SameLine(); 
                 ImGui::Text("Saved!");
@@ -684,15 +705,14 @@ FUNCTION void do_editor(b32 is_first_call)
 }
 #endif
 
+
+
 FUNCTION b32 is_outside_map(s32 x, s32 y)
 {
     b32 result = ((x < 0) || (x > NUM_X*SIZE_X-1) ||
                   (y < 0) || (y > NUM_Y*SIZE_Y-1));
     return result;
 }
-
-
-
 
 // @Cleanup: Move to specific file.
 //
