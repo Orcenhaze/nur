@@ -1865,7 +1865,7 @@ FUNCTION s32 draw_text(s32 top_left_x, s32 top_left_y, f32 scale, V4 color, u8 *
     return top_left_x;
 }
 
-FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.03f)
+FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.035f)
 {
     V4 c     = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
     V2 start = v2((f32)src_x, (f32)src_y);
@@ -1873,7 +1873,7 @@ FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f
     
     immediate_line_2d(start, end, c, thickness);
 }
-FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a, f32 thickness = 0.03f)
+FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a, f32 thickness = 0.035f)
 {
     V4 c = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
     immediate_line_2d(start, end, c, thickness);
@@ -2098,7 +2098,8 @@ FUNCTION void game_render()
             immediate_begin();
             set_texture(0);
             // Draw grid.
-            immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1, 1, 1, 0.7f), 0.01f);
+            //immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1, 1, 1, 0.7f), 0.01f);
+            immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(0.24f, 0.3f, 0.46f, 0.85f), 0.04f);
             immediate_end();
         }
         
