@@ -14,8 +14,8 @@ struct PS_INPUT
 cbuffer Particle_Constant : register(b0)
 {
 	float4x4 object_to_proj_matrix;
-    float4   color;
-    float2   offset;
+	float4   color;
+	float2   offset;
 	float    scale;
 }
 

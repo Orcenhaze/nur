@@ -1717,7 +1717,7 @@ FUNCTION void process_metagame()
                 main_mode = M_GAME;
             } break;
             case 1: {
-                if (load_level(S8LIT("intro"))) {
+                if (load_level(S8LIT("mirror_intro"))) {
                     game_started = true;
                     main_mode = M_GAME;
                 }
