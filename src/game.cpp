@@ -714,41 +714,6 @@ FUNCTION b32 is_outside_map(s32 x, s32 y)
     return result;
 }
 
-// @Cleanup: Move to specific file.
-//
-FUNCTION V2 random_on_border(V2 min, V2 max)
-{
-    u32 side = random_range(&game->rng, 0, 4);
-    
-    switch (side) {
-        case 0: {
-            // Right.
-            f32 r = random_rangef(&game->rng, min.y, max.y);
-            return v2(max.x, r);
-        };
-        case 1: {
-            // Top.
-            f32 r = random_rangef(&game->rng, min.x, max.x);
-            return v2(r, max.y);
-        };
-        case 2: {
-            // Left.
-            f32 r = random_rangef(&game->rng, min.y, max.y);
-            return v2(min.x, r);
-        };
-        case 3: {
-            // Bottom.
-            f32 r = random_rangef(&game->rng, min.x, max.x);
-            return v2(r, min.y);
-        };
-        default: {
-            ASSERT(0);
-        }
-    }
-    
-    return v2(0);
-}
-
 FUNCTION void obj_emitter_init(s32 amount)
 {
     Particle_Emitter *e = &game->obj_emitter;
@@ -794,47 +759,64 @@ FUNCTION s32 obj_emitter_get_first_unused()
     return 0;
 }
 
-FUNCTION void obj_emitter_respawn_particle(Particle *p, s32 texture_slot, V2 offset)
+FUNCTION void obj_emitter_respawn_particle(Particle *p, s32 type, Emitter_Texture_Slot slot, V2 offset)
 {
-    //V2 random   = random_on_border(v2(-0.45f), v2(0.45f));
-    V2 random   = random_range_v2(&game->rng, v2(-0.45f), v2(0.45f));
-    f32 r_col   = random_rangef(&game->rng, 0.5f, 1.0f);
-    p->position = offset + random;
-    p->color    = v4(r_col, r_col, r_col, 1.0f);
-    p->velocity = v2(0.0f, 0.5f);
+    p->type = type;
+    p->slot = slot;
     
-    p->life     = 1.0f;
-    
-    p->scale    = random_rangef(&game->rng, 0.15f, 0.25f);
-    p->texture_slot = texture_slot;
+    if (type == ParticleType_ROTATE) {
+        V2 random   = random_range_v2(&game->rng, v2(-0.45f), v2(0.45f));
+        f32 r_col   = random_rangef(&game->rng, 0.5f, 1.0f);
+        p->position = offset + random;
+        p->color    = v4(r_col, r_col, r_col, 1.0f);
+        p->velocity = v2(0.0f, 0.5f);
+        p->life     = 1.0f;
+        p->scale    = random_rangef(&game->rng, 0.15f, 0.25f);
+    } else if (type == ParticleType_WALK) {
+        p->position = offset + v2(0.0f, -0.25f);
+        p->color    = v4(1.0f);
+        p->velocity = -fdirs[pdir] * 1.5f;
+        p->life     = 0.75f;
+        p->scale    = 0.45f;
+    }
 }
 
-FUNCTION void obj_emitter_emit(s32 num_new_particles, s32 texture_slot, V2 offset = v2(0))
+FUNCTION void obj_emitter_emit(s32 num_new_particles, s32 type, Emitter_Texture_Slot slot, V2 offset = v2(0))
 {
     Particle_Emitter *e = &game->obj_emitter;
     
     // Add new particles.
     for (s32 i = 0; i < num_new_particles; i++) {
         s32 unused_particle = obj_emitter_get_first_unused();
-        obj_emitter_respawn_particle(&e->particles[unused_particle], texture_slot, offset);
+        obj_emitter_respawn_particle(&e->particles[unused_particle], type, slot, offset);
     }
 }
 
 FUNCTION void obj_emitter_update_particles()
 {
     Particle_Emitter *e = &game->obj_emitter;
+    f32 dt = os->dt;
     
     // Update all particles.
     for (s32 i = 0; i < e->amount; i++) {
         Particle *p = &e->particles[i];
-        p->life -= os->dt;
+        p->life -= dt;
+        
         if (p->life > 0.0f) {
-            f32 intensity = 0.5f;
-            V2 shake      = intensity * random_range_v2(&game->rng, v2(-1), v2(1));
             
-            p->position += (p->velocity + shake) * os->dt;
-            p->velocity += shake * os->dt * 0.6f;
-            p->color.a  -= 1.0f * os->dt;
+            if (p->type == ParticleType_ROTATE) {
+                f32 intensity = 0.5f;
+                V2 shake      = intensity * random_range_v2(&game->rng, v2(-1), v2(1));
+                p->position += (p->velocity + shake) * dt;
+                p->velocity += shake * dt * 0.6f;
+                p->color.a  -= 1.0f * dt;
+            } else if (p->type == ParticleType_WALK) {
+                p->position += p->velocity * dt;
+                //p->velocity += p->velocity * dt * 1.5f;
+                p->color.a  -= 2.2f * dt;
+                p->scale    -= 1.2f * dt;
+            }
+            
         }
     }
 }
@@ -864,7 +846,6 @@ FUNCTION void obj_emitter_draw_particles()
     device_context->PSSetShader(particle_ps, 0, 0);
     
     // Output Merger.
-    device_context->OMSetBlendState(blend_state_one, 0, 0XFFFFFFFFU);
     device_context->OMSetDepthStencilState(depth_state, 0);
     device_context->OMSetRenderTargets(1, &render_target_view, depth_stencil_view);
     
@@ -884,7 +865,13 @@ FUNCTION void obj_emitter_draw_particles()
             device_context->Unmap(particle_vs_cbuffer, 0);
             
             // Set texture.
-            device_context->PSSetShaderResources(0, 1, &e->texture[p->texture_slot].view);
+            device_context->PSSetShaderResources(0, 1, &e->texture[p->slot].view);
+            
+            // Output Merger.
+            if (p->type == ParticleType_WALK)
+                device_context->OMSetBlendState(blend_state, 0, 0XFFFFFFFFU);
+            else
+                device_context->OMSetBlendState(blend_state_one, 0, 0XFFFFFFFFU);
             
             // Draw.
             device_context->Draw(6, 0);
@@ -922,6 +909,7 @@ FUNCTION void game_init()
         d3d11_load_texture(&game->obj_emitter.texture[SLOT0], sprint(scratch.arena, "%Sobj_particle.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT1], sprint(scratch.arena, "%Sobj_particle_ccw.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT2], sprint(scratch.arena, "%Sobj_particle_cw.png", os->data_folder));
+        d3d11_load_texture(&game->obj_emitter.texture[SLOT3], sprint(scratch.arena, "%Swalk_particle.png", os->data_folder));
         free_scratch(scratch);
     }
     
@@ -1284,6 +1272,7 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
 #else
     set_player_position(tempx, tempy, pdir, true);
 #endif
+    obj_emitter_emit(5, ParticleType_WALK, SLOT3, ppos);
 }
 
 #define MOVE_HOLD_DURATION 0.20f
@@ -1466,7 +1455,7 @@ FUNCTION void update_world()
                         
                         V2 pos = ((dx == pushed_obj.x) && (dy == pushed_obj.y))? pushed_obj_pos : v2((f32)dx, (f32)dy);
                         
-                        s32 slot = SLOT0;
+                        Emitter_Texture_Slot slot = SLOT0;
                         if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
                             slot = SLOT1;
                         else if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
@@ -1475,7 +1464,7 @@ FUNCTION void update_world()
                         // Add particles every `interval` seconds.
                         f64 interval = 0.7;
                         if (_mod(os->time, interval) >= interval - 0.01) {
-                            obj_emitter_emit(5, slot, pos);
+                            obj_emitter_emit(5, ParticleType_ROTATE, slot, pos);
                         }
                     } break;
                 }

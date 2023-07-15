@@ -375,13 +375,22 @@ struct Loaded_Level
     u8  **tile_map;
 };
 
-enum Particle_Emitter_Texture_Slot
+enum Emitter_Texture_Slot
 {
     SLOT0,
     SLOT1,
     SLOT2,
+    SLOT3,
     
     SLOT_COUNT
+};
+
+enum Particle_Type
+{
+    ParticleType_NONE,
+    
+    ParticleType_ROTATE,
+    ParticleType_WALK,
 };
 
 struct Particle
@@ -391,9 +400,10 @@ struct Particle
     V4  color;
     f32 scale;
     f32 life;
+    s32 type;
     
-    // @Note: Emitters can store 3 textures and this tells us which texture to render for this particle.
-    s32 texture_slot;
+    // @Note: Emitters can store multiple textures and this tells us which texture to render for this particle.
+    Emitter_Texture_Slot slot;
 };
 
 struct Particle_Emitter
