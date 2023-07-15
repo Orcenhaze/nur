@@ -1,4 +1,4 @@
-/* orh.h - v0.54 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.55 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.55 - added pow() for V2 and V3.
 0.54 - added random_next64() and random_nextd().
 0.53 - added random_rangef().
 0.52 - cleaned up rect functions.
@@ -478,15 +479,16 @@ FUNCDEF inline f32 _round(f32 x); // Towards nearest integer.
 FUNCDEF inline f32 _floor(f32 x); // Towards negative infinity.
 FUNCDEF inline f32 _ceil(f32 x);  // Towards positive infinity.
 
-FUNCDEF V2 clamp(V2 min, V2 x, V2 max);
-FUNCDEF V2 round(V2 v);
-FUNCDEF V2 floor(V2 v);
-FUNCDEF V2 ceil(V2 v);
-
-FUNCDEF V3 clamp(V3 min, V3 x, V3 max);
-FUNCDEF V3 round(V3 v);
-FUNCDEF V3 floor(V3 v);
-FUNCDEF V3 ceil(V3 v);
+FUNCDEF inline V2 pow(V2 v, f32 y);
+FUNCDEF inline V3 pow(V3 v, f32 y);
+FUNCDEF inline V2 clamp(V2 min, V2 x, V2 max);
+FUNCDEF inline V3 clamp(V3 min, V3 x, V3 max);
+FUNCDEF inline V2 round(V2 v);
+FUNCDEF inline V3 round(V3 v);
+FUNCDEF inline V2 floor(V2 v);
+FUNCDEF inline V3 floor(V3 v);
+FUNCDEF inline V2 ceil(V2 v);
+FUNCDEF inline V3 ceil(V3 v);
 
 FUNCDEF f32 frac(f32 x);
 FUNCDEF V2  frac(V2 v);
@@ -1928,6 +1930,21 @@ f32 _ceil(f32 x)
 }
 #endif
 
+V2 pow(V2 v, f32 y)
+{
+    V2 result = {};
+    result.x = _pow(v.x, y);
+    result.y = _pow(v.y, y);
+    return result;
+}
+V3 pow(V3 v, f32 y)
+{
+    V3 result = {};
+    result.x = _pow(v.x, y);
+    result.y = _pow(v.y, y);
+    result.z = _pow(v.z, y);
+    return result;
+}
 V2 clamp(V2 min, V2 x, V2 max)
 {
     V2 result = {};
@@ -1935,34 +1952,19 @@ V2 clamp(V2 min, V2 x, V2 max)
     result.y = CLAMP(min.y, x.y, max.y);
     return result;
 }
-V2 round(V2 v)
-{
-    V2 result = {};
-    result.x  = _round(v.x);
-    result.y  = _round(v.y);
-    return result;
-}
-V2 floor(V2 v)
-{
-    V2 result = {};
-    result.x  = _floor(v.x);
-    result.y  = _floor(v.y);
-    return result;
-}
-V2 ceil(V2 v)
-{
-    V2 result = {};
-    result.x  = _ceil(v.x);
-    result.y  = _ceil(v.y);
-    return result;
-}
-
 V3 clamp(V3 min, V3 x, V3 max)
 {
     V3 result = {};
     result.x = CLAMP(min.x, x.x, max.x);
     result.y = CLAMP(min.y, x.y, max.y);
     result.z = CLAMP(min.z, x.z, max.z);
+    return result;
+}
+V2 round(V2 v)
+{
+    V2 result = {};
+    result.x  = _round(v.x);
+    result.y  = _round(v.y);
     return result;
 }
 V3 round(V3 v)
@@ -1973,12 +1975,26 @@ V3 round(V3 v)
     result.z  = _round(v.z);
     return result;
 }
+V2 floor(V2 v)
+{
+    V2 result = {};
+    result.x  = _floor(v.x);
+    result.y  = _floor(v.y);
+    return result;
+}
 V3 floor(V3 v)
 {
     V3 result = {};
     result.x  = _floor(v.x);
     result.y  = _floor(v.y);
     result.z  = _floor(v.z);
+    return result;
+}
+V2 ceil(V2 v)
+{
+    V2 result = {};
+    result.x  = _ceil(v.x);
+    result.y  = _ceil(v.y);
     return result;
 }
 V3 ceil(V3 v)

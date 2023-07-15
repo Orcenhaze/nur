@@ -13,6 +13,10 @@ CONVENTIONS:
 TODO:
 [] Make a generic orh_renderer.h that the game can use without directly talking to specific graphics API.
 
+NOTE:
+sRGB --> linear:     pow(color, 2.2)        make numbers smaller.
+linear --> sRGB:     pow(color, 1.0/2.2)    make numbers bigger.
+
 */
 
 #include <d3d11.h>       // D3D interface
@@ -192,7 +196,7 @@ FUNCTION void d3d11_load_texture(Texture *map, s32 w, s32 h, u8 *color_data)
     desc.Height     = map->height;
     desc.MipLevels  = 1;
     desc.ArraySize  = 1;
-    desc.Format     = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format     = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     desc.SampleDesc = {1, 0};
     desc.Usage      = D3D11_USAGE_IMMUTABLE;
     desc.BindFlags  = D3D11_BIND_SHADER_RESOURCE;
@@ -221,7 +225,7 @@ FUNCTION void d3d11_load_texture(Texture *map, String8 full_path)
         desc.Height     = map->height;
         desc.MipLevels  = 1;
         desc.ArraySize  = 1;
-        desc.Format     = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format     = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         desc.SampleDesc = {1, 0};
         desc.Usage      = D3D11_USAGE_IMMUTABLE;
         desc.BindFlags  = D3D11_BIND_SHADER_RESOURCE;
@@ -533,7 +537,7 @@ FUNCTION void d3d11_resize()
             desc.Height     = window_height;
             desc.MipLevels  = 1;
             desc.ArraySize  = 1;
-            desc.Format     = DXGI_FORMAT_B8G8R8A8_UNORM;
+            desc.Format     = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
             desc.SampleDesc = {4, 0};
             desc.BindFlags  = D3D11_BIND_RENDER_TARGET;
             
@@ -587,8 +591,11 @@ FUNCTION void d3d11_viewport(FLOAT top_left_x, FLOAT top_left_y, FLOAT width, FL
 
 FUNCTION void d3d11_clear(FLOAT r, FLOAT g, FLOAT b, FLOAT a)
 {
-    FLOAT rgba[4] = {r, g, b, a};
-    device_context->ClearRenderTargetView(render_target_view, rgba);
+    // @Note: Go linear; using SRGB framebuffer (render_target_view).
+    V4 color  = v4(r, g, b, a);
+    color.rgb = pow(color.rgb, 2.2f);
+    
+    device_context->ClearRenderTargetView(render_target_view, color.I);
     device_context->ClearDepthStencilView(depth_stencil_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 }
 
@@ -782,6 +789,9 @@ FUNCTION void immediate_vertex(V2 position, V4 color)
     if (is_using_pixel_coords)
         position = pixel_to_ndc(position);
     
+    // @Note: Go linear; using SRGB framebuffer.
+    color.rgb = pow(color.rgb, 2.2f);
+    
     Vertex_XCNU *v = immediate_vertex_ptr(num_immediate_vertices);
     v->position    = v3(position, 0);
     v->color       = color;
@@ -797,6 +807,9 @@ FUNCTION void immediate_vertex(V2 position, V2 uv, V4 color)
     
     if (is_using_pixel_coords)
         position = pixel_to_ndc(position);
+    
+    // @Note: Go linear; using SRGB framebuffer.
+    color.rgb = pow(color.rgb, 2.2);
     
     Vertex_XCNU *v = immediate_vertex_ptr(num_immediate_vertices);
     v->position    = v3(position, 0);
