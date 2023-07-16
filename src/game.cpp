@@ -1694,9 +1694,9 @@ FUNCTION void update_menus()
     switch (page) {
         case MAIN_MENU: {
 #if DEVELOPER
-            s32 const num_choices = 5;
+            s32 const num_choices = 6;
 #else
-            s32 const num_choices = 4;
+            s32 const num_choices = 5;
 #endif
             move_selection(dir, num_choices);
             if (selection == 0 && !game_started) {
@@ -1721,9 +1721,17 @@ FUNCTION void update_menus()
                         // Settings.
                         prev_page = page;
                         page      = SETTINGS;
-                        selection = 0;
+                        prev_selection = selection;
+                        selection      = 0;
                     } break;
-                    case 3: { 
+                    case 3: {
+                        // Controls.
+                        prev_page = page;
+                        page      = CONTROLS;
+                        prev_selection = selection;
+                        selection      = 0;
+                    } break;
+                    case 4: { 
                         // Quit.
                         //if (dead)
                         //undo_next(&undo_handler);
@@ -1731,7 +1739,7 @@ FUNCTION void update_menus()
                         os->exit = true;
                     } break;
 #if DEVELOPER
-                    case 4: { 
+                    case 5: { 
                         // Make Empty Level.
                         make_empty_level();
                         current_mode = M_GAME;
@@ -1742,7 +1750,7 @@ FUNCTION void update_menus()
             
         } break;
         case PAUSE: {
-            s32 const num_choices = 5;
+            s32 const num_choices = 6;
             move_selection(dir, num_choices);
             
             if (key_pressed(Key_ESCAPE)) {
@@ -1760,22 +1768,31 @@ FUNCTION void update_menus()
                         // Restart level.
                         prev_page = page;
                         page      = RESTART_CONFIRMATION;
+                        prev_selection = selection;
                         selection = 1;
                     } break;
                     case 2: { 
                         // Settings.
                         prev_page = page;
                         page      = SETTINGS;
+                        prev_selection = selection;
                         selection = 0;
                     } break;
-                    case 3: { 
+                    case 3: {
+                        // Controls.
+                        prev_page = page;
+                        page      = CONTROLS;
+                        prev_selection = selection;
+                        selection = 0;
+                    } break;
+                    case 4: { 
                         // Go to main menu.
                         page = MAIN_MENU;
                         selection = 0;
                         if (!game_started)
                             selection = 1;
                     } break;
-                    case 4: { 
+                    case 5: { 
                         // Quit.
                         //if (dead)
                         //undo_next(&undo_handler);
@@ -1791,10 +1808,13 @@ FUNCTION void update_menus()
             move_selection(dir, num_choices);
             
             if (key_pressed(Key_ESCAPE)) {
-                page      = prev_page;
-                selection = 0;
-                if (prev_page == MAIN_MENU && !game_started)
-                    selection = 1;
+                if (prev_page == PAUSE) {
+                    current_mode = M_GAME;
+                    break;
+                }
+                
+                page = prev_page;
+                selection = prev_selection;
                 break;
             }
             
@@ -1813,11 +1833,9 @@ FUNCTION void update_menus()
                         prompt_user_on_restart = !prompt_user_on_restart;
                     } break;
                     case 3: {
-                        // back.
-                        page      = prev_page;
-                        selection = 0;
-                        if (prev_page == MAIN_MENU && !game_started)
-                            selection = 1;
+                        // Back.
+                        page = prev_page;
+                        selection = prev_selection;
                     } break;
                 }
             }
@@ -1835,10 +1853,7 @@ FUNCTION void update_menus()
             move_selection(dir, num_choices);
             
             if (key_pressed(Key_ESCAPE)) {
-                if (prev_page == PAUSE) 
-                    page = prev_page;
-                else
-                    current_mode = M_GAME;
+                current_mode = M_GAME;
                 break;
             }
             
@@ -1852,14 +1867,41 @@ FUNCTION void update_menus()
                     } break;
                     case 1: {
                         // No.
-                        if (prev_page == PAUSE) 
+                        if (prev_page == PAUSE) {
                             page = prev_page;
+                            selection = prev_selection;
+                        }
                         else
                             current_mode = M_GAME;
                     } break;
                 }
             }
             
+        } break;
+        case CONTROLS: {
+            s32 const num_choices = 1;
+            move_selection(dir, num_choices);
+            
+            if (key_pressed(Key_ESCAPE)) {
+                if (prev_page == PAUSE) {
+                    current_mode = M_GAME;
+                    break;
+                }
+                
+                page = prev_page;
+                selection = prev_selection;
+                break;
+            }
+            
+            if (input_pressed(CONFIRM)) {
+                switch (selection) {
+                    case 0: {
+                        // Back;
+                        page = prev_page;
+                        selection = prev_selection;
+                    } break;
+                }
+            }
         } break;
     }
     
@@ -2253,7 +2295,7 @@ FUNCTION void draw_world()
 
 FUNCTION void draw_button(char *text, V2 *p, f32 scale, b32 highlighed, b32 centered = false)
 {
-    V4 c_normal     = v4(0.8f, 0.5f, 0.8f, 1.0f);;
+    V4 c_normal     = v4(0.8f, 0.5f, 0.8f, 1.0f);
     V4 c_highlighed = v4(1.0f);
     V4 color        = highlighed? c_highlighed : c_normal;
     V2 dest         = *p;
@@ -2271,7 +2313,7 @@ FUNCTION void draw_button(char *text, V2 *p, f32 scale, b32 highlighed, b32 cent
     
     draw_text(dest, final_scale, color, text);
     
-    p->y += (scale * h_scale * 80);
+    p->y += (h_scale * 80);
 }
 
 FUNCTION void draw_menus()
@@ -2279,6 +2321,7 @@ FUNCTION void draw_menus()
     b32 is_transparent_bg = false;
     if (page == PAUSE || 
         (page == SETTINGS && prev_page == PAUSE) || 
+        (page == CONTROLS && prev_page == PAUSE) || 
         page == RESTART_CONFIRMATION)
         is_transparent_bg = true;
     
@@ -2337,9 +2380,10 @@ FUNCTION void draw_menus()
                 draw_button("CONTINUE",      &p, 1, (selection == 0));
             draw_button("START NEW GAME",    &p, 1, (selection == 1));
             draw_button("SETTINGS",          &p, 1, (selection == 2));
-            draw_button("QUIT",              &p, 1, (selection == 3));
+            draw_button("CONTROLS",          &p, 1, (selection == 3));
+            draw_button("QUIT",              &p, 1, (selection == 4));
 #if DEVELOPER
-            draw_button("EMPTY LEVEL",       &p, 1, (selection == 4));
+            draw_button("EMPTY LEVEL",       &p, 1, (selection == 5));
 #endif
         } break;
         case PAUSE: {
@@ -2347,8 +2391,9 @@ FUNCTION void draw_menus()
             draw_button("CONTINUE",          &p, 1, (selection == 0));
             draw_button("RESTART LEVEL",     &p, 1, (selection == 1));
             draw_button("SETTINGS",          &p, 1, (selection == 2));
-            draw_button("BACK TO MAIN MENU", &p, 1, (selection == 3));
-            draw_button("QUIT",              &p, 1, (selection == 4));
+            draw_button("CONTROLS",          &p, 1, (selection == 3));
+            draw_button("BACK TO MAIN MENU", &p, 1, (selection == 4));
+            draw_button("QUIT",              &p, 1, (selection == 5));
         } break;
         case SETTINGS: {
             V2 p = v2(0.1f*w, 0.3333f*h);
@@ -2387,6 +2432,30 @@ FUNCTION void draw_menus()
             V2 p = v2(0, h*0.5f);
             draw_button("YES", &p, 1, (selection == 0), true);
             draw_button("NO",  &p, 1, (selection == 1), true);
+        } break;
+        case CONTROLS: {
+            V2 p       = v2(0.1f*w, 0.3333f*h);
+            f32 scale  = 4.0f * w_scale;
+            V4 color   = v4(0.9f, 0.6f, 0.9f, 1.0f);
+            char *text = "WASD/ARROWS"; draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "Q E";         draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "Z";           draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "R";           draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "G";           draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            
+            p.y  += (s32)(h_scale * 80);
+            draw_button("BACK",  &p, 1, (selection == 0));
+            
+            // Return cursor up and move right.
+            p          = v2(0.3333f*w, 0.3333f*h);
+            
+            text       = "MOVE";          draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "ROTATE MIRRORS COUNTER-CLOCKWISE OR CLOCKWISE"; draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "UNDO";          draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "RESTART LEVEL"; draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            text       = "TOGGLE GRID";   draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            
+            
         } break;
     }
     

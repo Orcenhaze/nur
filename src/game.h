@@ -90,8 +90,10 @@ enum Menu_Page
     PAUSE,
     SETTINGS,
     RESTART_CONFIRMATION,
+    CONTROLS,
 };
 GLOBAL s32 selection;
+GLOBAL s32 prev_selection;
 GLOBAL Menu_Page page;
 GLOBAL Menu_Page prev_page;
 
