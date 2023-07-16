@@ -365,12 +365,11 @@ FUNCTION void win32_process_inputs(HWND window)
     for (s32 i = 0; i < global_os.inputs_to_process.count; i++) {
         Queued_Input input = global_os.inputs_to_process[i];
         if (input.down) {
-            
-            // Key already pressed, defer this press for later to preserve input order.
-            if (global_os.pressed[input.key])
+            // Defer DOWN event because UP was true, break to preserve order.
+            if (global_os.released[input.key])
                 break;
-            // Key was marked as released before we got here, so defer for later.
-            else if (global_os.released[input.key])
+            // Defer DOWN event because DOWN is already true, break to preserve order.
+            else if (global_os.pressed[input.key])
                 break;
             else {
                 if (!global_os.held[input.key])
@@ -381,10 +380,18 @@ FUNCTION void win32_process_inputs(HWND window)
                 i--;
             }
         } else {
-            global_os.released[input.key] = true;
-            global_os.held[input.key] = false;
-            array_ordered_remove_by_index(&global_os.inputs_to_process, i);
-            i--;
+            // Defer UP event because DOWN was true, break to preserve order.
+            if (global_os.pressed[input.key])
+                break;
+            // Defer UP event because UP is already true, break to preserve order.
+            else if (global_os.released[input.key])
+                break;
+            else {
+                global_os.released[input.key] = true;
+                global_os.held[input.key] = false;
+                array_ordered_remove_by_index(&global_os.inputs_to_process, i);
+                i--;
+            }
         }
     }
 }
@@ -528,9 +535,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     ImGui_ImplDX11_Init(device, device_context);
 #endif
     
-    game_init();
     
-    if (global_os.fullscreen) 
+    b32 fullscreen_before = global_os.fullscreen;
+    game_init();
+    if (fullscreen_before != global_os.fullscreen) 
         win32_toggle_fullscreen(window);
     
     LARGE_INTEGER last_counter = win32_qpc();

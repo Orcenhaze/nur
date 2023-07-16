@@ -79,25 +79,21 @@ FUNCTION b32 input_released(Game_Input input)
 GLOBAL b32 game_started = false;
 enum
 {
-    M_MENU,
+    M_MENUS,
     M_GAME,
     M_EDITOR
-} GLOBAL main_mode = M_MENU;
+} GLOBAL current_mode = M_MENUS;
 
-#define MAX_CHOICES ARRAY_COUNT(choices)
-s32 menu_selection = 1;
-GLOBAL String8 choices[] = 
+enum Menu_Page
 {
-    S8LIT("CONTINUE"),
-    S8LIT("START NEW GAME"),
-    S8LIT("TOGGLE FULLSCREEN"),
-    S8LIT("QUIT"),
-#if DEVELOPER
-    S8LIT("EMPTY LEVEL"),
-#endif
+    MAIN_MENU,
+    PAUSE,
+    SETTINGS,
+    RESTART_CONFIRMATION,
 };
-
-GLOBAL b32 can_toggle_menu;
+GLOBAL s32 selection;
+GLOBAL Menu_Page page;
+GLOBAL Menu_Page prev_page;
 
 ////////////////////////////////
 ////////////////////////////////
@@ -244,6 +240,14 @@ struct Player
 };
 
 
+struct Settings
+{
+    // Not gonna use flags because meh.
+    b32 fullscreen;
+    b32 draw_grid;
+    b32 prompt_user_on_restart;
+};
+
 ////////////////////////////////
 ////////////////////////////////
 // Global current state.
@@ -278,9 +282,13 @@ GLOBAL f32 animation_timer;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite; GLOBAL u8 pcolor;
 GLOBAL b32 dead;
 
+// Settings.
+GLOBAL b32 draw_grid;
+GLOBAL b32 prompt_user_on_restart = true;
+
 // Other state.
 GLOBAL f32 zoom_level; 
-GLOBAL b32 draw_grid;
+
 
 ////////////////////////////////
 ////////////////////////////////
