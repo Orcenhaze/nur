@@ -67,7 +67,6 @@ FUNCTION void set_player_position(s32 x, s32 y, u8 dir, b32 teleport = false)
 GLOBAL Undo_Handler undo_handler;
 
 
-//
 // @Cleanup: Cleanup serialization stuff.
 // @Cleanup: Cleanup serialization stuff.
 //
@@ -79,16 +78,19 @@ FUNCTION void save_game()
     String_Builder sb = sb_init();
     defer(sb_free(&sb));
     
-    Loaded_Level *lev = &game->loaded_level;
+    Loaded_Level *lev  = &game->loaded_level;
+    s32 latest_version = SaveFileVersion_COUNT-1;
+    
+    //save_map();
+    sb_append(&sb, &latest_version, sizeof(s32));
+    sb_append(&sb, &lev->name.count, sizeof(u32));
+    sb_append(&sb, lev->name.data, lev->name.count);
     
     Settings s = {};
     s.fullscreen = os->fullscreen;
     s.draw_grid  = draw_grid;
     s.prompt_user_on_restart = prompt_user_on_restart;
     
-    //save_map();
-    sb_append(&sb, &lev->name.count, sizeof(u32));
-    sb_append(&sb, lev->name.data, lev->name.count);
     sb_append(&sb, &s, sizeof(Settings));
     
     Arena_Temp scratch = get_scratch(0, 0);
@@ -172,9 +174,9 @@ get(&file, &field_name, size); \
     
     Arena *a          = game->loaded_level_arena;
     Loaded_Level *lev = &game->loaded_level;
-    s32 version       = 0;
     arena_reset(a);
     
+    s32 version = 0;
     get(&file, &version);
     
     // @Todo: Once we implement package manager, we don't need to copy data. Instead, we load the 
@@ -196,6 +198,7 @@ get(&file, &field_name, size); \
             lev->name = string_copy(level_name);
         }
      */
+    // Load level name.
     u32 len;
     get(&file, &len);
     String8 stemp = string(file.data, len);
@@ -211,11 +214,13 @@ get(&file, &field_name, size); \
     }
 #endif
     
+    // Load level size.
     get(&file, &lev->num_x);
     get(&file, &lev->num_y);
     get(&file, &lev->size_x);
     get(&file, &lev->size_y);
     
+    // Load player data.
     get(&file, &lev->player);
     
     s32 num_rows = lev->num_y*lev->size_y;
@@ -256,6 +261,16 @@ get(&file, &field_name, size); \
 
 FUNCTION b32 load_game()
 {
+#define RESTORE_FIELD(field, inclusion_version) \
+if (version >= (inclusion_version)) \
+get(&file, &field)
+#define IGNORE_FIELD(type, field_name, inclusion_version, removed_version) \
+do { \
+type field_name; \
+if (version >= (inclusion_version) && version < (removed_version)) \
+get(&file, &field_name); \
+} while(0)
+    
     Arena_Temp scratch = get_scratch(0, 0);
     String8 file = os->read_entire_file(sprint(scratch.arena, "%Ssave.dat", os->data_folder));
     free_scratch(scratch);
@@ -265,6 +280,10 @@ FUNCTION b32 load_game()
     }
     defer(os->free_file_memory(file.data));
     
+    s32 version = 0;
+    get(&file, &version);
+    
+    // Load level name and level itself.
     u32 name_length;
     get(&file, &name_length);
     String8 name = string(file.data, name_length);
@@ -273,11 +292,10 @@ FUNCTION b32 load_game()
     }
     advance(&file, name_length);
     
-    Settings s = {};
-    get(&file, &s);
-    os->fullscreen = s.fullscreen;
-    draw_grid      = s.draw_grid;
-    prompt_user_on_restart = s.prompt_user_on_restart;
+    // Load settings.
+    RESTORE_FIELD(os->fullscreen, SaveFileVersion_INIT);
+    RESTORE_FIELD(draw_grid, SaveFileVersion_INIT);
+    RESTORE_FIELD(prompt_user_on_restart, SaveFileVersion_INIT);
     
     game_started = true;
     return true;
@@ -461,28 +479,6 @@ FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
     }
 }
 
-FUNCTION void bake_next_level_in_teleporter()
-{
-    for (s32 y = 0; y < SIZE_Y*NUM_Y; y++) {
-        for (s32 x = 0; x < SIZE_X*NUM_X; x++) {
-            Obj o = objmap[y][x];
-            if (o.type == T_TELEPORTER) {
-                u8 current_level_index = 0;
-                for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
-                    if (level_names[i] == game->loaded_level.name) {
-                        current_level_index = (u8)i;
-                        break;
-                    }
-                }
-                ASSERT(current_level_index != 0);
-                
-                u8 next = (current_level_index + 1) % ARRAY_COUNT(level_names);
-                objmap[y][x].color[0] = next;
-            }
-        }
-    }
-}
-
 FUNCTION void do_editor(b32 is_first_call)
 {
     ImGuiIO& io      = ImGui::GetIO();
@@ -512,9 +508,7 @@ FUNCTION void do_editor(b32 is_first_call)
                     if (!load_level(level_names[selected_level])) {
                         resize_current_level(1, 1, 8, 8);
                         make_empty_level();
-                    } else {
-                        bake_next_level_in_teleporter();
-                    }
+                    } 
                     
                     num_x = NUM_X, num_y = NUM_Y, size_x = SIZE_X, size_y = SIZE_Y;
                 }
@@ -691,25 +685,6 @@ FUNCTION void do_editor(b32 is_first_call)
             
             if (game->selected_tile_or_obj == T_DOOR) {
                 ImGui::SliderInt("Number of detectors required", &game->num_detectors_required, 1, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
-            }
-            
-            if (game->selected_tile_or_obj == T_TELEPORTER) {
-                ImGui::SameLine(0, ImGui::GetFrameHeight());
-                // Select level.
-                const char* combo_preview_value = (const char*)level_names[game->level_teleport_to].data;
-                if(ImGui::BeginListBox("Teleport to")) {
-                    for(int name_index = 0; name_index < IM_ARRAYSIZE(level_names); name_index++) {
-                        const bool is_selected = (game->level_teleport_to == name_index);
-                        if(ImGui::Selectable((const char*)level_names[name_index].data, is_selected)) {
-                            game->level_teleport_to = (u8)name_index;
-                        }
-                        
-                        // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-                        if(is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndListBox();
-                }
             }
         }
     }
@@ -1038,6 +1013,21 @@ FUNCTION void flip_room_vertically()
 }
 #endif
 
+FUNCTION void load_next_level()
+{
+    s32 current_level_index = 0;
+    for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
+        if (level_names[i] == game->loaded_level.name) {
+            current_level_index = i;
+            break;
+        }
+    }
+    ASSERT(current_level_index != 0);
+    
+    if ((current_level_index + 1) < ARRAY_COUNT(level_names))
+        load_level(level_names[current_level_index + 1]);
+}
+
 FUNCTION u8 mix_colors(u8 cur, u8 src)
 {
     if (cur == Color_WHITE)
@@ -1323,7 +1313,7 @@ FUNCTION void update_world()
     if (player_is_at_rest()) {
         Obj o = objmap[py][px];
         if (o.type == T_TELEPORTER) {
-            load_level(level_names[o.color[0]]);
+            load_next_level();
         }
     }
     
@@ -1488,9 +1478,7 @@ FUNCTION void update_world()
     // Clear colors for all objs (except ones that use it specially).
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            if (objmap[y][x].type == T_TELEPORTER)
-                continue;
-            else if (objmap[y][x].type == T_DOOR || objmap[y][x].type == T_DOOR_OPEN)
+            if (objmap[y][x].type == T_DOOR || objmap[y][x].type == T_DOOR_OPEN)
                 objmap[y][x].color[1] = 0;
             else
                 MEMORY_ZERO_ARRAY(objmap[y][x].color);
@@ -1618,10 +1606,6 @@ FUNCTION void update_editor()
                     if (game->selected_tile_or_obj == T_DOOR) {
                         objmap[my][mx].color[0] = (u8)game->num_detectors_required;
                     }
-                    
-                    if (game->selected_tile_or_obj == T_TELEPORTER) {
-                        objmap[my][mx].color[0] = game->level_teleport_to;
-                    }
                 }
             }
         }
@@ -1732,7 +1716,7 @@ FUNCTION void update_menus()
                         selection      = 0;
                     } break;
                     case 4: { 
-                        // Quit.
+                        // Save and Quit.
                         //if (dead)
                         //undo_next(&undo_handler);
                         save_game();
@@ -1793,7 +1777,7 @@ FUNCTION void update_menus()
                             selection = 1;
                     } break;
                     case 5: { 
-                        // Quit.
+                        // Save and Quit.
                         //if (dead)
                         //undo_next(&undo_handler);
                         save_game();
@@ -1966,13 +1950,13 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
 {
     Texture *texture = &tex;
     
-    // Offsetting uv-coords with 0.05f to avoid texture bleeding.
+    // Shrink the uv rect to have padding around sprites to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 0.05f) / texture->width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 0.05f) / texture->height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 0.05f) / texture->width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 0.05f) / texture->height;
+    f32 u0 = (((s + 0) * TILE_SIZE) + 0.5f) / texture->width;
+    f32 v0 = (((t + 0) * TILE_SIZE) + 0.5f) / texture->height;
+    f32 u1 = (((s + 1) * TILE_SIZE) - 0.5f) / texture->width;
+    f32 v1 = (((t + 1) * TILE_SIZE) - 0.5f) / texture->height;
     
     if (invert_x) 
         SWAP(u0, u1, f32);
@@ -1990,7 +1974,9 @@ FUNCTION void draw_sprite_text(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *col
     // @Note: We use this for text because we draw text with top_left position instead of center.
     // i.e. we call immediate_rect_tl().
     
-    // Offsetting uv-coords with 0.05f to avoid texture bleeding.
+    // @Todo: TrueType (.ttf) text rendering.
+    
+    // Shrink the uv rect to have padding around sprites to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
     f32 u0 = (((s + 0) * FONT_TILE_W) + 0.05f) / font_tex.width;
@@ -2287,7 +2273,7 @@ FUNCTION void draw_world()
     if(current_mode == M_EDITOR)
     {
         bool show_demo_window = true;
-        ImGui::ShowDemoWindow(&show_demo_window);
+        //ImGui::ShowDemoWindow(&show_demo_window);
         do_editor(key_pressed(Key_F1));
     }
 #endif
@@ -2381,7 +2367,7 @@ FUNCTION void draw_menus()
             draw_button("START NEW GAME",    &p, 1, (selection == 1));
             draw_button("SETTINGS",          &p, 1, (selection == 2));
             draw_button("CONTROLS",          &p, 1, (selection == 3));
-            draw_button("QUIT",              &p, 1, (selection == 4));
+            draw_button("SAVE AND QUIT",              &p, 1, (selection == 4));
 #if DEVELOPER
             draw_button("EMPTY LEVEL",       &p, 1, (selection == 5));
 #endif
@@ -2393,7 +2379,7 @@ FUNCTION void draw_menus()
             draw_button("SETTINGS",          &p, 1, (selection == 2));
             draw_button("CONTROLS",          &p, 1, (selection == 3));
             draw_button("BACK TO MAIN MENU", &p, 1, (selection == 4));
-            draw_button("QUIT",              &p, 1, (selection == 5));
+            draw_button("SAVE AND QUIT",              &p, 1, (selection == 5));
         } break;
         case SETTINGS: {
             V2 p = v2(0.1f*w, 0.3333f*h);

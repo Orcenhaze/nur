@@ -226,8 +226,6 @@ struct Obj
     //         color[1] is used every frame as counter of number of detectors currently lit.
     //         color[1] must be cleared every frame before we update the doors and detectors.
     //
-    // T_TELEPORTER: color[0] is level index to load once we step on the teleporter.
-    //
     u8 color[8];
     u8 flags;
     u8 type;
@@ -241,20 +239,10 @@ struct Player
     u8 dir;
 };
 
-
-struct Settings
-{
-    // Not gonna use flags because meh.
-    b32 fullscreen;
-    b32 draw_grid;
-    b32 prompt_user_on_restart;
-};
-
 ////////////////////////////////
 ////////////////////////////////
 // Global current state.
 //
-
 // current_level metadata (we're storing each field independently).
 GLOBAL Arena *current_level_arena;
 GLOBAL s32 NUM_X;
@@ -309,6 +297,7 @@ GLOBAL String8 level_names[] =
     S8LIT("red_intro"),
     S8LIT("splitter_intro"),
     S8LIT("teach_rotation"),
+    S8LIT("block_the_source"),
     S8LIT("mirror_first_challenge"),
     
     S8LIT("primary_mixing_intro"),
@@ -319,7 +308,6 @@ GLOBAL String8 level_names[] =
     S8LIT("mirror_bender_relationship1"),
     S8LIT("mirror_bender_relationship2"),
     
-    S8LIT("block_the_source"),
     S8LIT("bender_red"),
     S8LIT("bender_locked_red"),
     S8LIT("bender_locked_red_double"),
@@ -365,6 +353,21 @@ GLOBAL String8 level_names[] =
     S8LIT("loop_hard"),
 };
 #endif
+
+enum 
+{
+    SaveFileVersion_INIT,
+    
+    SaveFileVersion_COUNT,
+};
+
+struct Settings
+{
+    // Not gonna use flags because meh.
+    b32 fullscreen;
+    b32 draw_grid;
+    b32 prompt_user_on_restart;
+};
 
 enum
 {
@@ -427,8 +430,6 @@ struct Particle_Emitter
     // @Todo: Add own Random_PCG.
 };
 
-
-
 struct Game_State
 {
     Arena *loaded_level_arena;
@@ -451,7 +452,6 @@ struct Game_State
     s32 selected_color;
     s32 selected_flag;
     s32 num_detectors_required;
-    u8  level_teleport_to;
 #endif
 };
 GLOBAL Game_State *game;

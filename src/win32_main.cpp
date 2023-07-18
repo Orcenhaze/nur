@@ -303,7 +303,7 @@ FUNCTION void win32_process_pending_messages(HWND window)
     }
 }
 
-LRESULT CALLBACK win32_main_window_callback(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+FUNCTION LRESULT CALLBACK win32_wndproc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
 #if DEVELOPER
     if (ImGui_ImplWin32_WndProcHandler(window, message, wparam, lparam))
@@ -313,6 +313,14 @@ LRESULT CALLBACK win32_main_window_callback(HWND window, UINT message, WPARAM wp
     LRESULT result = 0;
     
     switch (message) {
+        case WM_ACTIVATE:
+        case WM_ACTIVATEAPP: {
+            // Clear all key states.
+            MEMORY_ZERO_ARRAY(global_os.pressed);
+            MEMORY_ZERO_ARRAY(global_os.held);
+            MEMORY_ZERO_ARRAY(global_os.released);
+        } break;
+        
         case WM_CLOSE: 
         case WM_DESTROY:
         case WM_QUIT: {
@@ -416,7 +424,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     WNDCLASS window_class = {};
     
     window_class.style         = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
-    window_class.lpfnWndProc   = win32_main_window_callback;
+    window_class.lpfnWndProc   = win32_wndproc;
     window_class.hInstance     = instance;
     window_class.hCursor       = LoadCursor(0, IDC_ARROW);
     window_class.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
