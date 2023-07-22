@@ -272,8 +272,14 @@ GLOBAL f32 animation_timer;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite; GLOBAL u8 pcolor;
 GLOBAL b32 dead;
 
+// Level transition.
+#define LEVEL_TRANSITION_DURATION 0.65f
+GLOBAL f32 level_transition_timer;
+GLOBAL b32 is_loading_next_level;
+
 // Settings.
-GLOBAL b32 draw_grid;
+// Fullscreen from global os->fullscreen.
+GLOBAL b32 draw_grid = true;
 GLOBAL b32 prompt_user_on_restart = true;
 
 // Other state.

@@ -639,10 +639,11 @@ FUNCTION void set_texture(Texture *map)
         texture0 = white_texture.view;
 }
 
-FUNCTION void set_view_to_proj(f32 zoom)
+FUNCTION void set_view_to_proj()
 {
     f32 ar = (f32)os->render_size.w / (f32)os->render_size.h;
-    view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
+    //view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
+    view_to_proj_matrix = infinite_perspective(90.0f, ar, 0.1f);
 }
 
 FUNCTION void set_world_to_view(V3 camera_position)

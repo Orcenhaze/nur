@@ -5,19 +5,19 @@ FUNCTION void set_default_zoom()
     f32 render_ar = (f32)os->render_size.w / (f32)os->render_size.h;
     
     if (level_ar >= render_ar)
-        zoom_level = ((f32)SIZE_X + 1.0f) / (2.0f * render_ar);
+        zoom_level = (f32)SIZE_X / (2.0f * render_ar);
     else
-        zoom_level = ((f32)SIZE_Y + 1.0f) / (2.0f);
+        zoom_level = (f32)SIZE_Y / (2.0f * render_ar);
     
-    f32 padding_factor = 1.1f;
+    f32 padding_factor = 1.2f;
     zoom_level *= padding_factor;
     
-    set_view_to_proj(zoom_level);
+    set_view_to_proj();
 }
 
 FUNCTION void update_camera(b32 teleport = false)
 {
-    camera = v2((f32)(rx + SIZE_X/2), (f32)(ry + SIZE_Y/2));
+    camera = v2((f32)rx + 0.5f*(SIZE_X-1), (f32)ry + 0.5f*(SIZE_Y-1));
     if (teleport)
         camera_pos = camera;
 }
@@ -911,7 +911,7 @@ FUNCTION void game_init()
     
     set_default_zoom();
     update_camera(true);
-    set_world_to_view(v3(camera_pos, 0));
+    set_world_to_view(v3(camera_pos, zoom_level));
     
     undo_handler_init(&undo_handler);
 }
@@ -1015,17 +1015,28 @@ FUNCTION void flip_room_vertically()
 
 FUNCTION void load_next_level()
 {
-    s32 current_level_index = 0;
-    for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
-        if (level_names[i] == game->loaded_level.name) {
-            current_level_index = i;
-            break;
-        }
-    }
-    ASSERT(current_level_index != 0);
+    level_transition_timer = CLAMP_LOWER(level_transition_timer - os->dt, 0.0f);
     
-    if ((current_level_index + 1) < ARRAY_COUNT(level_names))
-        load_level(level_names[current_level_index + 1]);
+    // Transition animation.
+    // @Todo: Add post-processing effects here!
+    zoom_level += 0.8f;
+    
+    // Transition animation complete; load the level and stop calling this function.
+    if (level_transition_timer <= 0) {
+        s32 current_level_index = 0;
+        for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
+            if (level_names[i] == game->loaded_level.name) {
+                current_level_index = i;
+                break;
+            }
+        }
+        ASSERT(current_level_index != 0);
+        
+        if ((current_level_index + 1) < ARRAY_COUNT(level_names))
+            load_level(level_names[current_level_index + 1]);
+        
+        is_loading_next_level = false;
+    }
 }
 
 FUNCTION u8 mix_colors(u8 cur, u8 src)
@@ -1310,11 +1321,15 @@ FUNCTION void update_world()
     }
     
     // Load new level if we step on teleporter.
-    if (player_is_at_rest()) {
+    if (player_is_at_rest() && !is_loading_next_level) {
         Obj o = objmap[py][px];
         if (o.type == T_TELEPORTER) {
-            load_next_level();
+            level_transition_timer = LEVEL_TRANSITION_DURATION;
+            is_loading_next_level  = true;
         }
+    }
+    if (is_loading_next_level) {
+        load_next_level();
     }
     
     // Update player pos.
@@ -1567,7 +1582,8 @@ FUNCTION void update_editor()
     if(shift_held) {
         zoom_level += -0.45f*os->mouse_scroll.y;
         zoom_level  = CLAMP_LOWER(zoom_level, 0.01f);
-        set_view_to_proj(zoom_level);
+        set_world_to_view(v3(camera_pos, zoom_level));
+        
         if (length2(os->mouse_scroll) != 0) {
             print("zoom_level: %f\n", zoom_level);
         }
@@ -1943,7 +1959,7 @@ FUNCTION void game_update()
     }
     
     camera_pos = move_towards(camera_pos, camera, os->dt*30.0f);
-    set_world_to_view(v3(camera_pos, 0));
+    set_world_to_view(v3(camera_pos, zoom_level));
 }
 
 FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 invert_x = false)
@@ -2025,10 +2041,13 @@ FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a, f32 thickness = 0.03
 
 FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
 {
-    if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y))
-        return;
-    
     V2 src_pos = {(f32)src_x, (f32)src_y};
+    
+    if (is_outside_map(src_x + dirs[src_dir].x, src_y + dirs[src_dir].y)) {
+        V2 edge = src_pos + 0.5f*fdirs[src_dir];
+        draw_line(src_pos, edge, &colors[src_color], 1.0f);
+        return;
+    }
     
     u32 func_id = 0;
     func_id |= (src_x     & 0xFF) << 24;
