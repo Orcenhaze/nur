@@ -2,7 +2,7 @@
 #define GAME_H
 
 ////////////////////////////////
-// Game inputs.
+// Game inputs
 //
 #define MAX_BINDS_PER_INPUT 3
 
@@ -108,11 +108,57 @@ Texture tex;
 #define FONT_TILE_H 8
 Texture font_tex;
 
-Texture controls_tex;
+////////////////////////////////
+////////////////////////////////
+// Particles
+//
+
+enum Emitter_Texture_Slot
+{
+    SLOT0,
+    SLOT1,
+    SLOT2,
+    SLOT3,
+    
+    SLOT_COUNT
+};
+
+enum Particle_Type
+{
+    ParticleType_NONE,
+    
+    ParticleType_ROTATE,
+    ParticleType_WALK,
+};
+
+struct Particle
+{
+    V2  position;
+    V2  velocity;
+    V4  color;
+    f32 scale;
+    f32 life;
+    s32 type;
+    
+    // @Note: Emitters can store multiple textures and this tells us which texture to render for this particle.
+    Emitter_Texture_Slot slot;
+};
+
+struct Particle_Emitter
+{
+    Array<Particle> particles;
+    s32 amount;
+    
+    // @Cleanup: Maybe there's a better way to do this..?
+    Texture texture[SLOT_COUNT];
+    
+    // @Todo: Add own Random_PCG.
+};
 
 ////////////////////////////////
-
-
+////////////////////////////////
+// World
+//
 #define WRAP_D(d) (((d) + 8) % 8)
 enum
 {
@@ -241,7 +287,7 @@ struct Player
 
 ////////////////////////////////
 ////////////////////////////////
-// Global current state.
+// Global current state
 //
 // current_level metadata (we're storing each field independently).
 GLOBAL Arena *current_level_arena;
@@ -288,7 +334,8 @@ GLOBAL f32 zoom_level;
 
 ////////////////////////////////
 ////////////////////////////////
-
+// Levels
+//
 #if 0
 #include "levels.h"
 #else
@@ -392,48 +439,6 @@ struct Loaded_Level
     Player player;
     Obj **obj_map;
     u8  **tile_map;
-};
-
-enum Emitter_Texture_Slot
-{
-    SLOT0,
-    SLOT1,
-    SLOT2,
-    SLOT3,
-    
-    SLOT_COUNT
-};
-
-enum Particle_Type
-{
-    ParticleType_NONE,
-    
-    ParticleType_ROTATE,
-    ParticleType_WALK,
-};
-
-struct Particle
-{
-    V2  position;
-    V2  velocity;
-    V4  color;
-    f32 scale;
-    f32 life;
-    s32 type;
-    
-    // @Note: Emitters can store multiple textures and this tells us which texture to render for this particle.
-    Emitter_Texture_Slot slot;
-};
-
-struct Particle_Emitter
-{
-    Array<Particle> particles;
-    s32 amount;
-    
-    // @Cleanup: Maybe there's a better way to do this..?
-    Texture texture[SLOT_COUNT];
-    
-    // @Todo: Add own Random_PCG.
 };
 
 struct Game_State

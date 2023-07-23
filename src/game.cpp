@@ -93,8 +93,9 @@ FUNCTION void save_game()
     
     sb_append(&sb, &s, sizeof(Settings));
     
+    Arena *a           = os->permanent_arena;
     Arena_Temp scratch = get_scratch(0, 0);
-    os->write_entire_file(sprint(scratch.arena, "%Ssave.dat", os->data_folder), sb_to_string(&sb));
+    os->write_entire_file(sprint(scratch.arena, "%Ssave.dat", os->data_folder), sb_to_string(&sb, a));
     free_scratch(scratch);
 }
 
@@ -204,7 +205,7 @@ get(&file, &field_name, size); \
     String8 stemp = string(file.data, len);
     advance(&file, len);
     //advance(&file, len + 1); // Account for null terminator.
-    lev->name = string_copy(stemp);
+    lev->name = string_copy(os->permanent_arena, stemp);
     
 #if DEVELOPER
     if (lev->name != level_name) {
@@ -385,8 +386,9 @@ FUNCTION b32 save_level(String8 level_name)
         }
     }
     
+    Arena *a           = os->permanent_arena;
     Arena_Temp scratch = get_scratch(0, 0);
-    b32 result = os->write_entire_file(sprint(scratch.arena, "%Slevels/%S.nlf", os->data_folder, level_name), sb_to_string(&sb));
+    b32 result = os->write_entire_file(sprint(scratch.arena, "%Slevels/%S.nlf", os->data_folder, level_name), sb_to_string(&sb, a));
     free_scratch(scratch);
     
     return result;
@@ -2371,6 +2373,18 @@ FUNCTION void draw_menus()
     immediate_vertex(v2(w, 0), v2(1, 0), c2); // Top-right.
     immediate_vertex(v2(0, 0), v2(0, 0), c3); // Top-left.
     immediate_end();
+    
+    
+    ////////////////////////////////
+    ////////////////////////////////
+    // @Note: Test ttf rendering.
+    immediate_begin();
+    set_texture(&font_cabal.atlas);
+    is_using_pixel_coords = true;
+    immediate_text(&font_cabal, v2(w/2, h/2), 18, v4(1), "Cabal");
+    immediate_end();
+    ////////////////////////////////
+    ////////////////////////////////
     
     
     immediate_begin();

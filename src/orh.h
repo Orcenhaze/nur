@@ -1,4 +1,4 @@
-/* orh.h - v0.55 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.56 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.56 - added arena_push_set() and PUSH_ARRAY_SET.
 0.55 - added pow() for V2 and V3.
 0.54 - added random_next64() and random_nextd().
 0.53 - added random_rangef().
@@ -1009,14 +1010,15 @@ FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, ma
 #define ALIGN_UP(x, pow2)   (((x) + ((pow2) - 1)) & ~((pow2) - 1))
 #define ALIGN_DOWN(x, pow2) ( (x)                 & ~((pow2) - 1))
 
-#define PUSH_STRUCT(arena, T)        ((T *) arena_push(arena, sizeof(T)))
-#define PUSH_STRUCT_ZERO(arena, T)   ((T *) arena_push_zero(arena, sizeof(T)))
-#define PUSH_ARRAY(arena, T, c)      ((T *) arena_push(arena, sizeof(T) * (c)))
-#define PUSH_ARRAY_ZERO(arena, T, c) ((T *) arena_push_zero(arena, sizeof(T) * (c)))
-#define MEMORY_ZERO(m, z)            memory_set(m, 0, z)
-#define MEMORY_ZERO_STRUCT(s)        memory_set(s, 0, sizeof(*(s)))
-#define MEMORY_ZERO_ARRAY(a)         memory_set(a, 0, sizeof(a))
-#define MEMORY_COPY_STRUCT(d, s)     memory_copy(d, s, sizeof(*(d)));
+#define PUSH_STRUCT(arena, T)          ((T *) arena_push(arena, sizeof(T)))
+#define PUSH_STRUCT_ZERO(arena, T)     ((T *) arena_push_zero(arena, sizeof(T)))
+#define PUSH_ARRAY(arena, T, c)        ((T *) arena_push(arena, sizeof(T) * (c)))
+#define PUSH_ARRAY_ZERO(arena, T, c)   ((T *) arena_push_zero(arena, sizeof(T) * (c)))
+#define PUSH_ARRAY_SET(arena, T, c, v) ((T *) arena_push_set(arena, sizeof(T) * (c), v))
+#define MEMORY_ZERO(m, z)              memory_set(m, 0, z)
+#define MEMORY_ZERO_STRUCT(s)          memory_set(s, 0, sizeof(*(s)))
+#define MEMORY_ZERO_ARRAY(a)           memory_set(a, 0, sizeof(a))
+#define MEMORY_COPY_STRUCT(d, s)       memory_copy(d, s, sizeof(*(d)));
 
 #define ARENA_MAX_DEFAULT GIGABYTES(8)
 #define ARENA_COMMIT_SIZE KILOBYTES(4)
@@ -1040,6 +1042,7 @@ FUNCDEF Arena*     arena_init(u64 max_size = ARENA_MAX_DEFAULT);
 FUNCDEF void       arena_free(Arena *arena);
 FUNCDEF void*      arena_push(Arena *arena, u64 size);
 FUNCDEF void*      arena_push_zero(Arena *arena, u64 size);
+FUNCDEF void*      arena_push_set(Arena *arena, u64 size, s32 value);
 FUNCDEF void       arena_pop(Arena *arena, u64 size);
 FUNCDEF void       arena_reset(Arena *arena);
 FUNCDEF Arena_Temp arena_temp_begin(Arena *arena);
@@ -1075,8 +1078,8 @@ struct String8
 FUNCDEF String8    string(u8 *data, u64 count);
 FUNCDEF String8    string(const char *c_string);
 FUNCDEF u64        string_length(const char *c_string);
-FUNCDEF String8    string_copy(String8 s, Arena *arena = 0);
-FUNCDEF String8    string_cat(String8 a, String8 b, Arena *arena = 0);
+FUNCDEF String8    string_copy(Arena *arena, String8 s);
+FUNCDEF String8    string_cat(Arena *arena, String8 a, String8 b);
 FUNCDEF inline b32 string_empty(String8 s);
 FUNCDEF b32        string_match(String8 a, String8 b);
 
@@ -1132,10 +1135,6 @@ FUNCDEF u64     ascii_to_u64(char **at);
 FUNCDEF u64     string_format_list(char *dest_start, u64 dest_count, const char *format, va_list arg_list);
 FUNCDEF u64     string_format(char *dest_start, u64 dest_count, const char *format, ...);
 FUNCDEF void    print(const char *format, ...);
-
-// @Note: The sprint() function allocates memory; it is split into two versions: either
-//        pass an arena explicitly, or automatically use the default os->permanent_arena.
-FUNCDEF String8 sprint(const char *format, ...);
 FUNCDEF String8 sprint(Arena *arena, const char *format, ...);
 
 /////////////////////////////////////////
@@ -1159,7 +1158,7 @@ FUNCDEF void           sb_free(String_Builder *builder);
 FUNCDEF void           sb_reset(String_Builder *builder);
 FUNCDEF void           sb_append(String_Builder *builder, void *data, u64 size);
 FUNCDEF void           sb_appendf(String_Builder *builder, char *format, ...);
-FUNCDEF String8        sb_to_string(String_Builder *builder, Arena *arena = 0);
+FUNCDEF String8        sb_to_string(String_Builder *builder, Arena *arena);
 template<typename T>
 void sb_append(String_Builder *builder, T *data)
 {
@@ -3100,6 +3099,12 @@ void* arena_push_zero(Arena *arena, u64 size)
     MEMORY_ZERO(result, size);
     return result;
 }
+void* arena_push_set(Arena *arena, u64 size, s32 value)
+{
+    void *result = arena_push(arena, size);
+    memory_set(result, value, size);
+    return result;
+}
 void arena_pop(Arena *arena, u64 size)
 {
     // @Todo: Decommit memory.
@@ -3175,10 +3180,8 @@ u64 string_length(const char *c_string)
     while (*c_string++) result++;
     return result;
 }
-String8 string_copy(String8 s, Arena *arena /*= 0*/)
+String8 string_copy(Arena *arena, String8 s)
 {
-    arena = (arena? arena : os->permanent_arena);
-    
     String8 result;
     result.count = s.count;
     result.data  = PUSH_ARRAY(arena, u8, result.count + 1);
@@ -3186,7 +3189,7 @@ String8 string_copy(String8 s, Arena *arena /*= 0*/)
     result.data[result.count] = 0;
     return result;
 }
-String8 string_cat(String8 a, String8 b, Arena *arena /*= 0*/)
+String8 string_cat(Arena *arena, String8 a, String8 b)
 {
     arena = (arena? arena : os->permanent_arena);
     
@@ -3509,20 +3512,6 @@ u64 string_format(char *dest_start, u64 dest_count, const char *format, ...)
     
     return result;
 }
-String8 sprint(const char *format, ...)
-{
-    char temp[4096];
-    String8 s = {};
-    
-    va_list arg_list;
-    va_start(arg_list, format);
-    s.data  = (u8 *) temp;
-    s.count = string_format_list(temp, sizeof(temp), format, arg_list);
-    va_end(arg_list);
-    
-    String8 result = string_copy(s, os->permanent_arena);
-    return result;
-}
 String8 sprint(Arena *arena, const char *format, ...)
 {
     char temp[4096];
@@ -3534,7 +3523,7 @@ String8 sprint(Arena *arena, const char *format, ...)
     s.count = string_format_list(temp, sizeof(temp), format, arg_list);
     va_end(arg_list);
     
-    String8 result = string_copy(s, arena);
+    String8 result = string_copy(arena, s);
     return result;
 }
 void print(const char *format, ...)
@@ -3601,7 +3590,7 @@ void sb_appendf(String_Builder *builder, char *format, ...)
     
     sb_append(builder, temp, size);
 }
-String8 sb_to_string(String_Builder *builder, Arena *arena /*= 0*/)
+String8 sb_to_string(String_Builder *builder, Arena *arena)
 {
     if (builder->buffer.count)
         builder->buffer.data[0] = 0;
@@ -3610,7 +3599,7 @@ String8 sb_to_string(String_Builder *builder, Arena *arena /*= 0*/)
         builder->length--;
     }
     
-    String8 result = string_copy(string(builder->start, builder->length), arena);
+    String8 result = string_copy(arena, string(builder->start, builder->length));
     return result;
 }
 

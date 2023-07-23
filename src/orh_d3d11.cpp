@@ -31,6 +31,16 @@ linear --> sRGB:     pow(color, 1.0/2.2)    make numbers bigger.
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
+#if !defined(DEVELOPER)
+#    define STB_TRUETYPE_IMPLEMENTATION
+#    include "stb/stb_truetype.h"
+#endif
+
+#if DEVELOPER
+#    define STB_IMAGE_WRITE_IMPLEMENTATION
+#    include "stb/stb_image_write.h"
+#endif
+
 //
 // Window dimensions.
 //
@@ -78,6 +88,26 @@ struct Texture
     ID3D11ShaderResourceView *view;
 };
 GLOBAL Texture white_texture;
+
+//
+// Fonts.
+//
+struct Font
+{
+    String8 full_path;
+    Texture atlas;
+    s32    *sizes;
+    s32     sizes_count;
+    s32     first;
+    s32     w, h;
+    u8     *pixels; // Only R-channel (1 bpp).
+    
+    stbtt_fontinfo     info;
+    stbtt_pack_context pack_context;
+    stbtt_packedchar **char_data;
+    s32                char_count;
+};
+GLOBAL Font font_cabal;
 
 //
 // Common constant buffers.
@@ -146,40 +176,6 @@ GLOBAL ID3D11PixelShader  *particle_ps;
 ////////////////////////////////
 ////////////////////////////////
 
-FUNCTION void d3d11_compile_shader(String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC element_desc[], UINT element_count, ID3D11InputLayout **input_layout_out, ID3D11VertexShader **vs_out, ID3D11PixelShader **ps_out)
-{
-    String8 file = os->read_entire_file(hlsl_path);
-    
-    UINT flags = D3DCOMPILE_PACK_MATRIX_ROW_MAJOR | D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_WARNINGS_ARE_ERRORS;
-#if defined(_DEBUG)
-    flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-    flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
-#endif
-    
-    ID3DBlob *vs_blob = 0, *ps_blob = 0, *error_blob = 0;
-    HRESULT hr = D3DCompile(file.data, file.count, 0, 0, 0, "vs", "vs_5_0", flags, 0, &vs_blob, &error_blob);
-    if (FAILED(hr))  {
-        const char *message = (const char *) error_blob->GetBufferPointer();
-        OutputDebugStringA(message);
-        ASSERT(!"Failed to compile vertex shader!");
-    }
-    
-    hr = D3DCompile(file.data, file.count, 0, 0, 0, "ps", "ps_5_0", flags, 0, &ps_blob, &error_blob);
-    if (FAILED(hr))  {
-        const char *message = (const char *) error_blob->GetBufferPointer();
-        OutputDebugStringA(message);
-        ASSERT(!"Failed to compile pixel shader!");
-    }
-    
-    device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), 0, vs_out);
-    device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), 0, ps_out);
-    device->CreateInputLayout(element_desc, element_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout_out);
-    
-    vs_blob->Release(); ps_blob->Release();
-    os->free_file_memory(file.data);
-}
-
 FUNCTION void d3d11_load_texture(Texture *map, s32 w, s32 h, u8 *color_data)
 {
     if (!color_data)
@@ -243,6 +239,122 @@ FUNCTION void d3d11_load_texture(Texture *map, String8 full_path)
     }
     
     stbi_image_free(color_data);
+}
+
+FUNCTION void d3d11_load_font(Font *font, String8 full_path, s32 ascii_start, s32 ascii_end, s32 *sizes, s32 sizes_count)
+{
+    // @Note: From Wassimulator's SimplyRend. 
+    
+    font->full_path = full_path;
+    String8 file = os->read_entire_file(full_path);
+    defer(os->free_file_memory(file.data));
+    
+    stbtt_InitFont(&font->info, file.data, 0);
+    
+    s32 char_count   = ascii_end - ascii_start;
+    font->char_count = char_count;
+    
+    stbtt_pack_range *ranges = PUSH_ARRAY_ZERO(os->permanent_arena, stbtt_pack_range, sizes_count);
+    font->sizes              = PUSH_ARRAY_ZERO(os->permanent_arena, s32, sizes_count);
+    font->sizes_count        = sizes_count;
+    for (s32 i = 0; i < sizes_count; i++) {
+        ranges[i].font_size = (f32)sizes[i];
+        font->sizes[i]      = sizes[i];
+    }
+    
+    font->char_data = PUSH_ARRAY_ZERO(os->permanent_arena, stbtt_packedchar*, char_count * sizes_count);
+    for (s32 i = 0; i < sizes_count; i++) {
+        ranges[i].first_unicode_codepoint_in_range = ascii_start;
+        ranges[i].num_chars                        = char_count;
+        ranges[i].array_of_unicode_codepoints      = 0;
+        font->char_data[i]                         = PUSH_ARRAY_ZERO(os->permanent_arena, stbtt_packedchar, char_count + 1);
+        ranges[i].chardata_for_range               = font->char_data[i]; 
+    }
+    font->first = ascii_start;
+    
+    s32 w = 2000, h = 2000;
+    font->w = w;
+    font->h = h;
+    font->pixels = PUSH_ARRAY_ZERO(os->permanent_arena, u8, w * h);
+    stbtt_PackBegin(&font->pack_context, font->pixels, w, h, 0, 1, 0);
+    stbtt_PackSetOversampling(&font->pack_context, 1, 1);
+    stbtt_PackFontRanges(&font->pack_context, file.data, 0, ranges, sizes_count);
+    stbtt_PackEnd(&font->pack_context);
+    
+    // Could also use scratch arena for this, maybe?
+    u8 *pixels_rgba = PUSH_ARRAY_SET(os->permanent_arena, u8, w * h * 4, 1);
+    for (s32 i = 0; i < w * h; i++) {
+        pixels_rgba[i * 4 + 0] |= font->pixels[i];
+        pixels_rgba[i * 4 + 1] |= font->pixels[i];
+        pixels_rgba[i * 4 + 2] |= font->pixels[i];
+        pixels_rgba[i * 4 + 3] |= font->pixels[i];
+        
+        if (pixels_rgba[i * 4] == 0)
+            pixels_rgba[i * 4 + 3] = 0;
+    }
+    
+    d3d11_load_texture(&font->atlas, w, h, pixels_rgba);
+    
+#if DEVELOPER
+    Arena_Temp scratch = get_scratch(0, 0);
+    String8 target     = sprint(scratch.arena, "%Scabal_atlas.png", os->data_folder);
+    stbi_write_png((char*)target.data, w, h, 4, pixels_rgba, 0);
+    free_scratch(scratch);
+#endif
+}
+
+FUNCTION s32 find_font_size_index(Font *font, s32 size)
+{
+    s32 result = 0;
+    b32 found  = false;
+    
+    while (!found) {
+        for (s32 i = 0; i < font->sizes_count; i++) {
+            if (font->sizes[i] == size) {
+                found  = true;
+                result = i;
+            }
+        }
+        
+        size--;
+        size = CLAMP(font->sizes[0], size, 100);
+    }
+    
+    return result;
+}
+
+FUNCTION void d3d11_compile_shader(String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC element_desc[], UINT element_count, ID3D11InputLayout **input_layout_out, ID3D11VertexShader **vs_out, ID3D11PixelShader **ps_out)
+{
+    String8 file = os->read_entire_file(hlsl_path);
+    
+    UINT flags = D3DCOMPILE_PACK_MATRIX_ROW_MAJOR | D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_WARNINGS_ARE_ERRORS;
+#if defined(_DEBUG)
+    flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+    flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+#endif
+    
+    ID3DBlob *vs_blob = 0, *ps_blob = 0, *error_blob = 0;
+    HRESULT hr = D3DCompile(file.data, file.count, 0, 0, 0, "vs", "vs_5_0", flags, 0, &vs_blob, &error_blob);
+    if (FAILED(hr))  {
+        const char *message = (const char *) error_blob->GetBufferPointer();
+        OutputDebugStringA(message);
+        ASSERT(!"Failed to compile vertex shader!");
+    }
+    
+    hr = D3DCompile(file.data, file.count, 0, 0, 0, "ps", "ps_5_0", flags, 0, &ps_blob, &error_blob);
+    if (FAILED(hr))  {
+        const char *message = (const char *) error_blob->GetBufferPointer();
+        OutputDebugStringA(message);
+        ASSERT(!"Failed to compile pixel shader!");
+    }
+    
+    device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), 0, vs_out);
+    device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), 0, ps_out);
+    device->CreateInputLayout(element_desc, element_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout_out);
+    
+    vs_blob->Release(); ps_blob->Release();
+    os->free_file_memory(file.data);
 }
 
 FUNCTION void create_immediate_shader()
@@ -500,6 +612,16 @@ FUNCTION void d3d11_init(HWND window)
     {
         u8 data[] = {0xFF, 0xFF, 0xFF, 0xFF};
         d3d11_load_texture(&white_texture, 1, 1, data);
+    }
+    
+    //
+    // Default font.
+    {
+        Arena_Temp scratch = get_scratch(0, 0);
+        String8 font_path  = sprint(scratch.arena, "%Scabal.ttf", os->data_folder);
+        s32 sizes[] = {4, 8, 12, 16, 18, 20};
+        d3d11_load_font(&font_cabal, font_path, ' ', S8_MAX, sizes, ARRAY_COUNT(sizes));
+        free_scratch(scratch);
     }
     
     //
@@ -903,6 +1025,35 @@ FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 c
     V2 uv2 = v2(uv1.x, uv3.y);
     
     immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
+}
+
+FUNCTION void immediate_text(Font *font, V2 top_left, s32 size, V4 color, char *format, ...)
+{
+    // is_using_pixel_coords = true;
+    
+    char buff[256];
+    va_list arg_list;
+    va_start(arg_list, format);
+    u64 text_count = string_format_list(buff, sizeof(buff), format, arg_list);
+    va_end(arg_list);
+    
+    // Get corresponding index for passed size.
+    size = find_font_size_index(font, size);
+    f32 x = top_left.x;
+    f32 y = top_left.y; 
+    for (s32 i = 0; i < text_count; i++) {
+        s32 char_index      = buff[i] - font->first;
+        stbtt_packedchar d  = font->char_data[size][char_index];
+        
+        V2 uv_min = hadamard_div(v2((f32)d.x0, (f32)d.y0), v2((f32)font->w, (f32)font->h));
+        V2 uv_max = hadamard_div(v2((f32)d.x1, (f32)d.y1), v2((f32)font->w, (f32)font->h));
+        V2 s      = v2((f32)(d.x1 - d.x0), (f32)(d.y1 - d.y0));
+        V2 p      = v2(x + d.xoff, y + d.yoff);
+        
+        immediate_rect_tl(p, s, uv_min, uv_max, color);
+        
+        x += d.xadvance;
+    }
 }
 
 FUNCTION void immediate_line_2d(V2 p0, V2 p1, V4 color, f32 thickness = 0.1f)
