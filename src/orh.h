@@ -1,4 +1,4 @@
-/* orh.h - v0.56 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.57 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.57 - added [0-1] hsv() that gives us V4 rgba.
 0.56 - added arena_push_set() and PUSH_ARRAY_SET.
 0.55 - added pow() for V2 and V3.
 0.54 - added random_next64() and random_nextd().
@@ -628,6 +629,8 @@ FUNCDEF f32 repeat(f32 x, f32 max_y);
 FUNCDEF f32 ping_pong(f32 x, f32 max_y);
 
 FUNCDEF V3 bezier2(V3 p0, V3 p1, V3 p2, f32 t);
+
+FUNCDEF V4 hsv(f32 h, f32 s, f32 v);
 
 FUNCDEF M4x4_Inverse look_at(V3 pos, V3 at, V3 up);
 FUNCDEF M4x4_Inverse perspective(f32 fov, f32 aspect, f32 n, f32 f);
@@ -2738,6 +2741,42 @@ f32 ping_pong(f32 x, f32 max_y)
 V3 bezier2(V3 p0, V3 p1, V3 p2, f32 t)
 {
     V3 result = lerp(lerp(p0, t, p1), t, lerp(p1, t, p2));
+    return result;
+}
+
+V4 hsv(f32 h, f32 s, f32 v)
+{
+    // @Note: From Imgui.
+    //
+    
+    V4 result = {0, 0, 0, 1};
+    
+    if (s == 0.0f)
+    {
+        // Gray.
+        result = {v, v, v, 1};
+        return result;
+    }
+    
+    h     = _mod(h, 1.0f) / (60.0f / 360.0f);
+    s32 i = (s32)h;
+    f32 f = h - (f32)i;
+    f32 p = v * (1.0f - s);
+    f32 q = v * (1.0f - s * f);
+    f32 t = v * (1.0f - s * (1.0f - f));
+    
+    f32 r, g, b;
+    switch (i)
+    {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: default: r = v; g = p; b = q; break;
+    }
+    
+    result = {r, g, b, 1};
     return result;
 }
 

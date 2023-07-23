@@ -1269,7 +1269,7 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
 GLOBAL f32 move_hold_timer;
 GLOBAL s32 last_pressed;
 GLOBAL s32 queued_moves_count;
-GLOBAL V2s queued_moves[8]; // @Todo: Decrease max number of queued_moves.
+GLOBAL V2s queued_moves[8];
 
 #define UNDO_HOLD_DURATION 0.20f
 GLOBAL f32 undo_hold_timer;
@@ -1664,15 +1664,6 @@ FUNCTION inline void move_selection(s32 dir, s32 num_choices)
 
 FUNCTION void update_menus()
 {
-    // @Cleanup:
-    // @Cleanup:
-    // @Cleanup:
-    //
-    // @Todo: What if we put all choices in arrays?
-    // We need a way so that we only change the stuff once. Because at the moment if I add something 
-    // in one page, I have to update num_choices, and draw_menus, and make sure selection is correct,
-    // yada, yada, yada...
-    
     if (input_pressed(MOVE_UP))
         move_hold_timer = 0.0f;
     else if (input_pressed(MOVE_DOWN))
@@ -1987,46 +1978,6 @@ FUNCTION inline void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *c
     draw_spritef((f32)x, (f32)y, w, h, s, t, color, a);
 }
 
-FUNCTION void draw_sprite_text(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
-{
-    // @Note: We use this for text because we draw text with top_left position instead of center.
-    // i.e. we call immediate_rect_tl().
-    
-    // @Todo: TrueType (.ttf) text rendering.
-    
-    // Shrink the uv rect to have padding around sprites to avoid texture bleeding.
-    //
-    V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    f32 u0 = (((s + 0) * FONT_TILE_W) + 0.05f) / font_tex.width;
-    f32 v0 = (((t + 0) * FONT_TILE_H) + 0.05f) / font_tex.height;
-    f32 u1 = (((s + 1) * FONT_TILE_W) - 0.05f) / font_tex.width;
-    f32 v1 = (((t + 1) * FONT_TILE_H) - 0.05f) / font_tex.height;
-    
-    immediate_rect_tl(v2(x, y), v2(w, h), v2(u0, v0), v2(u1, v1), c);
-}
-GLOBAL char *font = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-?! ";
-FUNCTION s32 draw_text(V2 dest, f32 scale, V4 color, char *text)
-{
-    s32 top_left_x = (s32) dest.x;
-    s32 top_left_y = (s32) dest.y;
-    
-    while (*text) {
-        char *p = strchr(font, *text);
-        if (p) {
-            s32 ch = (s32)(p - font);
-            s32 s  = ch % (font_tex.width / FONT_TILE_W);
-            s32 t  = ch / (font_tex.width / FONT_TILE_W);
-            
-            draw_sprite_text((f32)top_left_x, (f32)top_left_y, FONT_TILE_W*scale, FONT_TILE_H*scale, s, t, &color, 1.0f);
-            top_left_x += (s32)(FONT_TILE_W * scale);
-        }
-        
-        text++;
-    }
-    
-    return top_left_x;
-}
-
 FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.035f)
 {
     V4 c     = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
@@ -2300,29 +2251,6 @@ FUNCTION void draw_world()
 #endif
 }
 
-FUNCTION void draw_button(char *text, V2 *p, f32 scale, b32 highlighed, b32 centered = false)
-{
-    V4 c_normal     = v4(0.8f, 0.5f, 0.8f, 1.0f);
-    V4 c_highlighed = v4(1.0f);
-    V4 color        = highlighed? c_highlighed : c_normal;
-    V2 dest         = *p;
-    
-    f32 w = get_width(os->drawing_rect);
-    f32 h = get_height(os->drawing_rect);
-    
-    // @Note: Multiply these values with pixels, so that pixel sizes scale with drawing_rect size.
-    f32 w_scale = w / os->render_size.w;
-    f32 h_scale = h / os->render_size.h;
-    
-    f32 final_scale = scale * w_scale * (highlighed? 5.0f : 4.0f);
-    if (centered)
-        dest.x = w/2 - (string_length(text) * FONT_TILE_W * 0.5f * final_scale);
-    
-    draw_text(dest, final_scale, color, text);
-    
-    p->y += (h_scale * 80);
-}
-
 FUNCTION void draw_menus()
 {
     b32 is_transparent_bg = false;
@@ -2335,19 +2263,9 @@ FUNCTION void draw_menus()
     if (is_transparent_bg)
         draw_world();
     
-    // @Cleanup:
-    // @Cleanup:
-    // @Cleanup:
-    //
-    // @Todo: We need truetype fonts!
-    // @Todo: When we add .ttf support, we should use size instead of scale.
-    
     f32 w = get_width(os->drawing_rect);
     f32 h = get_height(os->drawing_rect);
-    
-    // @Note: Multiply these values with pixels, so that pixel sizes scale with drawing_rect size.
-    f32 w_scale = w / os->render_size.w;
-    f32 h_scale = h / os->render_size.h;
+    f32 yadvance = 80 * (h / os->render_size.h);
     
     // Gradient background.
     immediate_begin();
@@ -2375,106 +2293,141 @@ FUNCTION void draw_menus()
     immediate_end();
     
     
-    ////////////////////////////////
-    ////////////////////////////////
-    // @Note: Test ttf rendering.
+    // Menu text.
     immediate_begin();
-    set_texture(&font_cabal.atlas);
-    is_using_pixel_coords = true;
-    immediate_text(&font_cabal, v2(w/2, h/2), 18, v4(1), "Cabal");
-    immediate_end();
-    ////////////////////////////////
-    ////////////////////////////////
-    
-    
-    immediate_begin();
-    set_texture(&font_tex);
+    set_texture(&consolas.atlas);
     is_using_pixel_coords = true;
     
     switch (page) {
         case MAIN_MENU: {
             V2 p = v2(0.1f*w, 0.3333f*h);
-            
-            if (game_started)
-                draw_button("CONTINUE",      &p, 1, (selection == 0));
-            draw_button("START NEW GAME",    &p, 1, (selection == 1));
-            draw_button("SETTINGS",          &p, 1, (selection == 2));
-            draw_button("CONTROLS",          &p, 1, (selection == 3));
-            draw_button("SAVE AND QUIT",              &p, 1, (selection == 4));
+            char *choices[] = 
+            {
+                "CONTINUE",
+                "START NEW GAME",
+                "SETTINGS",
+                "CONTROLS",
+                "SAVE AND QUIT",
 #if DEVELOPER
-            draw_button("EMPTY LEVEL",       &p, 1, (selection == 5));
+                "EMPTY LEVEL",
 #endif
+            };
+            
+            for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
+                if (!game_started && (i==0))
+                    continue;
+                
+                b32 highlighed = selection == i;
+                V4 color       = highlighed? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+                immediate_text(&consolas, p, 5, color, choices[i]);
+                p.y += yadvance;
+            }
         } break;
         case PAUSE: {
             V2 p = v2(0.1f*w, 0.3333f*h);
-            draw_button("CONTINUE",          &p, 1, (selection == 0));
-            draw_button("RESTART LEVEL",     &p, 1, (selection == 1));
-            draw_button("SETTINGS",          &p, 1, (selection == 2));
-            draw_button("CONTROLS",          &p, 1, (selection == 3));
-            draw_button("BACK TO MAIN MENU", &p, 1, (selection == 4));
-            draw_button("SAVE AND QUIT",              &p, 1, (selection == 5));
+            char *choices[] = 
+            {
+                "CONTINUE",
+                "RESTART LEVEL",
+                "SETTINGS",
+                "CONTROLS",
+                "BACK TO MAIN MENU",
+                "SAVE AND QUIT",
+            };
+            
+            for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
+                b32 highlighed = selection == i;
+                V4 color       = highlighed? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+                immediate_text(&consolas, p, 5, color, choices[i]);
+                p.y += yadvance;
+            }
         } break;
         case SETTINGS: {
             V2 p = v2(0.1f*w, 0.3333f*h);
-            draw_button("TOGGLE GRID",       &p, 1, (selection == 0));
-            draw_button("TOGGLE FULLSCREEN", &p, 1, (selection == 1));
-            draw_button("PROMPT ON RESTART", &p, 1, (selection == 2));
-            p.y += (s32)(h_scale * 80);
-            draw_button("BACK",              &p, 1, (selection == 3));
+            char *choices[] = 
+            {
+                "TOGGLE GRID",
+                "TOGGLE FULLSCREEN",
+                "PROMPT ON RESTART",
+                
+                "BACK",
+            };
             
-            // Mark setting state (T = true, F = false).
-            f32 scale = 4.0f * w_scale;
-            p = v2(0.5f*w, 0.3333f*h);
-            draw_text(p, scale, draw_grid? v4(0,1,0,1) : v4(1,0,0,1), draw_grid? "T" : "F");
-            p.y += (h_scale * 80);
-            draw_text(p, scale, os->fullscreen? v4(0,1,0,1) : v4(1,0,0,1), os->fullscreen? "T" : "F");
-            p.y += (h_scale * 80);
-            draw_text(p, scale, prompt_user_on_restart? v4(0,1,0,1) : v4(1,0,0,1), prompt_user_on_restart? "T" : "F");
-        } break;
-        case RESTART_CONFIRMATION: {
-            if (prompt_user_on_restart == false) {
-                break;
+            for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
+                b32 highlighed = selection == i;
+                V4 color       = highlighed? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+                immediate_text(&consolas, p, 5, color, choices[i]);
+                p.y += yadvance;
+                
+                if (i == ARRAY_COUNT(choices) - 2)
+                    p.y += yadvance;
             }
             
+            // Mark setting state (T = true, F = false).
+            p = v2(0.5f*w, 0.3333f*h);
+            immediate_text(&consolas, p, 5, draw_grid? v4(0,1,0,1) : v4(1,0,0,1), draw_grid? "T" : "F");
+            p.y += yadvance;
+            immediate_text(&consolas, p, 5, os->fullscreen? v4(0,1,0,1) : v4(1,0,0,1), os->fullscreen? "T" : "F");
+            p.y += yadvance;
+            immediate_text(&consolas, p, 5, prompt_user_on_restart? v4(0,1,0,1) : v4(1,0,0,1), prompt_user_on_restart? "T" : "F");
+        } break;
+        case RESTART_CONFIRMATION: {
+            if (prompt_user_on_restart == false)
+                break;
+            
+            V2 p = v2(0, h*0.25f);
+            
             char *text = "ARE YOU SURE YOU WANT TO RESTART?";
-            f32 scale  = 6.0f * w_scale;
-            f32 x      = w/2 - (string_length(text) * FONT_TILE_W * 0.5f * scale);
+            f32 text_w = get_text_width(&consolas, 5, text);
+            p.x        = w/2 - text_w*0.5f;
             V4 color   = v4(0.8f, 0.7f, 0.8f, 1.0f);
-            draw_text(v2(x, h*0.25f), scale, color, text);
+            immediate_text(&consolas, p, 5, color, text);
+            p.y       += yadvance;
             
             text       = "YOU CAN DISABLE THIS PROMPT IN SETTINGS";
-            scale      = 5.0f * w_scale;
-            x          = w/2 - (string_length(text) * FONT_TILE_W * 0.5f * scale);
-            color      = v4(0.8f, 0.8f, 0.8f, 1.0f);
-            draw_text(v2(x, h*0.25f + (80 * h_scale)), scale, color, text);
+            text_w     = get_text_width(&consolas, 5, text);
+            p.x        = w/2 - text_w*0.5f;
+            color      = v4(0.8f, 0.6f, 0.8f, 1.0f);
+            immediate_text(&consolas, p, 5, color, text);
+            p.y       += yadvance;
             
-            V2 p = v2(0, h*0.5f);
-            draw_button("YES", &p, 1, (selection == 0), true);
-            draw_button("NO",  &p, 1, (selection == 1), true);
+            p = v2(0, h*0.5f);
+            text       = "YES";
+            text_w     = get_text_width(&consolas, 5, text);
+            p.x        = w/2 - text_w*0.5f;
+            color      = (selection == 0)? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+            immediate_text(&consolas, p, 5, color, text);
+            p.y       += yadvance;
+            
+            text       = "NO";
+            text_w     = get_text_width(&consolas, 5, text);
+            p.x        = w/2 - text_w*0.5f;
+            color      = (selection == 1)? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+            immediate_text(&consolas, p, 5, color, text);
         } break;
         case CONTROLS: {
-            V2 p       = v2(0.1f*w, 0.3333f*h);
-            f32 scale  = 4.0f * w_scale;
-            V4 color   = v4(0.9f, 0.6f, 0.9f, 1.0f);
-            char *text = "WASD/ARROWS"; draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "Q E";         draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "Z";           draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "R";           draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "G";           draw_text(p, scale, color, text); p.y += (h_scale * 80);
+            V2 p = v2(0.1f*w, 0.3333f*h);
+            char *lines[] = 
+            {
+                "WASD/ARROW                MOVE",
+                "Q E                       ROTATE MIRRORS",
+                "Z                         UNDO",
+                "R                         RESTART LEVEL",
+                "G                         TOGGLE GRID",
+                
+                "BACK",
+            };
             
-            p.y  += (s32)(h_scale * 80);
-            draw_button("BACK",  &p, 1, (selection == 0));
-            
-            // Return cursor up and move right.
-            p          = v2(0.3333f*w, 0.3333f*h);
-            
-            text       = "MOVE";          draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "ROTATE MIRRORS COUNTER-CLOCKWISE OR CLOCKWISE"; draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "UNDO";          draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "RESTART LEVEL"; draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            text       = "TOGGLE GRID";   draw_text(p, scale, color, text); p.y += (h_scale * 80);
-            
-            
+            for (s32 i = 0; i < ARRAY_COUNT(lines); i++) {
+                V4 color = v4(0.9f, 0.6f, 0.9f, 1.0f);
+                if (i == ARRAY_COUNT(lines) - 1)
+                    color = v4(1);
+                immediate_text(&consolas, p, 5, color, lines[i]);
+                p.y += yadvance;
+                
+                if (i == ARRAY_COUNT(lines) - 2)
+                    p.y += yadvance;
+            }
         } break;
     }
     
