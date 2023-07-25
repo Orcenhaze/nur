@@ -28,6 +28,6 @@ REM "%~dp0" is the drive letter and path combined, of the batch file being execu
 pushd %~dp0
 IF NOT EXIST ..\build mkdir ..\build
 pushd ..\build
-cl %COMPILER_FLAGS% /I..\src\vendor -Fenur.exe ..\src\win32_main.cpp -Fmwin32_main.map /link /MANIFEST:EMBED /MANIFESTINPUT:nur.manifest /entry:WinMainCRTStartup /subsystem:windows %LINKER_FLAGS% 
+cl %COMPILER_FLAGS% /I..\src\vendor -Fenur.exe ..\src\win32_main.cpp -Fmwin32_main.map /link /MANIFEST:EMBED /MANIFESTINPUT:../src/nur.manifest /entry:WinMainCRTStartup /subsystem:windows %LINKER_FLAGS% 
 popd
 popd
