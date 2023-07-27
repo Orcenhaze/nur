@@ -1,0 +1,41 @@
+Playtesting.
+
+- Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
+- Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.
+- If all primary colored lasers are present in same level, it's possible to make white before player is introduced to the concept.
+
+Rename is_loading_level to something more accurate and if we restart level, set it to false and transition timer to 0.
+Make levels store index instead of level name.
+
+More hard levels.
+Overworld/(level select) and plot.
+	HandmadeHero E.221: Cutscenes.
+Art: Level transition effects + 128x128px tiles.
+
+
+
+Sound.
+
+
+Support controller.
+
+
+
+Implement simple CYCLE_COUNT_SCOPE() macro for instrumentation using _rdtsc().
+	https://guide.handmadehero.org/code/day112/
+	https://guide.handmadehero.org/code/day113/
+
+
+
+Simple package manager.
+Null-terminate strings when writing to files + convention.
+Don't load stuff from disk, allocate more memory, then copy. Instead, load stuff from disk, and simply point stuff into it, no need to copy. Once we load a package into memory, it should stay in memory for the lifetime of the program.
+
+
+
+Precompile hlsl shaders using fxc (look at how wcap does it).
+
+
+
+Make it good.
+Make it fast.
