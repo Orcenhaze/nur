@@ -137,7 +137,11 @@ FUNCTION void reload_map()
         }
     }
     
-    dead = false;
+    // Set default state.
+    dead                      = false;
+    is_teleporting            = false;
+    teleport_transition_timer = 0;
+    queued_moves_count        = 0;
     set_default_zoom();
     update_camera(true);
     undo_handler_reset(&undo_handler);
@@ -1017,14 +1021,14 @@ FUNCTION void flip_room_vertically()
 
 FUNCTION void load_next_level()
 {
-    level_transition_timer = CLAMP_LOWER(level_transition_timer - os->dt, 0.0f);
+    teleport_transition_timer = CLAMP_LOWER(teleport_transition_timer - os->dt, 0.0f);
     
     // Transition animation.
     // @Todo: Add post-processing effects here!
     zoom_level += 0.8f;
     
     // Transition animation complete; load the level and stop calling this function.
-    if (level_transition_timer <= 0) {
+    if (teleport_transition_timer <= 0) {
         s32 current_level_index = 0;
         for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
             if (level_names[i] == game->loaded_level.name) {
@@ -1037,7 +1041,7 @@ FUNCTION void load_next_level()
         if ((current_level_index + 1) < ARRAY_COUNT(level_names))
             load_level(level_names[current_level_index + 1]);
         
-        is_loading_next_level = false;
+        is_teleporting = false;
     }
 }
 
@@ -1265,16 +1269,6 @@ FUNCTION void move_player(s32 dir_x, s32 dir_y)
     obj_emitter_emit(5, ParticleType_WALK, SLOT3, ppos);
 }
 
-#define MOVE_HOLD_DURATION 0.20f
-GLOBAL f32 move_hold_timer;
-GLOBAL s32 last_pressed;
-GLOBAL s32 queued_moves_count;
-GLOBAL V2s queued_moves[8];
-
-#define UNDO_HOLD_DURATION 0.20f
-GLOBAL f32 undo_hold_timer;
-GLOBAL f32 undo_speed_scale;
-
 FUNCTION void update_world()
 {
     ////////////////////////////////
@@ -1289,7 +1283,6 @@ FUNCTION void update_world()
     if (input_pressed(RESTART_LEVEL)) {
         if (prompt_user_on_restart == false) {
             load_level(game->loaded_level.name);
-            queued_moves_count = 0;
         } else {
             current_mode = M_MENUS;
             page         = RESTART_CONFIRMATION;
@@ -1323,14 +1316,14 @@ FUNCTION void update_world()
     }
     
     // Load new level if we step on teleporter.
-    if (player_is_at_rest() && !is_loading_next_level) {
+    if (player_is_at_rest() && !is_teleporting) {
         Obj o = objmap[py][px];
         if (o.type == T_TELEPORTER) {
-            level_transition_timer = LEVEL_TRANSITION_DURATION;
-            is_loading_next_level  = true;
+            teleport_transition_timer = LEVEL_TRANSITION_DURATION;
+            is_teleporting            = true;
         }
     }
-    if (is_loading_next_level) {
+    if (is_teleporting) {
         load_next_level();
     }
     
@@ -1837,7 +1830,6 @@ FUNCTION void update_menus()
         case RESTART_CONFIRMATION: {
             if (prompt_user_on_restart == false) {
                 load_level(game->loaded_level.name);
-                queued_moves_count = 0;
                 current_mode = M_GAME;
                 break;
             }
@@ -1855,7 +1847,6 @@ FUNCTION void update_menus()
                     case 0: {
                         // Yes.
                         load_level(game->loaded_level.name);
-                        queued_moves_count = 0;
                         current_mode = M_GAME;
                     } break;
                     case 1: {

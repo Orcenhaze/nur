@@ -1,4 +1,4 @@
-/* orh.h - v0.57 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.58 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.58 - some fixes.
 0.57 - added [0-1] hsv() that gives us V4 rgba.
 0.56 - added arena_push_set() and PUSH_ARRAY_SET.
 0.55 - added pow() for V2 and V3.
@@ -250,6 +251,8 @@ typedef double             f64;
 #if COMPILER_CL
 #    define threadvar __declspec(thread)
 #elif COMPILER_CLANG
+#    define threadvar __thread
+#elif COMPILER_GCC
 #    define threadvar __thread
 #else
 #    error threadvar not defined for this compiler
@@ -696,19 +699,23 @@ inline V2 operator/(V2 v, f32 s)
 }
 inline V2& operator+=(V2 &a, V2 b) 
 { 
-    return (a = a + b);
+    a = a + b;
+    return a;
 }
 inline V2& operator-=(V2 &a, V2 b) 
 { 
-    return (a = a - b);
+    a = a - b;
+    return a;
 }
 inline V2& operator*=(V2 &v, f32 s)
 { 
-    return (v = v * s);
+    v = v * s;
+    return v;
 }
 inline V2& operator/=(V2 &v, f32 s)
 { 
-    return (v = v / s);
+    v = v / s;
+    return v;
 }
 
 inline V2s operator+(V2s v)         
@@ -743,11 +750,13 @@ inline V2s operator*(s32 s, V2s v)
 }
 inline V2s& operator+=(V2s &a, V2s b) 
 { 
-    return (a = a + b);
+    a = a + b;
+    return a;
 }
 inline V2s& operator-=(V2s &a, V2s b) 
 { 
-    return (a = a - b);
+    a = a - b;
+    return a;
 }
 inline b32 operator==(V2s a, V2s b)
 {
@@ -817,8 +826,8 @@ inline V3& operator*=(V3 &v, f32 s)
 }
 inline V3& operator/=(V3 &v, f32 s)
 { 
-    V3 result = (v = v / s);
-    return result;
+    v = v / s;
+    return v;
 }
 
 inline V4 operator+(V4 v)         
@@ -858,23 +867,23 @@ inline V4 operator/(V4 v, f32 s)
 }
 inline V4& operator+=(V4 &a, V4 b) 
 { 
-    V4 result = (a = a + b);
-    return result;
+    a = a + b;
+    return a;
 }
 inline V4& operator-=(V4 &a, V4 b) 
 { 
-    V4 result = (a = a - b);
-    return result;
+    a = a - b;
+    return a;
 }
 inline V4& operator*=(V4 &v, f32 s)
 { 
-    V4 result = (v = v * s);
-    return result;
+    v = v * s;
+    return v;
 }
 inline V4& operator/=(V4 &v, f32 s)
 { 
-    V4 result = (v = v / s);
-    return result;
+    v = v / s;
+    return v;
 }
 
 inline Quaternion operator+(Quaternion v)                
@@ -914,23 +923,23 @@ inline Quaternion operator/(Quaternion v, f32 s)
 }
 inline Quaternion& operator+=(Quaternion &a, Quaternion b)
 { 
-    Quaternion result = (a = a + b);
-    return result;
+    a = a + b;
+    return a;
 }
 inline Quaternion& operator-=(Quaternion &a, Quaternion b)
 { 
-    Quaternion result = (a = a - b);
-    return result;
+    a = a - b;
+    return a;
 }
 inline Quaternion& operator*=(Quaternion &v, f32 s)       
 { 
-    Quaternion result = (v = v * s);
-    return result;
+    v = v * s;
+    return v;
 }
 inline Quaternion& operator/=(Quaternion &v, f32 s)       
 { 
-    Quaternion result = (v = v / s);
-    return result;
+    v = v / s;
+    return v;
 }
 inline Quaternion operator*(Quaternion a, Quaternion b)
 { 
@@ -1069,9 +1078,9 @@ struct String8
     u8 *data;
     u64 count;
     
-    inline u8& operator[](s32 index)
+    inline u8& operator[](s64 index)
     {
-        ASSERT(index < count);
+        ASSERT(index < (s64)count);
         return data[index];
     }
 };
@@ -1100,6 +1109,7 @@ inline b32 operator!=(String8 lhs, String8 rhs)
 // String Helper Functions
 //
 FUNCDEF inline void advance(String8 *s, u64 count);
+FUNCDEF        void get(String8 *s, void *data, u64 size);
 FUNCDEF        u32  get_hash(String8 s);
 FUNCDEF inline b32  is_spacing(char c);
 FUNCDEF inline b32  is_end_of_line(char c);
@@ -1108,6 +1118,7 @@ FUNCDEF inline b32  is_alpha(char c);
 FUNCDEF inline b32  is_numeric(char c);
 FUNCDEF inline b32  is_alphanumeric(char c);
 FUNCDEF inline b32  is_file_separator(char c);
+
 template<typename T>
 void get(String8 *s, T *value)
 {
@@ -1115,13 +1126,6 @@ void get(String8 *s, T *value)
     
     memory_copy(value, s->data, sizeof(T));
     advance(s, sizeof(T));
-}
-void get(String8 *s, void *data, u64 size)
-{
-    ASSERT(size <= s->count);
-    
-    memory_copy(data, s->data, size);
-    advance(s, size);
 }
 
 /////////////////////////////////////////
@@ -3264,6 +3268,13 @@ void advance(String8 *s, u64 count)
     count     = CLAMP_UPPER(s->count, count);
     s->data  += count;
     s->count -= count;
+}
+void get(String8 *s, void *data, u64 size)
+{
+    ASSERT(size <= s->count);
+    
+    memory_copy(data, s->data, size);
+    advance(s, size);
 }
 u32 get_hash(String8 s)
 {

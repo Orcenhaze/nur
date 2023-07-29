@@ -4,7 +4,6 @@ Playtesting.
 - Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.
 - If all primary colored lasers are present in same level, it's possible to make white before player is introduced to the concept.
 
-Rename is_loading_level to something more accurate and if we restart level, set it to false and transition timer to 0.
 Make levels store index instead of level name.
 
 More hard levels.

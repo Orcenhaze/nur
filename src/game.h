@@ -318,10 +318,22 @@ GLOBAL f32 animation_timer;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite; GLOBAL u8 pcolor;
 GLOBAL b32 dead;
 
+// Movement
+#define MOVE_HOLD_DURATION 0.20f
+GLOBAL f32 move_hold_timer;
+GLOBAL s32 last_pressed;
+GLOBAL s32 queued_moves_count;
+GLOBAL V2s queued_moves[8];
+
+#define UNDO_HOLD_DURATION 0.20f
+GLOBAL f32 undo_hold_timer;
+GLOBAL f32 undo_speed_scale;
+
+
 // Level transition.
 #define LEVEL_TRANSITION_DURATION 0.65f
-GLOBAL f32 level_transition_timer;
-GLOBAL b32 is_loading_next_level;
+GLOBAL f32 teleport_transition_timer;
+GLOBAL b32 is_teleporting;
 
 // Settings.
 // Fullscreen from global os->fullscreen.
