@@ -1085,8 +1085,6 @@ struct String8
     }
 };
 
-// @Note: Functions with Arena argument will allocate memory. If you don't pass an Arena to
-//        these functions, it will default to allocating using os->permanent_arena.
 FUNCDEF String8    string(u8 *data, u64 count);
 FUNCDEF String8    string(const char *c_string);
 FUNCDEF u64        string_length(const char *c_string);
@@ -1571,7 +1569,7 @@ struct OS_State
     String8 data_folder;
     
     // Arenas.
-    Arena *permanent_arena; // Default arena.
+    Arena *permanent_arena;
     
     // User Input.
     Array<Queued_Input> inputs_to_process;
@@ -3234,8 +3232,6 @@ String8 string_copy(Arena *arena, String8 s)
 }
 String8 string_cat(Arena *arena, String8 a, String8 b)
 {
-    arena = (arena? arena : os->permanent_arena);
-    
     String8 result;
     result.count = a.count + b.count;
     result.data  = PUSH_ARRAY(arena, u8, result.count + 1);
