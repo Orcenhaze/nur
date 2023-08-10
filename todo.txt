@@ -1,37 +1,39 @@
-Playtesting.
 
+Features:
+- Sound (WASAPI).
+- Controller (XInput).
+- Level select.
+- Displaying layered cutscenes (HH E.221).
+- Simple package manager.
+- Simple instrumentation.
+
+Improvements:
+- Make levels store index instead of level name.
+
+Level design:
 - Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
 - Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.
 - If all primary colored lasers are present in same level, it's possible to make white before player is introduced to the concept.
+- Design more hard levels.
 
-Make levels store index instead of level name.
-
-More hard levels.
-Overworld/(level select) and plot.
-	HandmadeHero E.221: Cutscenes.
-Art: Level transition effects + 128x128px tiles.
-
-
-
-Sound.
+Art:
+- Layered cutscenes.
+- Level transition effects and shaders.
+- 128x128px tiles.
+- Shadows.
+- Writing: plot, dialogues and monologues.
 
 
-Support controller.
-
-
-
+About instrumentation:
 Implement simple CYCLE_COUNT_SCOPE() macro for instrumentation using _rdtsc().
-	https://guide.handmadehero.org/code/day112/
-	https://guide.handmadehero.org/code/day113/
+https://guide.handmadehero.org/code/day112/
+https://guide.handmadehero.org/code/day113/
 
-
-
-Simple package manager.
-Null-terminate strings when writing to files + convention.
+About simple package manager:
+Null-terminate strings when writing to files + establish convention.
 Don't load stuff from disk, allocate more memory, then copy. Instead, load stuff from disk, and simply point stuff into it, no need to copy. Once we load a package into memory, it should stay in memory for the lifetime of the program.
 
-
-
+Misc:
 Precompile hlsl shaders using fxc (look at how wcap does it).
 
 
