@@ -2383,14 +2383,12 @@ Quaternion quaternion_inverse(Quaternion q)
 }
 V3 quaternion_get_axis(Quaternion q)
 {
-    Quaternion n = normalize(q);
-    V3 result    = n.v / _sin(_arccos(q.w));
+    V3 result = normalize(q.v);
     return result;
 }
 f32 quaternion_get_angle(Quaternion q)
 {
-    f32 w      = q.w  / length(q);
-    f32 result = 2.0f * _arccos(w);
+    f32 result = _arctan2(length(q.v), q.w) * 2.0f;
     return result;
 }
 f32 quaternion_get_angle_turns(Quaternion q)
