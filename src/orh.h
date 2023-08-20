@@ -1,4 +1,4 @@
-/* orh.h - v0.58 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.59 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.59 - added audio output to OS_State.
 0.58 - some fixes.
 0.57 - added [0-1] hsv() that gives us V4 rgba.
 0.56 - added arena_push_set() and PUSH_ARRAY_SET.
@@ -360,7 +361,7 @@ auto GLUE(__defer_, __COUNTER__) = MakeDeferScope([&](){code;})
 #define ABS(x)    ((x) > 0 ? (x) : -(x))
 #define SIGN(x)   ((x) > 0 ?  1  :  -1 )
 
-#ifdef _MSC_VER
+#if COMPILER_CL
 #    pragma warning(push)
 #    pragma warning(disable:4201)
 #endif
@@ -459,7 +460,7 @@ struct M4x4_Inverse
 struct Range { f32 min, max; };
 struct Rect2 { V2  min, max; };
 struct Rect3 { V3  min, max; };
-#ifdef _MSC_VER
+#if COMPILER_CL
 #    pragma warning(pop)
 #endif
 
@@ -647,11 +648,11 @@ FUNCDEF void calculate_tangents(V3 normal, V3 *tangent_out, V3 *bitangent_out);
 //
 // Operator overloading
 //
-#if (defined(__GCC__) || defined(__GNUC__)) && !defined(__clang__)
+#if COMPILER_GCC
 #    pragma GCC diagnostic push
 #    pragma GCC diagnostic ignored "-Wattributes"
 #    pragma GCC diagnostic ignored "-Wmissing-braces"
-#elif __clang__
+#elif COMPILER_CLANG
 #    pragma clang diagnostic push
 #    pragma clang diagnostic ignored "-Wattributes"
 #    pragma clang diagnostic ignored "-Wmissing-braces"
@@ -985,9 +986,9 @@ inline M4x4 operator*(M4x4 a, M4x4 b)
     return result;
 }
 
-#if defined(__GCC__) || defined(__GNUC__)
+#if COMPILER_GCC
 #    pragma GCC diagnostic pop
-#elif defined(__clang__)
+#elif COMPILER_CLANG
 #    pragma clang diagnostic pop
 #endif
 
@@ -1037,18 +1038,18 @@ FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, ma
 
 #define ARENA_SCRATCH_COUNT 2
 
-typedef struct Arena
+struct Arena
 {
     u64 max;
     u64 used;
     u64 commit_used;
-} Arena;
+};
 
-typedef struct Arena_Temp
+struct Arena_Temp
 {
     Arena *arena;
     u64    used;
-} Arena_Temp;
+};
 
 FUNCDEF Arena*     arena_init(u64 max_size = ARENA_MAX_DEFAULT);
 FUNCDEF void       arena_free(Arena *arena);
@@ -1579,6 +1580,11 @@ struct OS_State
     V3  mouse_ndc;           // In [-1, 1] interval - relative to drawing_rect.
     V2  mouse_scroll;
     
+    // Audio Output.
+    f32 *samples_out;        // The sample data for multiple channels (interleaved) in range [-1, 1]. 
+    u32  samples_per_second;
+    u32  frames_to_write;    // Number of audio frames we want to write. 
+    
     // Options.
     volatile b32 exit;
     b32 fullscreen;
@@ -1621,11 +1627,11 @@ FUNCDEF V3    unproject(V3 camera_position, f32 Zworld_distance_from_camera, V3 
 //
 // Math Implementation
 //
-#if (defined(__GCC__) || defined(__GNUC__)) && !defined(__clang__)
+#if COMPILER_GCC
 #    pragma GCC diagnostic push
 #    pragma GCC diagnostic ignored "-Wattributes"
 #    pragma GCC diagnostic ignored "-Wmissing-braces"
-#elif __clang__
+#elif COMPILER_CLANG
 #    pragma clang diagnostic push
 #    pragma clang diagnostic ignored "-Wattributes"
 #    pragma clang diagnostic ignored "-Wmissing-braces"
@@ -1633,7 +1639,7 @@ FUNCDEF V3    unproject(V3 camera_position, f32 Zworld_distance_from_camera, V3 
 
 // @Todo: For now, <math.h> is included either way when using MSVC.
 #ifdef ORH_NO_STD_MATH
-#    ifdef _MSC_VER
+#    ifdef COMPILER_CL
 #include <math.h>
 f32 _pow(f32 x, f32 y)     
 {
@@ -2971,9 +2977,9 @@ void calculate_tangents(V3 normal, V3 *tangent_out, V3 *bitangent_out)
     *bitangent_out = normalize(cross(*tangent_out, normal));
 }
 
-#if defined(__GCC__) || defined(__GNUC__)
+#if COMPILER_GCC
 #    pragma GCC diagnostic pop
-#elif defined(__clang__)
+#elif COMPILER_CLANG
 #    pragma clang diagnostic pop
 #endif
 

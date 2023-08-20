@@ -27,6 +27,28 @@ GLOBAL char     global_exe_full_path[256];
 GLOBAL char     global_exe_parent_folder[256];
 GLOBAL char     global_data_folder[256];
 
+// @Todo: Place in separate win32_utils.cpp or something...
+//
+FUNCTION void win32_messagebox(char *title, char *format, ...)
+{
+    // @Todo: LOCAL_PERSIST and InterlockedExchange... why?
+    // Should we make this fatal error and ExitProcess()?
+    
+    // @Todo: Should not call string_format_list, instead use vsprintf()....
+    
+    char text[4096];
+    
+    va_list arg_list;
+    va_start(arg_list, format);
+    string_format_list(text, sizeof(text), format, arg_list);
+    
+    MessageBoxA(0, text, title, MB_OK);
+}
+
+//#include "win32_utils.cpp"
+#include "win32_wasapi.cpp"
+//#include "win32_xinput.cpp"
+
 inline LARGE_INTEGER win32_qpc()
 {
     LARGE_INTEGER result;
@@ -181,6 +203,8 @@ FUNCTION void win32_build_paths()
     memory_copy(global_exe_parent_folder, global_exe_full_path, one_past_slash - global_exe_full_path);
     
     // @Todo: On release we may need to change what to append.
+    // A better solution is to always use data straight away instead of ..\\data\\ and simply
+    // copy the entire data folder to build/ and ship that folder minus any intermediates.
     //
     string_format(global_data_folder, sizeof(global_data_folder), "%s..\\data\\", global_exe_parent_folder);
 }
@@ -432,8 +456,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     window_class.lpszClassName = "MainWindowClass";
     
     if (!RegisterClassA(&window_class)) {
-        OutputDebugStringA("OS Error: WinMain() RegisterClassA() failed!\n");
-        MessageBox(0, "Couldn't register window class.\n", 0, 0);
+        win32_messagebox("OS Fatal Error", "Could not register window class.");
         return 0;
     }
     
@@ -453,8 +476,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                                  0);
     
     if (!window) {
-        OutputDebugStringA("OS Error: WinMain() CreateWindowEx() failed!\n");
-        MessageBox(0, "Couldn't create window.\n", 0, 0);
+        win32_messagebox("OS Fatal Error", "Window creation failed.");
         return 0;
     }
     
@@ -465,6 +487,18 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     // @Todo: Show cursor when we hover on window borders.
     ShowCursor(false);
 #endif
+    
+    /////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////
+    
+    //
+    // Initialize sound.
+    Win32_Sound_Output win32_sound_output = {};
+    win32_sound_output.samples_per_second  = 48000;
+    win32_sound_output.channels            = 2;
+    win32_sound_output.latency_frame_count = 48000;
+    win32_wasapi_load();
+    win32_wasapi_init(&win32_sound_output);
     
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
@@ -522,6 +556,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         
         // User Input.
         array_init(&global_os.inputs_to_process);
+        
+        // Audio Output.
+        global_os.samples_out = (f32 *) VirtualAlloc(0, 
+                                                     win32_sound_output.samples_per_second * sizeof(f32) * win32_sound_output.channels,
+                                                     MEM_RESERVE|MEM_COMMIT,
+                                                     PAGE_READWRITE);
+        global_os.samples_per_second = win32_sound_output.samples_per_second;
     }
     
     /////////////////////////////////////////////////////
@@ -593,10 +634,40 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             b32 last_fullscreen = global_os.fullscreen;
             win32_process_inputs(window);
             game_update();
-            accumulator -= os->dt;
-            os->time    += os->dt;
             if (last_fullscreen != global_os.fullscreen)
                 win32_toggle_fullscreen(window);
+            
+            // Find how much sound to write.
+            if (win32_sound_output.initialized) {
+                
+                // Calculate new amount every frame.
+                global_os.frames_to_write = 0;
+                
+                u32 padding_frames;
+                HRESULT hr = win32_sound_output.audio_client->GetCurrentPadding(&padding_frames);
+                if (SUCCEEDED(hr)) {
+                    global_os.frames_to_write = CLAMP_UPPER(win32_sound_output.latency_frame_count, win32_sound_output.latency_frame_count - padding_frames);
+                }
+                
+                // @Todo: Fix this! Where does (accum > os->dt) fit into this?
+                f32 *s = global_os.samples_out;
+                for (u32 i = 0; i < win32_sound_output.samples_per_second; i++) {
+                    f32 t  = (f32)i/win32_sound_output.samples_per_second;
+                    f32 hz = 261.0f;
+                    
+                    f32 amplitude = _sin(TAU32 * t * hz);
+                    
+                    *s++ = amplitude;
+                    *s++ = amplitude;
+                }
+            }
+            
+            // @Todo: Need to signal event, look at how minimal WASAPI does it.
+            // Fill sound buffer with game sound.
+            win32_fill_sound_buffer(&win32_sound_output, global_os.frames_to_write, global_os.samples_out);
+            
+            accumulator -= os->dt;
+            os->time    += os->dt;
             //num_updates_this_frame++;
         }
         
