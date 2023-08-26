@@ -873,6 +873,9 @@ FUNCTION void obj_emitter_draw_particles()
     }
 }
 
+// @Todo: Sound manger.
+GLOBAL Sound sound0;
+GLOBAL Sound sound1;
 
 GLOBAL Array<u32> unique_draw_beams_calls;
 FUNCTION void game_init()
@@ -899,11 +902,21 @@ FUNCTION void game_init()
     {
         Arena_Temp scratch = get_scratch(0, 0);
         d3d11_load_texture(&tex, sprint(scratch.arena, "%Ssprites.png", os->data_folder));
-        d3d11_load_texture(&font_tex, sprint(scratch.arena, "%Sfont_sprites.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT0], sprint(scratch.arena, "%Sobj_particle.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT1], sprint(scratch.arena, "%Sobj_particle_ccw.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT2], sprint(scratch.arena, "%Sobj_particle_cw.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT3], sprint(scratch.arena, "%Swalk_particle.png", os->data_folder));
+        free_scratch(scratch);
+    }
+    
+    {
+        // @Todo: Sound manger.
+        Arena_Temp scratch = get_scratch(0, 0);
+        sound0 = os->sound_load(S8LIT("C:/Windows/Media/Ring10.wav"), os->sample_rate);
+        sound0.loop = true;
+        
+        auto s = sprint(scratch.arena, "%Ssounds/woosh.wav", os->data_folder);
+        sound1 = os->sound_load(s, os->sample_rate);
         free_scratch(scratch);
     }
     
@@ -1905,6 +1918,8 @@ FUNCTION void game_update()
         os->fullscreen = !os->fullscreen;
     }
     
+    if (key_pressed(Key_Y))
+        sound_play(&sound1);
     
 #if DEVELOPER
     V2 m = round(game->mouse_world);
@@ -2423,6 +2438,15 @@ FUNCTION void draw_menus()
     }
     
     immediate_end();
+}
+
+FUNCTION void game_fill_sound_buffer()
+{
+    // Update and mix sounds.
+    sound_update(&sound0, os->samples_to_advance);
+    sound_update(&sound1, os->samples_to_advance);
+    sound_mix(os->samples_out, os->samples_to_write, 0.3f, &sound0);
+    sound_mix(os->samples_out, os->samples_to_write, 0.5f, &sound1);
 }
 
 FUNCTION void game_render()

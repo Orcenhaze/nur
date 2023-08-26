@@ -455,6 +455,8 @@ struct Loaded_Level
 
 struct Game_State
 {
+    // @Todo: Sound manger.
+    
     Arena *loaded_level_arena;
     Loaded_Level loaded_level;
     

@@ -1,4 +1,4 @@
-/* orh.h - v0.59 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.60 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.60 - added Sound.
 0.59 - added audio output to OS_State.
 0.58 - some fixes.
 0.57 - added [0-1] hsv() that gives us V4 rgba.
@@ -77,6 +78,14 @@ CONVENTIONS:
 * When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
+[] OS_State stores samples_out and our Sound structs writes to it. samples_out should point directly to our magic ring buffer that WASAPI reads from.
+[] Implement angle_from_two_vectors() that gets us angle in range (0, TAU).
+https://math.stackexchange.com/questions/878785/how-to-find-an-angle-in-range0-360-between-2-vectors
+[] Implement quaternion_from_two_vectors() that gets quaternion that rotates v1 to v2 (closest arc). 
+https://stackoverflow.com/questions/1171849/finding-quaternion-representing-the-rotation-from-one-vector-to-another
+[] Read the following for clarification: 
+https://gamedev.stackexchange.com/questions/111479/quaternion-rotation-problems
+[] Test retrieving the third column of the world_to_view_matrix, does it give us view_direction?
 [] Null-terminate strings when using string_format_list()!! 
 [] Establish convention to always write strings in files null-terminated.
 [] Remove data_folder and use working_folder (Get/SetCurrentDirectory()) instead.
@@ -1478,6 +1487,22 @@ V table_find(Table<K, V> *table, K key)
 
 /////////////////////////////////////////
 //
+// Sound
+//
+struct Sound
+{
+    s16 *samples; // mono 16-bit.
+    b32  loop;
+    u32  count;
+    u32  pos;
+};
+
+FUNCDEF void sound_play(Sound *sound);
+FUNCDEF void sound_update(Sound *sound, u32 samples_to_advance);
+FUNCDEF void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, const Sound *sound);
+
+/////////////////////////////////////////
+//
 // OS
 //
 enum Key
@@ -1581,9 +1606,14 @@ struct OS_State
     V2  mouse_scroll;
     
     // Audio Output.
-    f32 *samples_out;        // The sample data for multiple channels (interleaved) in range [-1, 1]. 
-    u32  samples_per_second;
-    u32  frames_to_write;    // Number of audio frames we want to write. 
+    // These values are constant and initialized in OS layer at startup after initializing audio API.
+    u32 sample_rate;      // Typically 48000.
+    u32 bytes_per_sample; // Typically 8 bytes (1 sample = 2 floats for stereo).
+    //
+    // These values must be set each frame by OS layer before asking game to fill sound buffer with samples.
+    f32 *samples_out;        // The sound buffer to fill (stereo, interleaved) in range [-1, 1]. 
+    u32  samples_to_write;   // Number of samples we want to write. 
+    u32  samples_to_advance; // Number of samples that were actually submitted last time (not necessarily all of what we intended, which was samples_to_write). Advance sound playback positions by this amount, i.e. pass to sound_update().
     
     // Options.
     volatile b32 exit;
@@ -1606,6 +1636,7 @@ struct OS_State
     void    (*free_file_memory)(void *memory);  // @Redundant: Does same thing as release().
     String8 (*read_entire_file)(String8 full_path);
     b32     (*write_entire_file)(String8 full_path, String8 data);
+    Sound   (*sound_load)(String8 full_path, u32 sample_rate);
 };
 extern OS_State *os;
 
@@ -3664,6 +3695,45 @@ String8 sb_to_string(String_Builder *builder, Arena *arena)
 // Hash Table Implementation
 //
 // In the header part of this file.
+
+/////////////////////////////////////////
+//
+// Sound Implementation
+//
+void sound_play(Sound *sound)
+{
+    sound->pos = 0;
+}
+void sound_update(Sound *sound, u32 samples_to_advance)
+{
+    sound->pos += samples_to_advance;
+    if (sound->loop)
+        sound->pos %= sound->count;
+    else
+        sound->pos = MIN(sound->pos, sound->count);
+}
+void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, Sound *sound)
+{
+    const s16 *s_samples = sound->samples;
+    u32 s_pos            = sound->pos;
+    u32 s_count          = sound->count;
+    b32 s_loop           = sound->loop;
+    
+    for (u32 i = 0; i < samples_to_write; i++) {
+        if (s_loop) {
+            if (s_pos == s_count)
+                s_pos = 0;
+        } else {
+            if (s_pos >= s_count)
+                break;
+        }
+        
+        f32 sample      = s_samples[s_pos++] * (1.f / 32768.f);
+        samples_out[0] += volume * sample;
+        samples_out[1] += volume * sample;
+        samples_out    += 2;
+    }
+}
 
 /////////////////////////////////////////
 //

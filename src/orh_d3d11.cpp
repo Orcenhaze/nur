@@ -11,11 +11,12 @@ CONVENTIONS:
 * When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
+[] World-space text rendering.
 [] Make a generic orh_renderer.h that the game can use without directly talking to specific graphics API.
 
 NOTE:
-sRGB --> linear:     pow(color, 2.2)        make numbers smaller.
-linear --> sRGB:     pow(color, 1.0/2.2)    make numbers bigger.
+sRGB --> linear:    pow(color, 2.2)        make numbers smaller    (ShaderResourceView with _SRGB format).
+linear --> sRGB:    pow(color, 1.0/2.2)    make numbers bigger     (RenderTargetView with _SRGB format).
 
 */
 
