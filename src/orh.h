@@ -1,4 +1,4 @@
-/* orh.h - v0.60 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.61 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.61 - added table_find_pointer() and initialize parameter for Arrays.
 0.60 - added Sound.
 0.59 - added audio output to OS_State.
 0.58 - some fixes.
@@ -1189,9 +1190,9 @@ template<typename T>
 struct Array
 {
     Arena *arena;
-    T    *data;
-    s64   count;
-    s64   capacity;
+    T     *data;
+    s64    count;
+    s64    capacity;
     
     inline T& operator[](s32 index)
     {
@@ -1201,12 +1202,18 @@ struct Array
 };
 
 template<typename T>
-void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN)
+void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize = false)
 {
     array->arena    = arena_init();
     array->data     = 0;
     array->count    = 0;
     array_reserve(array, capacity);
+    
+    if (initialize) {
+        T value = {};
+        for (s32 i = 0; i < capacity; i++)
+            array_add(array, value);
+    }
 }
 
 template<typename T>
@@ -1368,10 +1375,10 @@ void table_init(Table<K, V> *table, s64 size = 0)
     table->count    = 0;
     table->capacity = size;
     
-    array_init(&table->keys,           size);
-    array_init(&table->values,         size);
-    array_init(&table->occupancy_mask, size);
-    array_init(&table->hashes,         size);
+    array_init(&table->keys,           size, true);
+    array_init(&table->values,         size, true);
+    array_init(&table->occupancy_mask, size, true);
+    array_init(&table->hashes,         size, true);
 }
 
 template<typename K, typename V>
@@ -1416,7 +1423,7 @@ void table_expand(Table<K, V> *table)
 }
 
 template<typename K, typename V>
-void table_add(Table<K, V> *table, K key, V value)
+V* table_add(Table<K, V> *table, K key, V value)
 {
     if ((table->count * 2) >= table->capacity)
         table_expand(table);
@@ -1450,11 +1457,15 @@ void table_add(Table<K, V> *table, K key, V value)
     table->values[index]         = value;
     table->occupancy_mask[index] = true;
     table->hashes[index]         = hash;
+    
+    return &table->values[index];
 }
 
 template<typename K, typename V>
 V table_find(Table<K, V> *table, K key)
 {
+    // @Todo: Return b32 and pass return value as parameter?
+    
     if (!table->capacity) {
         V dummy = {};
         return dummy;
@@ -1485,6 +1496,39 @@ V table_find(Table<K, V> *table, K key)
     return dummy;
 }
 
+template<typename K, typename V>
+V* table_find_pointer(Table<K, V> *table, K key)
+{
+    // @Note: Almost same as table_find, except it returns pointer to value in the table.
+    
+    if (!table->capacity) {
+        return 0;
+    }
+    
+    // @Note: Some structs need padding; compiler will set padding bytes to arbitrary values. 
+    // If we run into issues, we should manually add padding bytes for these types.
+    //
+    String8 s = {};
+    if (typeid(K) == typeid(String8)) { s = *(String8*)&key; }
+    else                              { s = string((u8*)&key, sizeof(K)); }
+    
+    u32 hash  = get_hash(s);
+    s32 index = hash % table->capacity;
+    
+    while (table->occupancy_mask[index]) {
+        // @Note: Key_Types need to to have valid operator==().
+        //
+        if ((table->hashes[index] == hash) &&  (table->keys[index] == key)) {
+            return &table->values[index];
+        }
+        
+        index++;
+        if (index >= table->capacity) index = 0;
+    }
+    
+    return 0;
+}
+
 /////////////////////////////////////////
 //
 // Sound
@@ -1492,9 +1536,11 @@ V table_find(Table<K, V> *table, K key)
 struct Sound
 {
     s16 *samples; // mono 16-bit.
-    b32  loop;
     u32  count;
     u32  pos;
+    
+    f32  volume; // In range [0, 1].
+    b32  loop;
 };
 
 FUNCDEF void sound_play(Sound *sound);
@@ -3129,7 +3175,7 @@ void * memory_set(void *dst, s32 val, u64 size)
     return dst;
 }
 
-Arena* arena_init(u64 max_size)
+Arena* arena_init(u64 max_size /*= ARENA_MAX_DEFAULT*/)
 {
     Arena *result = 0;
     if (max_size > ARENA_COMMIT_SIZE) {
@@ -3715,8 +3761,9 @@ void sound_update(Sound *sound, u32 samples_to_advance)
 void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, Sound *sound)
 {
     const s16 *s_samples = sound->samples;
-    u32 s_pos            = sound->pos;
     u32 s_count          = sound->count;
+    u32 s_pos            = sound->pos;
+    f32 s_volume         = sound->volume;
     b32 s_loop           = sound->loop;
     
     for (u32 i = 0; i < samples_to_write; i++) {
@@ -3729,8 +3776,8 @@ void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, Sound *sound)
         }
         
         f32 sample      = s_samples[s_pos++] * (1.f / 32768.f);
-        samples_out[0] += volume * sample;
-        samples_out[1] += volume * sample;
+        samples_out[0] += volume * s_volume * sample;
+        samples_out[1] += volume * s_volume * sample;
         samples_out    += 2;
     }
 }

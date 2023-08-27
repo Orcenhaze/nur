@@ -1,6 +1,9 @@
 #ifndef GAME_H
 #define GAME_H
 
+// @Cleanup: Should probably move stuff to their own files.
+//
+
 ////////////////////////////////
 // Game inputs
 //
@@ -339,6 +342,7 @@ GLOBAL b32 is_teleporting;
 // Fullscreen from global os->fullscreen.
 GLOBAL b32 draw_grid = true;
 GLOBAL b32 prompt_user_on_restart = true;
+GLOBAL s32 master_volume = 5;
 
 // Other state.
 GLOBAL f32 zoom_level; 
@@ -422,6 +426,7 @@ GLOBAL String8 level_names[] =
 enum 
 {
     SaveFileVersion_INIT,
+    SaveFileVersion_ADD_MASTER_VOLUME,
     
     SaveFileVersion_COUNT,
 };
@@ -432,6 +437,7 @@ struct Settings
     b32 fullscreen;
     b32 draw_grid;
     b32 prompt_user_on_restart;
+    s32 master_volume; // Integer value in range [0, 10]
 };
 
 enum
@@ -453,12 +459,51 @@ struct Loaded_Level
     u8  **tile_map;
 };
 
+////////////////////////////////
+////////////////////////////////
+// Sound manager.
+//
+struct Sound_Manager
+{
+    Table<String8, Sound> sounds_table;
+    Array<Sound*>         sounds_array;
+};
+
+FUNCTION void sound_manager_init(Sound_Manager *manager)
+{
+    table_init(&manager->sounds_table);
+    array_init(&manager->sounds_array);
+}
+FUNCTION void sound_manager_add(Sound_Manager *manager, String8 path, String8 name, f32 volume, b32 loop)
+{
+    Sound sound  = os->sound_load(path, os->sample_rate);
+    if (!sound.samples)
+        return;
+    
+    sound.volume = CLAMP01(volume);
+    sound.loop   = loop;
+    
+    Sound *new_sound = table_add(&manager->sounds_table, name, sound);
+    array_add(&manager->sounds_array, new_sound);
+    ASSERT(manager->sounds_table.count == manager->sounds_array.count);
+}
+FUNCTION void sound_manager_play(Sound_Manager *manager, String8 name)
+{
+    Sound *sound = table_find_pointer(&manager->sounds_table, name);
+    if (!sound)
+        return;
+    
+    sound_play(sound);
+}
+
+////////////////////////////////
+
 struct Game_State
 {
-    // @Todo: Sound manger.
-    
     Arena *loaded_level_arena;
     Loaded_Level loaded_level;
+    
+    Sound_Manager sound_manager;
     
     Particle_Emitter obj_emitter;
     

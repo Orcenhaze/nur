@@ -21,12 +21,11 @@
 #include "game.h"
 #include "game.cpp"
 
-// Multi-media for loading and resampling audio files.
-#include <mfapi.h>
-#include <mfidl.h>
-#include <mfreadwrite.h>
-#pragma comment (lib, "mfplat")
-#pragma comment (lib, "mfreadwrite")
+// For loading ogg vorbis audio files.
+#pragma warning(push, 3)
+#pragma warning(disable: 4701)
+#include "stb/stb_vorbis.c"
+#pragma warning(pop)
 
 GLOBAL OS_State global_os;
 GLOBAL s64      global_performance_frequency;
@@ -52,96 +51,6 @@ inline f64 win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 {
     f64 result = (f64)(end.QuadPart - start.QuadPart) / (f64)global_performance_frequency;
     return result;
-}
-
-FUNCTION Sound win32_sound_load(String8 full_path, u32 sample_rate)
-{
-    // Loads any supported sound file and resamples to mono 16-bit audio with specified sample rate.
-    //
-    // @Note: From Martins.
-    
-    // Convert full_path to 16-bit string.
-    s32 len = MultiByteToWideChar(CP_ACP, 0, (char *)full_path.data, -1, 0, 0);
-    ASSERT(len != 0);
-    Arena_Temp scratch = get_scratch(0, 0);
-    defer(free_scratch(scratch));
-    WCHAR *path = PUSH_ARRAY(scratch.arena, WCHAR, len);
-    MultiByteToWideChar(CP_ACP, 0, (char *)full_path.data, -1, path, len);
-    
-    
-    Sound sound = {};
-	ASSERT_HR(MFStartup(MF_VERSION, MFSTARTUP_LITE));
-    
-	IMFSourceReader *reader;
-	ASSERT_HR(MFCreateSourceReaderFromURL(path, NULL, &reader));
-    
-	// read only first audio stream
-	ASSERT_HR(reader->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE));
-	ASSERT_HR(reader->SetStreamSelection((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE));
-    
-	const size_t k_channel_count = 1;
-	WAVEFORMATEXTENSIBLE format = {};
-    format.Format.wFormatTag           = WAVE_FORMAT_EXTENSIBLE;
-    format.Format.nChannels            = (WORD)k_channel_count;
-    format.Format.nSamplesPerSec       = (WORD)sample_rate;
-    format.Format.nAvgBytesPerSec      = (DWORD)(sample_rate * k_channel_count * sizeof(u16));
-    format.Format.nBlockAlign          = (WORD)(k_channel_count * sizeof(u16));
-    format.Format.wBitsPerSample       = (WORD)(8 * sizeof(u16));
-    format.Format.cbSize               = sizeof(format) - sizeof(format.Format);
-    format.Samples.wValidBitsPerSample = 8 * sizeof(u16);
-    format.dwChannelMask               = SPEAKER_FRONT_CENTER;
-    format.SubFormat                   = MEDIASUBTYPE_PCM;
-    
-	// Media Foundation in Windows 8+ allows reader to convert output to different format than native
-	IMFMediaType *type;
-	ASSERT_HR(MFCreateMediaType(&type));
-	ASSERT_HR(MFInitMediaTypeFromWaveFormatEx(type, &format.Format, sizeof(format)));
-	ASSERT_HR(reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, NULL, type));
-	type->Release();
-    
-	size_t used = 0;
-	size_t capacity = 0;
-    
-	for (;;)
-	{
-		IMFSample *sample;
-		DWORD flags = 0;
-		HRESULT hr  = reader->ReadSample((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, NULL, &flags, NULL, &sample);
-		if (FAILED(hr))
-			break;
-        
-		if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
-			break;
-		assert(flags == 0);
-        
-		IMFMediaBuffer *mbuffer;
-		ASSERT_HR(sample->ConvertToContiguousBuffer(&mbuffer));
-        
-		BYTE* data;
-		DWORD size;
-		ASSERT_HR(mbuffer->Lock(&data, NULL, &size));
-		{
-			size_t avail = capacity - used;
-			if (avail < size)
-			{
-                // @Todo: Switch to arenas instead of realloc!
-				sound.samples = (s16 *) realloc(sound.samples, capacity += 64 * 1024);
-			}
-			memcpy((char*)sound.samples + used, data, size);
-			used += size;
-		}
-		ASSERT_HR(mbuffer->Unlock());
-        
-		mbuffer->Release();
-		sample->Release();
-	}
-    
-	reader->Release();
-    
-	ASSERT_HR(MFShutdown());
-    
-	sound.pos = sound.count = (u32)(used / format.Format.nBlockAlign);
-	return sound;
 }
 
 FUNCTION void win32_toggle_fullscreen(HWND window)
@@ -246,6 +155,37 @@ FUNCTION b32 win32_write_entire_file(String8 full_path, String8 data)
     }
     
     CloseHandle(file_handle);
+    
+    return result;
+}
+
+FUNCTION Sound win32_sound_load(String8 full_path, u32 sample_rate)
+{
+    String8 file = win32_read_entire_file(full_path);
+    if (!file.data) {
+        print("Couldn't load sound file %S\n", full_path);
+        
+        Sound dummy = {};
+        return dummy;
+    }
+    
+    s16 *out;
+    s32 chan, samplerate;
+    s32 count = stb_vorbis_decode_memory(file.data, (s32)file.count, &chan, &samplerate, &out);
+    
+    if (count == -1) {
+        print("STB Error: Couldn't load sound file %S\n", full_path);
+        
+        Sound dummy = {};
+        return dummy;
+    }
+    
+    // @Note: Make sure we are loading mono audio with specified sample rate.
+    ASSERT((chan == 1) && ((u32)samplerate == sample_rate));
+    
+    Sound result;
+    result.samples = out;
+    result.count   = result.pos = (u32)count;
     
     return result;
 }

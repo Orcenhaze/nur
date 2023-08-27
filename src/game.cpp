@@ -87,9 +87,10 @@ FUNCTION void save_game()
     sb_append(&sb, lev->name.data, lev->name.count);
     
     Settings s = {};
-    s.fullscreen = os->fullscreen;
-    s.draw_grid  = draw_grid;
+    s.fullscreen             = os->fullscreen;
+    s.draw_grid              = draw_grid;
     s.prompt_user_on_restart = prompt_user_on_restart;
+    s.master_volume          = master_volume;
     
     sb_append(&sb, &s, sizeof(Settings));
     
@@ -149,6 +150,8 @@ FUNCTION void reload_map()
 
 FUNCTION b32 load_level(String8 level_name)
 {
+    // @Todo: This serialization stuff is great but ugly; is there a way to make it cleaner?
+    //
 #define RESTORE_FIELD(field, inclusion_version) \
 if (version >= (inclusion_version)) \
 get(&file, &field)
@@ -266,6 +269,8 @@ get(&file, &field_name, size); \
 
 FUNCTION b32 load_game()
 {
+    // @Todo: This serialization stuff is great but ugly; is there a way to make it cleaner?
+    //
 #define RESTORE_FIELD(field, inclusion_version) \
 if (version >= (inclusion_version)) \
 get(&file, &field)
@@ -301,6 +306,7 @@ get(&file, &field_name); \
     RESTORE_FIELD(os->fullscreen, SaveFileVersion_INIT);
     RESTORE_FIELD(draw_grid, SaveFileVersion_INIT);
     RESTORE_FIELD(prompt_user_on_restart, SaveFileVersion_INIT);
+    RESTORE_FIELD(master_volume, SaveFileVersion_ADD_MASTER_VOLUME);
     
     game_started = true;
     return true;
@@ -873,10 +879,6 @@ FUNCTION void obj_emitter_draw_particles()
     }
 }
 
-// @Todo: Sound manger.
-GLOBAL Sound sound0;
-GLOBAL Sound sound1;
-
 GLOBAL Array<u32> unique_draw_beams_calls;
 FUNCTION void game_init()
 {
@@ -895,6 +897,7 @@ FUNCTION void game_init()
     game->num_detectors_required = 1;
 #endif
     
+    
     game->rng = random_seed();
     
     array_init(&unique_draw_beams_calls);
@@ -909,14 +912,18 @@ FUNCTION void game_init()
         free_scratch(scratch);
     }
     
+    sound_manager_init(&game->sound_manager);
     {
-        // @Todo: Sound manger.
+        // Add sounds.
         Arena_Temp scratch = get_scratch(0, 0);
-        sound0 = os->sound_load(S8LIT("C:/Windows/Media/Ring10.wav"), os->sample_rate);
-        sound0.loop = true;
+        Sound_Manager *m   = &game->sound_manager;
         
-        auto s = sprint(scratch.arena, "%Ssounds/woosh.wav", os->data_folder);
-        sound1 = os->sound_load(s, os->sample_rate);
+        String8 path = sprint(scratch.arena, "%Ssounds/woosh.ogg", os->data_folder);
+        sound_manager_add(m, path, S8LIT("whoosh"), 1.4f, false);
+        
+        path = sprint(scratch.arena, "%Ssounds/fun.ogg", os->data_folder);
+        sound_manager_add(m, path, S8LIT("fun"), 0.8f, true);
+        
         free_scratch(scratch);
     }
     
@@ -1817,21 +1824,31 @@ FUNCTION void update_menus()
                 break;
             }
             
+            if (selection == 0) {
+                // Master volume.
+                if (input_pressed(MOVE_LEFT))
+                    master_volume--;
+                if (input_pressed(MOVE_RIGHT))
+                    master_volume++;
+                
+                master_volume = CLAMP(0, master_volume, 10);
+            }
+            
             if (input_pressed(CONFIRM)) {
                 switch (selection) {
-                    case 0: {
+                    case 1: {
                         // Toggle grid.
                         draw_grid = !draw_grid;
                     } break;
-                    case 1: {
+                    case 2: {
                         // Toggle fullscreen.
                         os->fullscreen = !os->fullscreen;
                     } break;
-                    case 2: {
+                    case 3: {
                         // Prompt to confirm on restart.
                         prompt_user_on_restart = !prompt_user_on_restart;
                     } break;
-                    case 3: {
+                    case 4: {
                         // Back.
                         page = prev_page;
                         selection = prev_selection;
@@ -1919,7 +1936,7 @@ FUNCTION void game_update()
     }
     
     if (key_pressed(Key_Y))
-        sound_play(&sound1);
+        sound_manager_play(&game->sound_manager, S8LIT("whoosh"));
     
 #if DEVELOPER
     V2 m = round(game->mouse_world);
@@ -2352,6 +2369,7 @@ FUNCTION void draw_menus()
             V2 p = v2(0.1f*w, 0.3333f*h);
             char *choices[] = 
             {
+                "MASTER VOLUME",
                 "TOGGLE GRID",
                 "TOGGLE FULLSCREEN",
                 "PROMPT ON RESTART",
@@ -2371,6 +2389,8 @@ FUNCTION void draw_menus()
             
             // Mark setting state (T = true, F = false).
             p = v2(0.5f*w, 0.3333f*h);
+            immediate_text(&consolas, p, 5, v4(1), "%d", master_volume);
+            p.y += yadvance;
             immediate_text(&consolas, p, 5, draw_grid? v4(0,1,0,1) : v4(1,0,0,1), draw_grid? "T" : "F");
             p.y += yadvance;
             immediate_text(&consolas, p, 5, os->fullscreen? v4(0,1,0,1) : v4(1,0,0,1), os->fullscreen? "T" : "F");
@@ -2443,10 +2463,15 @@ FUNCTION void draw_menus()
 FUNCTION void game_fill_sound_buffer()
 {
     // Update and mix sounds.
-    sound_update(&sound0, os->samples_to_advance);
-    sound_update(&sound1, os->samples_to_advance);
-    sound_mix(os->samples_out, os->samples_to_write, 0.3f, &sound0);
-    sound_mix(os->samples_out, os->samples_to_write, 0.5f, &sound1);
+    
+    Sound_Manager *manager = &game->sound_manager;
+    for (s32 i = 0; i < manager->sounds_array.count; i++) {
+        Sound *sound = manager->sounds_array[i];
+        sound_update(sound, os->samples_to_advance);
+        
+        f32 volume = CLAMP01_RANGE(0, (f32)master_volume, 10);
+        sound_mix(os->samples_out, os->samples_to_write, volume, sound);
+    }
 }
 
 FUNCTION void game_render()
