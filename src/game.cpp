@@ -1810,7 +1810,7 @@ FUNCTION void update_menus()
             
         } break;
         case SETTINGS: {
-            s32 const num_choices = 4;
+            s32 const num_choices = 5;
             move_selection(dir, num_choices);
             
             if (key_pressed(Key_ESCAPE)) {

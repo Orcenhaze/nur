@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "win32_wasapi.h"
+#include "win32_xinput.h"
 
 #if DEVELOPER
 #include "imgui/imgui.cpp"
@@ -281,12 +282,13 @@ FUNCTION void win32_process_pending_messages(HWND window)
                     } else if ((vkcode >= '0') && (vkcode <= '9')) {
                         key = Key_0 + (vkcode - '0');
                     } else {
-                        if      ((vkcode >= VK_F1) && (vkcode <= VK_F12)) key = Key_F1 + (vkcode - VK_F1);
+                        if     ((vkcode >= VK_F1) && (vkcode <= VK_F12)) key = Key_F1 + (vkcode - VK_F1);
+                        else if (vkcode == VK_ESCAPE)  key = Key_ESCAPE;
+                        else if (vkcode == VK_TAB)     key = Key_TAB;
                         else if (vkcode == VK_RETURN)  key = Key_ENTER;
                         else if (vkcode == VK_SHIFT)   key = Key_SHIFT;
                         else if (vkcode == VK_CONTROL) key = Key_CONTROL;
                         else if (vkcode == VK_MENU)    key = Key_ALT;
-                        else if (vkcode == VK_ESCAPE)  key = Key_ESCAPE;
                         else if (vkcode == VK_SPACE)   key = Key_SPACE;
                         else if (vkcode == VK_LEFT)    key = Key_LEFT;
                         else if (vkcode == VK_UP)      key = Key_UP;
@@ -383,11 +385,8 @@ FUNCTION LRESULT CALLBACK win32_wndproc(HWND window, UINT message, WPARAM wparam
 
 FUNCTION void win32_process_inputs(HWND window)
 {
-    // Clear pressed and released states.
-    MEMORY_ZERO_ARRAY(global_os.pressed);
-    MEMORY_ZERO_ARRAY(global_os.released);
-    
     // Mouse position.
+    //
     POINT cursor; 
     GetCursorPos(&cursor);
     ScreenToClient(window, &cursor);
@@ -402,9 +401,10 @@ FUNCTION void win32_process_inputs(HWND window)
     };
     
     // Clear mouse-wheel scroll.
+    //
     global_os.mouse_scroll = {};
     
-    // Put input messages in queue.
+    // Put input messages in queue + process mousewheel and such.
     //
     win32_process_pending_messages(window);
     
@@ -413,6 +413,11 @@ FUNCTION void win32_process_inputs(HWND window)
     if (io.WantCaptureKeyboard || io.WantCaptureMouse)
         return;
 #endif
+    
+    // Clear pressed and released states.
+    //
+    MEMORY_ZERO_ARRAY(global_os.pressed);
+    MEMORY_ZERO_ARRAY(global_os.released);
     
     // Process queued inputs.
     //
@@ -446,6 +451,59 @@ FUNCTION void win32_process_inputs(HWND window)
                 array_ordered_remove_by_index(&global_os.inputs_to_process, i);
                 i--;
             }
+        }
+    }
+    
+    // Do same thing for gamepads... Get gamepad state, then encode button states how we want.
+    //
+    for (s32 i = 0; i < GAMEPADS_MAX; i++) {
+        XInput_Gamepad xinput_pad = xinput_get_gamepad_state(i);
+        if (!xinput_pad.connected)
+            continue;
+        
+        Gamepad *pad       = &global_os.gamepads[i];
+        pad->connected     = xinput_pad.connected;
+        pad->stick_left    = {xinput_pad.stick_left_x, xinput_pad.stick_left_y};
+        pad->stick_right   = {xinput_pad.stick_right_x, xinput_pad.stick_right_y};
+        pad->trigger_left  = xinput_pad.trigger_left;
+        pad->trigger_right = xinput_pad.trigger_right;
+        
+        // Clear pressed and released states.
+        //
+        MEMORY_ZERO_ARRAY(pad->pressed);
+        MEMORY_ZERO_ARRAY(pad->released);
+        
+        // Process xinput button states and encode them the way we want.
+        //
+        for (s32 j = 1; j < XInputButton_COUNT; j++) {
+            s32 button = j;
+            b32 down   = xinput_pad.button_states[button];
+            if (down) {
+                if (!pad->held[button])
+                    pad->pressed[button] = true;
+                
+                pad->held[button] = true;
+            } else {
+                if (pad->held[button])
+                    pad->released[button] = true;
+                
+                pad->held[button] = false;
+            }
+            
+#if 1
+            // Test
+            //print("StickL(%v2)\n", pad->stick_left);
+            //print("StickR(%v2)\n", pad->stick_right);
+            //print("TriggerL(%f)\n", pad->trigger_left);
+            //print("TriggerR(%f)\n", pad->trigger_right);
+            
+            if (pad->pressed[button])
+                print("Pressed(%s)\n",  xinput_get_button_name((XInput_Button)button));
+            if (pad->held[button])
+                print("held(%s)\n",     xinput_get_button_name((XInput_Button)button));
+            if (pad->released[button])
+                print("released(%s)\n", xinput_get_button_name((XInput_Button)button));
+#endif
         }
     }
 }
@@ -518,6 +576,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     u32 sample_rate      = audio.buffer_format->nSamplesPerSec;
     u32 bytes_per_sample = audio.buffer_format->nBlockAlign;
     
+    //
+    // Initialize XInput.
+    xinput_init();
+    
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
     
@@ -574,7 +636,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.permanent_arena  = arena_init();
         
         // User Input.
-        array_init(&global_os.inputs_to_process);
+        array_init_static(&global_os.inputs_to_process, 512);
         
         // Audio Output.
         global_os.sample_rate        = sample_rate;

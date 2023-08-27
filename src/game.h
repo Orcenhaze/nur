@@ -7,6 +7,9 @@
 ////////////////////////////////
 // Game inputs
 //
+
+// @Todo: Add gamepad support!
+
 #define MAX_BINDS_PER_INPUT 3
 
 enum Game_Input

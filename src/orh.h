@@ -1193,6 +1193,7 @@ struct Array
     T     *data;
     s64    count;
     s64    capacity;
+    b32    is_static;
     
     inline T& operator[](s32 index)
     {
@@ -1204,9 +1205,26 @@ struct Array
 template<typename T>
 void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize = false)
 {
-    array->arena    = arena_init();
-    array->data     = 0;
-    array->count    = 0;
+    array->arena     = arena_init();
+    array->data      = 0;
+    array->count     = 0;
+    array->is_static = false;
+    array_reserve(array, capacity);
+    
+    if (initialize) {
+        T value = {};
+        for (s32 i = 0; i < capacity; i++)
+            array_add(array, value);
+    }
+}
+
+template<typename T>
+void array_init_static(Array<T> *array, s64 capacity, b32 initialize = false)
+{
+    array->arena     = arena_init(capacity * sizeof(T));
+    array->data      = 0;
+    array->count     = 0;
+    array->is_static = true;
     array_reserve(array, capacity);
     
     if (initialize) {
@@ -1244,6 +1262,8 @@ void array_copy(Array<T> *dst, Array<T> src)
 template<typename T>
 void array_expand(Array<T> *array)
 {
+    ASSERT(array->is_static == false);
+    
     s64 new_size = array->capacity * 2;
     if (new_size < ARRAY_SIZE_MIN) new_size = ARRAY_SIZE_MIN;
     
@@ -1551,6 +1571,9 @@ FUNCDEF void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, const
 //
 // OS
 //
+
+// Key input stuff.
+//
 enum Key
 {
     Key_NONE,
@@ -1606,11 +1629,12 @@ enum Key
     Key_Y,
     Key_Z,
     
+    Key_ESCAPE,
+    Key_TAB,
     Key_ENTER,
     Key_SHIFT,
     Key_CONTROL,
     Key_ALT,
-    Key_ESCAPE,
     Key_SPACE,
     
     // Arrow keys.
@@ -1633,6 +1657,48 @@ struct Queued_Input
     b32 down;
 };
 
+// Gamepad stuff.
+//
+enum Gamepad_Button
+{
+    GamepadButton_NONE,
+    
+    GamepadButton_DPAD_UP,
+    GamepadButton_DPAD_DOWN,
+    GamepadButton_DPAD_LEFT,
+    GamepadButton_DPAD_RIGHT,
+    GamepadButton_START,
+    GamepadButton_BACK,
+    GamepadButton_LEFT_THUMB,
+    GamepadButton_RIGHT_THUMB,
+    GamepadButton_LEFT_BUMPER,
+    GamepadButton_RIGHT_BUMPER,
+    GamepadButton_A,
+    GamepadButton_B,
+    GamepadButton_X,
+    GamepadButton_Y,
+    
+    GamepadButton_COUNT,
+};
+
+#define GAMEPADS_MAX 16
+struct Gamepad
+{
+    b32 connected;
+    
+    // Analog in range [-1, 1].
+    V2  stick_left;
+    V2  stick_right;
+    
+    // Analog in range [0, 1].
+    f32 trigger_left;
+    f32 trigger_right;
+    
+    b32 pressed [GamepadButton_COUNT];
+    b32 held    [GamepadButton_COUNT];
+    b32 released[GamepadButton_COUNT];
+};
+
 struct OS_State
 {
     // Meta-data.
@@ -1644,12 +1710,16 @@ struct OS_State
     Arena *permanent_arena;
     
     // User Input.
+    // Keyboard and mouse stuff.
     Array<Queued_Input> inputs_to_process;
     b32 pressed [Key_COUNT];
     b32 held    [Key_COUNT];
     b32 released[Key_COUNT];
     V3  mouse_ndc;           // In [-1, 1] interval - relative to drawing_rect.
     V2  mouse_scroll;
+    //
+    // Gamepad/controller stuff. Can only care about gamepads[0] for singleplayer.
+    Gamepad gamepads[GAMEPADS_MAX];
     
     // Audio Output.
     // These values are constant and initialized in OS layer at startup after initializing audio API.
@@ -3178,12 +3248,16 @@ void * memory_set(void *dst, s32 val, u64 size)
 Arena* arena_init(u64 max_size /*= ARENA_MAX_DEFAULT*/)
 {
     Arena *result = 0;
-    if (max_size > ARENA_COMMIT_SIZE) {
-        void *memory = os->reserve(max_size);
+    if (max_size >= ARENA_COMMIT_SIZE) {
+        // Reserve additional bytes to account for Arena header since we're storing it inside.
+        //
+        u32 header_size = ALIGN_UP(sizeof(Arena), 64);
+        max_size       += header_size;
+        void *memory    = os->reserve(max_size);
         if (os->commit(memory, ARENA_COMMIT_SIZE)) {
             result              = (Arena *)memory;
             result->max         = max_size;
-            result->used        = ALIGN_UP(sizeof(Arena), 64);
+            result->used        = header_size;
             result->commit_used = ARENA_COMMIT_SIZE;
         }
     }
@@ -3198,7 +3272,7 @@ void* arena_push(Arena *arena, u64 size)
 {
     void *result = 0;
     u64 s = arena->used + size; 
-    if (s < arena->max) {
+    if (s <= arena->max) {
         if (s > arena->commit_used) {
             // Commit more pages.
             u64 commit_size     = (size + (ARENA_COMMIT_SIZE-1));
