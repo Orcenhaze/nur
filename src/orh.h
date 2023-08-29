@@ -274,12 +274,12 @@ typedef double             f64;
 #define SWAP(a, b, Type)   DOWHILE(Type _t = a; a = b; b = _t;)
 
 #if defined(_DEBUG)
-#    if defined(COMPILER_CL)
+#    if COMPILER_CL
 #        define ASSERT(expr) DOWHILE(if (!(expr)) __debugbreak();)
 #    else
 #        define ASSERT(expr) DOWHILE(if (!(expr)) __builtin_trap();)
 #    endif
-#    if defined(OS_WINDOWS)
+#    if OS_WINDOWS
 #        define ASSERT_HR(hr) ASSERT(SUCCEEDED(hr))
 #    endif
 #else

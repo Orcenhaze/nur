@@ -32,7 +32,7 @@ linear --> sRGB:    pow(color, 1.0/2.2)    make numbers bigger     (RenderTarget
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
-#if !defined(DEVELOPER) // Because ImGui already defines this.
+#if !DEVELOPER // Because ImGui already defines this.
 #    define STB_TRUETYPE_IMPLEMENTATION
 #    include "stb/stb_truetype.h"
 #endif

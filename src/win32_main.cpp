@@ -4,6 +4,13 @@
 #include "win32_wasapi.h"
 #include "win32_xinput.h"
 
+// Tell AMD and Nvidia drivers to use the most powerful GPU instead of a lower-performance (such as integrated) GPU.
+// App should use either DirectX or OpenGL for this to work.
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement                  = 0x00000001;
+    __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
+}
+
 #if DEVELOPER
 #include "imgui/imgui.cpp"
 #include "imgui/imgui_impl_win32.cpp"
@@ -225,11 +232,8 @@ FUNCTION void win32_build_paths()
     }
     memory_copy(global_exe_parent_folder, global_exe_full_path, one_past_slash - global_exe_full_path);
     
-    // @Todo: On release we may need to change what to append.
-    // A better solution is to always use data straight away instead of ..\\data\\ and simply
-    // copy the entire data folder to build/ and ship that folder minus any intermediates.
-    //
-    string_format(global_data_folder, sizeof(global_data_folder), "%s..\\data\\", global_exe_parent_folder);
+    // @Note: We will copy the data folder when building the game and put it next to .exe.
+    string_format(global_data_folder, sizeof(global_data_folder), "%sdata/", global_exe_parent_folder);
 }
 
 FUNCTION void win32_process_pending_messages(HWND window)
@@ -600,6 +604,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.fullscreen        = false;
 #else
         global_os.fullscreen        = true;
+        win32_toggle_fullscreen(window);
 #endif
         global_os.exit              = false;
         
