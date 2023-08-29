@@ -7,11 +7,6 @@
 ////////////////////////////////
 // Game inputs
 //
-
-// @Todo: Add gamepad support!
-
-#define MAX_BINDS_PER_INPUT 3
-
 enum Game_Input
 {
     MOVE_RIGHT,
@@ -24,33 +19,56 @@ enum Game_Input
     
     UNDO,
     
+    PAUSE_MENU,
+    BACK,
     CONFIRM,
     
     RESTART_LEVEL,
 };
 
-GLOBAL s32 binds[][MAX_BINDS_PER_INPUT] = {
-    {Key_D, Key_RIGHT},
-    {Key_W, Key_UP},
-    {Key_A, Key_LEFT},
-    {Key_S, Key_DOWN},
+#define MAX_BINDS_PER_INPUT 3
+struct Game_Input_Binds
+{
+    Key            keyboard[MAX_BINDS_PER_INPUT];
+    Gamepad_Button gamepad [MAX_BINDS_PER_INPUT];
+};
+
+GLOBAL Game_Input_Binds binds[] = {
+    //     Key                        Gamepad_Buttons
     
-    {Key_Q},
-    {Key_E},
+    {{Key_D, Key_RIGHT},       {GamepadButton_DPAD_RIGHT}},
+    {{Key_W, Key_UP},          {GamepadButton_DPAD_UP}},
+    {{Key_A, Key_LEFT},        {GamepadButton_DPAD_LEFT}},
+    {{Key_S, Key_DOWN},        {GamepadButton_DPAD_DOWN}},
     
-    {Key_Z},
+    {{Key_Q},                  {GamepadButton_LEFT_BUMPER}},
+    {{Key_E},                  {GamepadButton_RIGHT_BUMPER}},
     
-    {Key_ENTER, Key_SPACE},
+    {{Key_Z},                  {GamepadButton_Y, GamepadButton_X}},
     
-    {Key_R}
+    {{Key_ESCAPE},             {GamepadButton_START}},
+    {{Key_BACKSPACE},          {GamepadButton_B}},
+    {{Key_ENTER, Key_SPACE},   {GamepadButton_A}},
+    
+    {{Key_R},                  {GamepadButton_BACK}},
 };
 
 FUNCTION b32 input_pressed(Game_Input input)
 {
+    // Check keys.
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
-        s32 key = binds[input][i];
+        s32 key = binds[input].keyboard[i];
         if (key_pressed(key))
             return true;
+    }
+    
+    // Check gamepad buttons.
+    if (os->gamepads[0].connected) {
+        for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
+            s32 button = binds[input].gamepad[i];
+            if (os->gamepads[0].pressed[button])
+                return true;
+        }
     }
     
     return false;
@@ -58,10 +76,20 @@ FUNCTION b32 input_pressed(Game_Input input)
 
 FUNCTION b32 input_held(Game_Input input)
 {
+    // Check keys.
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
-        s32 key = binds[input][i];
+        s32 key = binds[input].keyboard[i];
         if (key_held(key))
             return true;
+    }
+    
+    // Check gamepad buttons.
+    if (os->gamepads[0].connected) {
+        for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
+            s32 button = binds[input].gamepad[i];
+            if (os->gamepads[0].held[button])
+                return true;
+        }
     }
     
     return false;
@@ -69,10 +97,20 @@ FUNCTION b32 input_held(Game_Input input)
 
 FUNCTION b32 input_released(Game_Input input)
 {
+    // Check keys.
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
-        s32 key = binds[input][i];
+        s32 key = binds[input].keyboard[i];
         if (key_released(key))
             return true;
+    }
+    
+    // Check gamepad buttons.
+    if (os->gamepads[0].connected) {
+        for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
+            s32 button = binds[input].gamepad[i];
+            if (os->gamepads[0].released[button])
+                return true;
+        }
     }
     
     return false;
@@ -477,7 +515,7 @@ FUNCTION void sound_manager_init(Sound_Manager *manager)
     table_init(&manager->sounds_table);
     array_init(&manager->sounds_array);
 }
-FUNCTION void sound_manager_add(Sound_Manager *manager, String8 path, String8 name, f32 volume, b32 loop)
+FUNCTION void add_sound(Sound_Manager *manager, String8 path, String8 name, f32 volume, b32 loop)
 {
     Sound sound  = os->sound_load(path, os->sample_rate);
     if (!sound.samples)
@@ -490,13 +528,13 @@ FUNCTION void sound_manager_add(Sound_Manager *manager, String8 path, String8 na
     array_add(&manager->sounds_array, new_sound);
     ASSERT(manager->sounds_table.count == manager->sounds_array.count);
 }
-FUNCTION void sound_manager_play(Sound_Manager *manager, String8 name)
+FUNCTION void play_sound(Sound_Manager *manager, String8 name)
 {
     Sound *sound = table_find_pointer(&manager->sounds_table, name);
     if (!sound)
         return;
     
-    sound_play(sound);
+    sound->pos = 0;
 }
 
 ////////////////////////////////

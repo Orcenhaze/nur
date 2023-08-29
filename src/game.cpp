@@ -912,17 +912,11 @@ FUNCTION void game_init()
         free_scratch(scratch);
     }
     
+    // Load sounds.
     sound_manager_init(&game->sound_manager);
     {
-        // Add sounds.
         Arena_Temp scratch = get_scratch(0, 0);
         Sound_Manager *m   = &game->sound_manager;
-        
-        String8 path = sprint(scratch.arena, "%Ssounds/woosh.ogg", os->data_folder);
-        sound_manager_add(m, path, S8LIT("whoosh"), 1.4f, false);
-        
-        path = sprint(scratch.arena, "%Ssounds/fun.ogg", os->data_folder);
-        sound_manager_add(m, path, S8LIT("fun"), 0.8f, true);
         
         free_scratch(scratch);
     }
@@ -1294,7 +1288,7 @@ FUNCTION void update_world()
     ////////////////////////////////
     // Meta.
     //
-    if (key_pressed(Key_ESCAPE)) {
+    if (input_pressed(PAUSE_MENU)) {
         current_mode = M_MENUS;
         page         = PAUSE;
         selection    = 0;
@@ -1677,6 +1671,10 @@ FUNCTION inline void move_selection(s32 dir, s32 num_choices)
 
 FUNCTION void update_menus()
 {
+    // @Cleanup:
+    // @Cleanup: Pull-out commonalities like pressing BACK input and such.
+    //
+    
     if (input_pressed(MOVE_UP))
         move_hold_timer = 0.0f;
     else if (input_pressed(MOVE_DOWN))
@@ -1759,7 +1757,7 @@ FUNCTION void update_menus()
             s32 const num_choices = 6;
             move_selection(dir, num_choices);
             
-            if (key_pressed(Key_ESCAPE)) {
+            if (input_pressed(PAUSE_MENU) || input_pressed(BACK)) {
                 current_mode = M_GAME;
                 break;
             }
@@ -1813,12 +1811,18 @@ FUNCTION void update_menus()
             s32 const num_choices = 5;
             move_selection(dir, num_choices);
             
-            if (key_pressed(Key_ESCAPE)) {
-                if (prev_page == PAUSE) {
+            if (input_pressed(PAUSE_MENU)) {
+                if (prev_page == MAIN_MENU) {
+                    page = prev_page;
+                    selection = prev_selection;
+                    break;
+                } else {
                     current_mode = M_GAME;
                     break;
                 }
-                
+            }
+            
+            if (input_pressed(BACK)) {
                 page = prev_page;
                 selection = prev_selection;
                 break;
@@ -1867,7 +1871,7 @@ FUNCTION void update_menus()
             s32 const num_choices = 2;
             move_selection(dir, num_choices);
             
-            if (key_pressed(Key_ESCAPE)) {
+            if (input_pressed(PAUSE_MENU) || input_pressed(BACK)) {
                 current_mode = M_GAME;
                 break;
             }
@@ -1896,12 +1900,18 @@ FUNCTION void update_menus()
             s32 const num_choices = 1;
             move_selection(dir, num_choices);
             
-            if (key_pressed(Key_ESCAPE)) {
-                if (prev_page == PAUSE) {
+            if (input_pressed(PAUSE_MENU)) {
+                if (prev_page == MAIN_MENU) {
+                    page = prev_page;
+                    selection = prev_selection;
+                    break;
+                } else {
                     current_mode = M_GAME;
                     break;
                 }
-                
+            }
+            
+            if (input_pressed(BACK)) {
                 page = prev_page;
                 selection = prev_selection;
                 break;
@@ -1934,9 +1944,6 @@ FUNCTION void game_update()
         key_pressed(Key_ENTER, true);
         os->fullscreen = !os->fullscreen;
     }
-    
-    if (key_pressed(Key_Y))
-        sound_manager_play(&game->sound_manager, S8LIT("whoosh"));
     
 #if DEVELOPER
     V2 m = round(game->mouse_world);
@@ -2467,10 +2474,10 @@ FUNCTION void game_fill_sound_buffer()
     Sound_Manager *manager = &game->sound_manager;
     for (s32 i = 0; i < manager->sounds_array.count; i++) {
         Sound *sound = manager->sounds_array[i];
-        sound_update(sound, os->samples_to_advance);
+        f32 volume   = CLAMP01_RANGE(0, (f32)master_volume, 10);
         
-        f32 volume = CLAMP01_RANGE(0, (f32)master_volume, 10);
-        sound_mix(os->samples_out, os->samples_to_write, volume, sound);
+        sound_update(sound, os->samples_to_advance);
+        sound_mix(sound, volume, os->samples_out, os->samples_to_write);
     }
 }
 

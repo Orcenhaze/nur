@@ -284,6 +284,7 @@ FUNCTION void win32_process_pending_messages(HWND window)
                     } else {
                         if     ((vkcode >= VK_F1) && (vkcode <= VK_F12)) key = Key_F1 + (vkcode - VK_F1);
                         else if (vkcode == VK_ESCAPE)  key = Key_ESCAPE;
+                        else if (vkcode == VK_BACK)    key = Key_BACKSPACE;
                         else if (vkcode == VK_TAB)     key = Key_TAB;
                         else if (vkcode == VK_RETURN)  key = Key_ENTER;
                         else if (vkcode == VK_SHIFT)   key = Key_SHIFT;
@@ -463,10 +464,10 @@ FUNCTION void win32_process_inputs(HWND window)
         
         Gamepad *pad       = &global_os.gamepads[i];
         pad->connected     = xinput_pad.connected;
-        pad->stick_left    = {xinput_pad.stick_left_x, xinput_pad.stick_left_y};
-        pad->stick_right   = {xinput_pad.stick_right_x, xinput_pad.stick_right_y};
-        pad->trigger_left  = xinput_pad.trigger_left;
-        pad->trigger_right = xinput_pad.trigger_right;
+        pad->left_stick    = {xinput_pad.stick_left_x, xinput_pad.stick_left_y};
+        pad->right_stick   = {xinput_pad.stick_right_x, xinput_pad.stick_right_y};
+        pad->left_trigger  = xinput_pad.trigger_left;
+        pad->right_trigger = xinput_pad.trigger_right;
         
         // Clear pressed and released states.
         //
@@ -490,9 +491,10 @@ FUNCTION void win32_process_inputs(HWND window)
                 pad->held[button] = false;
             }
             
-#if 1
+#if 0
             // Test
-            //print("StickL(%v2)\n", pad->stick_left);
+            //
+            //print("StickL(%v2)\n", pad->left_stick);
             //print("StickR(%v2)\n", pad->stick_right);
             //print("TriggerL(%f)\n", pad->trigger_left);
             //print("TriggerR(%f)\n", pad->trigger_right);

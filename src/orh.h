@@ -1555,24 +1555,23 @@ V* table_find_pointer(Table<K, V> *table, K key)
 //
 struct Sound
 {
-    s16 *samples; // mono 16-bit.
+    s16 *samples; // Mono 16-bit.
     u32  count;
-    u32  pos;
+    u32  pos;     // 0 to play from start, "count" to stop (if not looping).
     
-    f32  volume; // In range [0, 1].
+    f32  volume;  // In range [0, 1].
     b32  loop;
 };
 
-FUNCDEF void sound_play(Sound *sound);
 FUNCDEF void sound_update(Sound *sound, u32 samples_to_advance);
-FUNCDEF void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, const Sound *sound);
+FUNCDEF void sound_mix(const Sound *sound, f32 volume, f32 *samples_out, u32 samples_to_write);
 
 /////////////////////////////////////////
 //
 // OS
 //
 
-// Key input stuff.
+// Keyboards keys and mouse buttons.
 //
 enum Key
 {
@@ -1630,6 +1629,7 @@ enum Key
     Key_Z,
     
     Key_ESCAPE,
+    Key_BACKSPACE,
     Key_TAB,
     Key_ENTER,
     Key_SHIFT,
@@ -1657,8 +1657,6 @@ struct Queued_Input
     b32 down;
 };
 
-// Gamepad stuff.
-//
 enum Gamepad_Button
 {
     GamepadButton_NONE,
@@ -1686,13 +1684,13 @@ struct Gamepad
 {
     b32 connected;
     
-    // Analog in range [-1, 1].
-    V2  stick_left;
-    V2  stick_right;
+    // Analog direction vectors in range [-1, 1].
+    V2  left_stick;
+    V2  right_stick;
     
     // Analog in range [0, 1].
-    f32 trigger_left;
-    f32 trigger_right;
+    f32 left_trigger;
+    f32 right_trigger;
     
     b32 pressed [GamepadButton_COUNT];
     b32 held    [GamepadButton_COUNT];
@@ -3820,10 +3818,6 @@ String8 sb_to_string(String_Builder *builder, Arena *arena)
 //
 // Sound Implementation
 //
-void sound_play(Sound *sound)
-{
-    sound->pos = 0;
-}
 void sound_update(Sound *sound, u32 samples_to_advance)
 {
     sound->pos += samples_to_advance;
@@ -3832,7 +3826,7 @@ void sound_update(Sound *sound, u32 samples_to_advance)
     else
         sound->pos = MIN(sound->pos, sound->count);
 }
-void sound_mix(f32 *samples_out, u32 samples_to_write, f32 volume, Sound *sound)
+void sound_mix(Sound *sound, f32 volume, f32 *samples_out, u32 samples_to_write)
 {
     const s16 *s_samples = sound->samples;
     u32 s_count          = sound->count;

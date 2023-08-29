@@ -30,7 +30,7 @@ struct XInput_Gamepad
 {
     int32_t connected;
     
-    // Analog in range [-1, 1]
+    // Analog direction vectors in range [-1, 1]
     float   stick_left_x;
     float   stick_left_y;
     float   stick_right_x;
