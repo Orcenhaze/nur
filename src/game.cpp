@@ -916,7 +916,20 @@ FUNCTION void game_init()
     sound_manager_init(&game->sound_manager);
     {
         Arena_Temp scratch = get_scratch(0, 0);
+        Arena *a           = scratch.arena;
         Sound_Manager *m   = &game->sound_manager;
+        
+        String8 names[] = {
+            S8LIT("menu_move"), S8LIT("menu_confirm"), S8LIT("menu_back"),
+            S8LIT("move"),      S8LIT("object_push"),  S8LIT("rotate"),    S8LIT("undo"), 
+            S8LIT("death"),     S8LIT("laser_beam"), 
+            S8LIT("teleport"), 
+            S8LIT("rain"), 
+        };
+        
+        for (s32 i = 0; i < ARRAY_COUNT(names); i++) {
+            add_sound(m, sprint(a, "%Ssounds/%S.ogg", os->data_folder, names[i]), names[i], 1.0f, false);
+        }
         
         free_scratch(scratch);
     }

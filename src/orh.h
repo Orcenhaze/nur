@@ -79,7 +79,7 @@ CONVENTIONS:
 * When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
-[] OS_State stores samples_out and our Sound structs writes to it. samples_out should point directly to our magic ring buffer that WASAPI reads from.
+[] Add ALIGN_UP to arena_push, pass alignof(T).
 [] Implement angle_from_two_vectors() that gets us angle in range (0, TAU).
 https://math.stackexchange.com/questions/878785/how-to-find-an-angle-in-range0-360-between-2-vectors
 [] Implement quaternion_from_two_vectors() that gets quaternion that rotates v1 to v2 (closest arc). 

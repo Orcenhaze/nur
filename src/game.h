@@ -383,7 +383,7 @@ GLOBAL b32 is_teleporting;
 // Fullscreen from global os->fullscreen.
 GLOBAL b32 draw_grid = true;
 GLOBAL b32 prompt_user_on_restart = true;
-GLOBAL s32 master_volume = 5;
+GLOBAL s32 master_volume = 7;
 
 // Other state.
 GLOBAL f32 zoom_level; 
@@ -531,8 +531,7 @@ FUNCTION void add_sound(Sound_Manager *manager, String8 path, String8 name, f32 
 FUNCTION void play_sound(Sound_Manager *manager, String8 name)
 {
     Sound *sound = table_find_pointer(&manager->sounds_table, name);
-    if (!sound)
-        return;
+    ASSERT(sound);
     
     sound->pos = 0;
 }
