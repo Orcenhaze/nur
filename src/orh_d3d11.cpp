@@ -283,7 +283,8 @@ FUNCTION void d3d11_load_font(Font *font, String8 full_path, s32 ascii_start, s3
     stbtt_PackFontRanges(&font->pack_context, file.data, 0, ranges, sizes_count);
     stbtt_PackEnd(&font->pack_context);
     
-    u8 *pixels_rgba = PUSH_ARRAY_SET(scratch.arena, u8, w * h * 4, 1);
+    u8 *pixels_rgba = PUSH_ARRAY(scratch.arena, u8, w * h * 4);
+    MEMORY_SET(pixels_rgba, 1, w * h * 4);
     for (s32 i = 0; i < w * h; i++) {
         pixels_rgba[i * 4 + 0] |= font->pixels[i];
         pixels_rgba[i * 4 + 1] |= font->pixels[i];
@@ -858,7 +859,7 @@ FUNCTION void update_render_transform()
     
     D3D11_MAPPED_SUBRESOURCE mapped;
     device_context->Map(immediate_vs_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    memory_copy(mapped.pData, &constants, sizeof(constants));
+    MEMORY_COPY(mapped.pData, &constants, sizeof(constants));
     device_context->Unmap(immediate_vs_cbuffer, 0);
 }
 
@@ -875,7 +876,7 @@ FUNCTION void immediate_end()
     UINT offset = 0;
     D3D11_MAPPED_SUBRESOURCE mapped;
     device_context->Map(immediate_vbo, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    memory_copy(mapped.pData, immediate_vertices, stride * num_immediate_vertices);
+    MEMORY_COPY(mapped.pData, immediate_vertices, stride * num_immediate_vertices);
     device_context->Unmap(immediate_vbo, 0);
     device_context->IASetVertexBuffers(0, 1, &immediate_vbo, &stride, &offset);
     
@@ -891,7 +892,7 @@ FUNCTION void immediate_end()
     // Pixel Shader.
     PS_Constants constants {};
     device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    memory_copy(mapped.pData, &constants, sizeof(constants));
+    MEMORY_COPY(mapped.pData, &constants, sizeof(constants));
     device_context->Unmap(immediate_ps_cbuffer, 0);
     device_context->PSSetConstantBuffers(1, 1, &immediate_ps_cbuffer);
     device_context->PSSetSamplers(0, 1, &sampler0);

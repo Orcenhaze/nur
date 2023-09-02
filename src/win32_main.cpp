@@ -230,7 +230,7 @@ FUNCTION void win32_build_paths()
     while (*exe)  {
         if (*exe++ == '\\') one_past_slash = exe;
     }
-    memory_copy(global_exe_parent_folder, global_exe_full_path, one_past_slash - global_exe_full_path);
+    MEMORY_COPY(global_exe_parent_folder, global_exe_full_path, one_past_slash - global_exe_full_path);
     
     // @Note: We will copy the data folder when building the game and put it next to .exe.
     string_format(global_data_folder, sizeof(global_data_folder), "%sdata/", global_exe_parent_folder);

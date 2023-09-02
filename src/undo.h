@@ -111,7 +111,7 @@ FUNCTION void undo_end_frame(Undo_Handler *handler)
     
     Undo_Record new_record; MEMORY_ZERO_STRUCT(&new_record);
     new_record.actions_count = count;
-    memory_copy(new_record.actions, handler->pending_actions, count * sizeof(new_record.actions[0]));
+    MEMORY_COPY(new_record.actions, handler->pending_actions, count * sizeof(new_record.actions[0]));
     
     // @Note: If max records reached. Remove first half of all records.
     if (handler->records.count >= MAX_RECORDS) {

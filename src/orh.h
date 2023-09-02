@@ -1,4 +1,4 @@
-/* orh.h - v0.61 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.62 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.62 - removed memory_copy(), memory_set() and arena_push_set(). Added alignment to arena_push().
 0.61 - added table_find_pointer() and initialize parameter for Arrays.
 0.60 - added Sound.
 0.59 - added audio output to OS_State.
@@ -79,7 +80,6 @@ CONVENTIONS:
 * When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
-[] Add ALIGN_UP to arena_push, pass alignof(T).
 [] Implement angle_from_two_vectors() that gets us angle in range (0, TAU).
 https://math.stackexchange.com/questions/878785/how-to-find-an-angle-in-range0-360-between-2-vectors
 [] Implement quaternion_from_two_vectors() that gets quaternion that rotates v1 to v2 (closest arc). 
@@ -1033,15 +1033,18 @@ FUNCDEF inline V3  random_range_v3(Random_PCG *rng, V3 min, V3 max); // [min, ma
 #define ALIGN_UP(x, pow2)   (((x) + ((pow2) - 1)) & ~((pow2) - 1))
 #define ALIGN_DOWN(x, pow2) ( (x)                 & ~((pow2) - 1))
 
-#define PUSH_STRUCT(arena, T)          ((T *) arena_push(arena, sizeof(T)))
-#define PUSH_STRUCT_ZERO(arena, T)     ((T *) arena_push_zero(arena, sizeof(T)))
-#define PUSH_ARRAY(arena, T, c)        ((T *) arena_push(arena, sizeof(T) * (c)))
-#define PUSH_ARRAY_ZERO(arena, T, c)   ((T *) arena_push_zero(arena, sizeof(T) * (c)))
-#define PUSH_ARRAY_SET(arena, T, c, v) ((T *) arena_push_set(arena, sizeof(T) * (c), v))
-#define MEMORY_ZERO(m, z)              memory_set(m, 0, z)
-#define MEMORY_ZERO_STRUCT(s)          memory_set(s, 0, sizeof(*(s)))
-#define MEMORY_ZERO_ARRAY(a)           memory_set(a, 0, sizeof(a))
-#define MEMORY_COPY_STRUCT(d, s)       memory_copy(d, s, sizeof(*(d)));
+#define PUSH_STRUCT(arena, T)          ((T *) arena_push     (arena, sizeof(T),       alignof(T)))
+#define PUSH_STRUCT_ZERO(arena, T)     ((T *) arena_push_zero(arena, sizeof(T),       alignof(T)))
+#define PUSH_ARRAY(arena, T, c)        ((T *) arena_push     (arena, sizeof(T) * (c), alignof(T)))
+#define PUSH_ARRAY_ZERO(arena, T, c)   ((T *) arena_push_zero(arena, sizeof(T) * (c), alignof(T)))
+
+#define MEMORY_SET(m, v, z)            memset((m), (v), (z))
+#define MEMORY_ZERO(m, z)              MEMORY_SET((m), 0, (z))
+#define MEMORY_ZERO_STRUCT(s)          MEMORY_ZERO((s), sizeof(*(s)))
+#define MEMORY_ZERO_ARRAY(a)           MEMORY_ZERO((a), sizeof(a))
+
+#define MEMORY_COPY(d, s, z)           memmove((d), (s), (z))
+#define MEMORY_COPY_STRUCT(d, s)       MEMORY_COPY((d), (s), MIN(sizeof(*(d)), sizeof(*(s))))
 
 #define ARENA_MAX_DEFAULT GIGABYTES(8)
 #define ARENA_COMMIT_SIZE KILOBYTES(4)
@@ -1063,18 +1066,14 @@ struct Arena_Temp
 
 FUNCDEF Arena*     arena_init(u64 max_size = ARENA_MAX_DEFAULT);
 FUNCDEF void       arena_free(Arena *arena);
-FUNCDEF void*      arena_push(Arena *arena, u64 size);
-FUNCDEF void*      arena_push_zero(Arena *arena, u64 size);
-FUNCDEF void*      arena_push_set(Arena *arena, u64 size, s32 value);
+FUNCDEF void*      arena_push(Arena *arena, u64 size, u64 alignment);
+FUNCDEF void*      arena_push_zero(Arena *arena, u64 size, u64 alignment);
 FUNCDEF void       arena_pop(Arena *arena, u64 size);
 FUNCDEF void       arena_reset(Arena *arena);
 FUNCDEF Arena_Temp arena_temp_begin(Arena *arena);
 FUNCDEF void       arena_temp_end(Arena_Temp temp);
 FUNCDEF Arena_Temp get_scratch(Arena **conflict_array, s32 count);
 #define            free_scratch(temp) arena_temp_end(temp)
-
-FUNCDEF void* memory_copy(void *dst, void *src, u64 size);
-FUNCDEF void* memory_set(void *dst, s32 val, u64 size);
 
 /////////////////////////////////////////
 //
@@ -1133,7 +1132,7 @@ void get(String8 *s, T *value)
 {
     ASSERT(sizeof(T) <= s->count);
     
-    memory_copy(value, s->data, sizeof(T));
+    MEMORY_COPY(value, s->data, sizeof(T));
     advance(s, sizeof(T));
 }
 
@@ -1256,7 +1255,7 @@ void array_copy(Array<T> *dst, Array<T> src)
         array_reserve(dst, src.count);
     
     dst->count = src.count;
-    memory_copy(dst->data, src.data, src.count * sizeof(T));
+    MEMORY_COPY(dst->data, src.data, src.count * sizeof(T));
 }
 
 template<typename T>
@@ -3222,27 +3221,6 @@ V3 random_range_v3(Random_PCG *rng, V3 min, V3 max)
 //
 // Memory Arena Implementation
 //
-void * memory_copy(void *dst, void *src, u64 size)
-{
-    u8 *__dst = (u8 *)dst;
-    u8 *__src = (u8 *)src;
-    
-    while (size--)
-        *__dst++ = *__src++;
-    
-    return dst;
-}
-void * memory_set(void *dst, s32 val, u64 size)
-{
-    u8 *__dst =  (u8 *)dst;
-    u8  __val = *(u8 *)&val;
-    
-    while (size--)
-        *__dst++ = __val;
-    
-    return dst;
-}
-
 Arena* arena_init(u64 max_size /*= ARENA_MAX_DEFAULT*/)
 {
     Arena *result = 0;
@@ -3266,10 +3244,10 @@ void arena_free(Arena *arena)
 {
     os->release(arena);
 }
-void* arena_push(Arena *arena, u64 size)
+void* arena_push(Arena *arena, u64 size, u64 alignment)
 {
     void *result = 0;
-    u64 s = arena->used + size; 
+    u64 s = ALIGN_UP(arena->used + size, alignment); 
     if (s <= arena->max) {
         if (s > arena->commit_used) {
             // Commit more pages.
@@ -3287,16 +3265,10 @@ void* arena_push(Arena *arena, u64 size)
     ASSERT(result != 0);
     return result;
 }
-void* arena_push_zero(Arena *arena, u64 size)
+void* arena_push_zero(Arena *arena, u64 size, u64 alignment)
 {
-    void *result = arena_push(arena, size);
+    void *result = arena_push(arena, size, alignment);
     MEMORY_ZERO(result, size);
-    return result;
-}
-void* arena_push_set(Arena *arena, u64 size, s32 value)
-{
-    void *result = arena_push(arena, size);
-    memory_set(result, value, size);
     return result;
 }
 void arena_pop(Arena *arena, u64 size)
@@ -3379,7 +3351,7 @@ String8 string_copy(Arena *arena, String8 s)
     String8 result;
     result.count = s.count;
     result.data  = PUSH_ARRAY(arena, u8, result.count + 1);
-    memory_copy(result.data, s.data, result.count);
+    MEMORY_COPY(result.data, s.data, result.count);
     result.data[result.count] = 0;
     return result;
 }
@@ -3388,8 +3360,8 @@ String8 string_cat(Arena *arena, String8 a, String8 b)
     String8 result;
     result.count = a.count + b.count;
     result.data  = PUSH_ARRAY(arena, u8, result.count + 1);
-    memory_copy(result.data, a.data, a.count);
-    memory_copy(result.data + a.count, b.data, b.count);
+    MEMORY_COPY(result.data, a.data, a.count);
+    MEMORY_COPY(result.data + a.count, b.data, b.count);
     result.data[result.count] = 0;
     return result;
 }
@@ -3422,7 +3394,7 @@ void get(String8 *s, void *data, u64 size)
 {
     ASSERT(size <= s->count);
     
-    memory_copy(data, s->data, size);
+    MEMORY_COPY(data, s->data, size);
     advance(s, size);
 }
 u32 get_hash(String8 s)
@@ -3773,7 +3745,7 @@ void sb_append(String_Builder *builder, void *data, u64 size)
         advance(&builder->buffer, builder->length);
     }
     
-    memory_copy(builder->buffer.data, data, size);
+    MEMORY_COPY(builder->buffer.data, data, size);
     advance(&builder->buffer, size);
     
     builder->length = builder->buffer.data - builder->start;
