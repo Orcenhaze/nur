@@ -335,6 +335,7 @@ struct Player
 //
 // current_level metadata (we're storing each field independently).
 GLOBAL Arena *current_level_arena;
+GLOBAL s32 current_level_idx;
 GLOBAL s32 NUM_X;
 GLOBAL s32 NUM_Y;
 GLOBAL s32 SIZE_X;
@@ -393,9 +394,6 @@ GLOBAL f32 zoom_level;
 ////////////////////////////////
 // Levels
 //
-#if 0
-#include "levels.h"
-#else
 GLOBAL String8 level_names[] = 
 {
     S8LIT("invalid_level"),
@@ -462,12 +460,15 @@ GLOBAL String8 level_names[] =
     S8LIT("loop_medium"),
     S8LIT("loop_hard"),
 };
-#endif
+
+GLOBAL b32 levels_visited[ARRAY_COUNT(level_names)];
 
 enum 
 {
     SaveFileVersion_INIT,
     SaveFileVersion_ADD_MASTER_VOLUME,
+    SaveFileVersion_REMOVE_NAME_ADD_ID,
+    // @Todo: Add visited array.
     
     SaveFileVersion_COUNT,
 };
@@ -486,13 +487,14 @@ enum
     LevelVersion_INIT,
     LevelVersion_REMOVE_ID,
     LevelVersion_ADD_NAME,
+    LevelVersion_REMOVE_NAME_ADD_ID,
     
     LevelVersion_COUNT,
 };
 
 struct Loaded_Level
 {
-    String8 name;
+    s32 idx;            // level_names[idx] is name of level.
     s32 num_x, num_y;   // Number of rooms.
     s32 size_x, size_y; // Size of each room (in squares).
     Player player;

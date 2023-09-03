@@ -5,9 +5,6 @@ Features:
 - Simple package manager.
 - Simple instrumentation.
 
-Improvements:
-- Make levels store index instead of level name.
-
 Level design:
 - Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
 - Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.

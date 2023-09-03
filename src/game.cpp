@@ -83,8 +83,7 @@ FUNCTION void save_game()
     
     //save_map();
     sb_append(&sb, &latest_version, sizeof(s32));
-    sb_append(&sb, &lev->name.count, sizeof(u32));
-    sb_append(&sb, lev->name.data, lev->name.count);
+    sb_append(&sb, &current_level_idx);
     
     Settings s = {};
     s.fullscreen             = os->fullscreen;
@@ -106,11 +105,12 @@ FUNCTION void reload_map()
     Loaded_Level *lev = &game->loaded_level;
     arena_reset(a);
     
-    NUM_X            = lev->num_x;
-    NUM_Y            = lev->num_y;
-    SIZE_X           = lev->size_x;
-    SIZE_Y           = lev->size_y;
-    Player player    = lev->player;
+    current_level_idx = lev->idx;
+    NUM_X             = lev->num_x;
+    NUM_Y             = lev->num_y;
+    SIZE_X            = lev->size_x;
+    SIZE_Y            = lev->size_y;
+    Player player     = lev->player;
     set_player_position(player.x, player.y, player.dir, true);
     
     s32 num_rows = lev->num_y*lev->size_y;
@@ -194,31 +194,14 @@ get(&file, &field_name, size); \
     // null-terminated. When loading, we load count, then in case of memcpy, we copy count+1 to 
     // account for null-terminator.
     // When advancing, we advance count+1 to account for null.
-    /* 
-        IGNORE_FIELD(s32, id, LevelVersion_INIT, LevelVersion_REMOVE_ID);
-        if (version >= (LevelVersion_ADD_NAME)) { 
-            u32 len;
-            get(&file, &len);
-            String8 stemp = string(file.data, len);
-            advance(&file, len);
-            lev->name = string_copy(stemp);
-        } else {
-            lev->name = string_copy(level_name);
-        }
-     */
-    // Load level name.
-    u32 len;
-    get(&file, &len);
-    String8 stemp = string(file.data, len);
-    advance(&file, len);
-    //advance(&file, len + 1); // Account for null terminator.
-    lev->name = string_copy(os->permanent_arena, stemp);
+    
+    RESTORE_FIELD(lev->idx, LevelVersion_REMOVE_NAME_ADD_ID);
     
 #if DEVELOPER
-    if (lev->name != level_name) {
+    if (level_names[lev->idx] != level_name) {
         print("\nName mismatch!\n"
               "expected %S but got %S\n"
-              "Save the game again to solve the issue!\n\n", level_name, lev->name);
+              "Save the game again to solve the issue!\n\n", level_name, level_names[lev->idx]);
     }
 #endif
     
@@ -266,6 +249,10 @@ get(&file, &field_name, size); \
     
     return true;
 }
+FUNCTION b32 load_level(s32 idx)
+{
+    return load_level(level_names[idx]);
+}
 
 FUNCTION b32 load_game()
 {
@@ -294,13 +281,26 @@ get(&file, &field_name); \
     get(&file, &version);
     
     // Load level name and level itself.
-    u32 name_length;
-    get(&file, &name_length);
-    String8 name = string(file.data, name_length);
-    if (!load_level(name) || (name != game->loaded_level.name)) {
-        return false;
+    if (version >= SaveFileVersion_ADD_MASTER_VOLUME && version < SaveFileVersion_REMOVE_NAME_ADD_ID) {
+        // Older versions.
+        u32 name_length;
+        get(&file, &name_length);
+        
+        String8 name = string(file.data, name_length);
+        if (!load_level(name) || (name != level_names[game->loaded_level.idx])) {
+            return false;
+        }
+        
+        advance(&file, name_length);
+    } else {
+        // Latest version.
+        s32 level_idx;
+        get(&file, &level_idx);
+        if (!load_level(level_idx) || (level_idx != game->loaded_level.idx)) {
+            ASSERT(0);
+            return false;
+        }
     }
-    advance(&file, name_length);
     
     // Load settings.
     RESTORE_FIELD(os->fullscreen, SaveFileVersion_INIT);
@@ -355,9 +355,9 @@ FUNCTION void save_map()
     }
 }
 
-FUNCTION b32 save_level(String8 level_name)
+FUNCTION b32 save_level(s32 level_idx)
 {
-    if (string_match(level_name, level_names[0])) {
+    if (level_idx == 0) {
         print("Can't save invalid level!\n");
         return false;
     }
@@ -370,8 +370,7 @@ FUNCTION b32 save_level(String8 level_name)
     
     save_map();
     sb_append(&sb, &latest_version, sizeof(s32));
-    sb_append(&sb, &level_name.count, sizeof(u32));
-    sb_append(&sb, level_name.data, level_name.count);
+    sb_append(&sb, &level_idx);
     sb_append(&sb, &lev->num_x);
     sb_append(&sb, &lev->num_y);
     sb_append(&sb, &lev->size_x);
@@ -396,9 +395,10 @@ FUNCTION b32 save_level(String8 level_name)
         }
     }
     
-    Arena *a           = os->permanent_arena;
     Arena_Temp scratch = get_scratch(0, 0);
-    b32 result = os->write_entire_file(sprint(scratch.arena, "%Slevels/%S.nlf", os->data_folder, level_name), sb_to_string(&sb, a));
+    Arena *a           = scratch.arena;
+    String8 path       = sprint(a, "%Slevels/%S.nlf", os->data_folder, level_names[level_idx]);
+    b32 result = os->write_entire_file(path, sb_to_string(&sb, a));
     free_scratch(scratch);
     
     return result;
@@ -509,15 +509,15 @@ FUNCTION void do_editor(b32 is_first_call)
         }
         
         // Select level.
-        LOCAL_PERSIST s32 selected_level = 0;
-        const char* combo_preview_value = (const char*)level_names[selected_level].data;
+        LOCAL_PERSIST s32 selected_level_idx = 0;
+        const char* combo_preview_value = (const char*)level_names[selected_level_idx].data;
         if(ImGui::BeginCombo("Choose level", combo_preview_value)) {
             for(int name_index = 0; name_index < IM_ARRAYSIZE(level_names); name_index++) {
-                const bool is_selected = (selected_level == name_index);
+                const bool is_selected = (selected_level_idx == name_index);
                 if(ImGui::Selectable((const char*)level_names[name_index].data, is_selected)) {
-                    selected_level = name_index;
+                    selected_level_idx = name_index;
                     
-                    if (!load_level(level_names[selected_level])) {
+                    if (!load_level(selected_level_idx)) {
                         resize_current_level(1, 1, 8, 8);
                         make_empty_level();
                     } 
@@ -555,9 +555,9 @@ FUNCTION void do_editor(b32 is_first_call)
         
         // Save level.
         if (ImGui::Button("Save level")) {
-            ASSERT(game->loaded_level.name == level_names[selected_level]);
+            ASSERT(game->loaded_level.idx == selected_level_idx);
             
-            if (save_level(level_names[selected_level])) {
+            if (save_level(selected_level_idx)) {
                 ImGui::SameLine(); 
                 ImGui::Text("Saved!");
             }
@@ -1056,17 +1056,11 @@ FUNCTION void load_next_level()
     
     // Transition animation complete; load the level and stop calling this function.
     if (teleport_transition_timer <= 0) {
-        s32 current_level_index = 0;
-        for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
-            if (level_names[i] == game->loaded_level.name) {
-                current_level_index = i;
-                break;
-            }
-        }
-        ASSERT(current_level_index != 0);
+        if ((current_level_idx + 1) < ARRAY_COUNT(level_names))
+            current_level_idx++;
         
-        if ((current_level_index + 1) < ARRAY_COUNT(level_names))
-            load_level(level_names[current_level_index + 1]);
+        load_level(current_level_idx);
+        // @Todo: Update visited array.
         
         is_teleporting = false;
     }
@@ -1309,7 +1303,7 @@ FUNCTION void update_world()
     
     if (input_pressed(RESTART_LEVEL)) {
         if (prompt_user_on_restart == false) {
-            load_level(game->loaded_level.name);
+            load_level(game->loaded_level.idx);
         } else {
             current_mode = M_MENUS;
             page         = RESTART_CONFIRMATION;
@@ -1876,7 +1870,7 @@ FUNCTION void update_menus()
         } break;
         case RESTART_CONFIRMATION: {
             if (prompt_user_on_restart == false) {
-                load_level(game->loaded_level.name);
+                load_level(game->loaded_level.idx);
                 current_mode = M_GAME;
                 break;
             }
@@ -1893,7 +1887,7 @@ FUNCTION void update_menus()
                 switch (selection) {
                     case 0: {
                         // Yes.
-                        load_level(game->loaded_level.name);
+                        load_level(game->loaded_level.idx);
                         current_mode = M_GAME;
                     } break;
                     case 1: {
