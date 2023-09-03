@@ -1056,10 +1056,11 @@ FUNCTION void load_next_level()
     
     // Transition animation complete; load the level and stop calling this function.
     if (teleport_transition_timer <= 0) {
-        if ((current_level_idx + 1) < ARRAY_COUNT(level_names))
-            current_level_idx++;
         
-        load_level(current_level_idx);
+        // current level idx will be updated when calling load_level.
+        if ((current_level_idx + 1) < ARRAY_COUNT(level_names))
+            load_level(current_level_idx + 1);
+        
         // @Todo: Update visited array.
         
         is_teleporting = false;
@@ -1682,22 +1683,22 @@ FUNCTION void update_menus()
     // @Cleanup: Pull-out commonalities like pressing BACK input and such.
     //
     
-    if (input_pressed(MOVE_UP))
-        move_hold_timer = 0.0f;
-    else if (input_pressed(MOVE_DOWN))
+    if (input_pressed(MOVE_RIGHT) || input_pressed(MOVE_UP) || 
+        input_pressed(MOVE_LEFT)  || input_pressed(MOVE_DOWN))
         move_hold_timer = 0.0f;
     
     move_hold_timer = MAX(0, move_hold_timer - os->dt);
     
-    s32 dir = 0;
-    if (input_held(MOVE_UP)) {
+    s32 xdir = 0;
+    s32 ydir = 0;
+    if (input_held(MOVE_RIGHT) || input_held(MOVE_UP) || 
+        input_held(MOVE_LEFT)  || input_held(MOVE_DOWN)) {
         if (move_hold_timer <= 0.0f) {
-            dir = -1;
-            move_hold_timer = MOVE_HOLD_DURATION;
-        }
-    } else if (input_held(MOVE_DOWN)) {
-        if (move_hold_timer <= 0.0f) {
-            dir = 1;
+            if (input_held(MOVE_RIGHT))      xdir =  1;
+            else if (input_held(MOVE_UP))    ydir = -1;
+            else if (input_held(MOVE_LEFT))  xdir = -1;
+            else if (input_held(MOVE_DOWN))  ydir =  1;
+            
             move_hold_timer = MOVE_HOLD_DURATION;
         }
     }
@@ -1705,13 +1706,13 @@ FUNCTION void update_menus()
     switch (page) {
         case MAIN_MENU: {
 #if DEVELOPER
-            s32 const num_choices = 6;
+            s32 const num_choices = 7;
 #else
-            s32 const num_choices = 5;
+            s32 const num_choices = 6;
 #endif
-            move_selection(dir, num_choices);
+            move_selection(ydir, num_choices);
             if (selection == 0 && !game_started) {
-                move_selection(dir, num_choices);
+                move_selection(ydir, num_choices);
             }
             
             if (input_pressed(CONFIRM)) {
@@ -1736,13 +1737,20 @@ FUNCTION void update_menus()
                         selection      = 0;
                     } break;
                     case 3: {
+                        // Level Select.
+                        prev_page = page;
+                        page      = LEVEL_SELECT;
+                        prev_selection = selection;
+                        selection      = current_level_idx;
+                    } break;
+                    case 4: {
                         // Controls.
                         prev_page = page;
                         page      = CONTROLS;
                         prev_selection = selection;
                         selection      = 0;
                     } break;
-                    case 4: { 
+                    case 5: { 
                         // Save and Quit.
                         //if (dead)
                         //undo_next(&undo_handler);
@@ -1750,7 +1758,7 @@ FUNCTION void update_menus()
                         os->exit = true;
                     } break;
 #if DEVELOPER
-                    case 5: { 
+                    case 6: { 
                         // Make Empty Level.
                         make_empty_level();
                         current_mode = M_GAME;
@@ -1762,7 +1770,7 @@ FUNCTION void update_menus()
         } break;
         case PAUSE: {
             s32 const num_choices = 6;
-            move_selection(dir, num_choices);
+            move_selection(ydir, num_choices);
             
             if (input_pressed(PAUSE_MENU) || input_pressed(BACK)) {
                 current_mode = M_GAME;
@@ -1816,7 +1824,7 @@ FUNCTION void update_menus()
         } break;
         case SETTINGS: {
             s32 const num_choices = 5;
-            move_selection(dir, num_choices);
+            move_selection(ydir, num_choices);
             
             if (input_pressed(PAUSE_MENU)) {
                 if (prev_page == MAIN_MENU) {
@@ -1876,7 +1884,7 @@ FUNCTION void update_menus()
             }
             
             s32 const num_choices = 2;
-            move_selection(dir, num_choices);
+            move_selection(ydir, num_choices);
             
             if (input_pressed(PAUSE_MENU) || input_pressed(BACK)) {
                 current_mode = M_GAME;
@@ -1905,7 +1913,7 @@ FUNCTION void update_menus()
         } break;
         case CONTROLS: {
             s32 const num_choices = 1;
-            move_selection(dir, num_choices);
+            move_selection(ydir, num_choices);
             
             if (input_pressed(PAUSE_MENU)) {
                 if (prev_page == MAIN_MENU) {
@@ -1934,8 +1942,34 @@ FUNCTION void update_menus()
                 }
             }
         } break;
+        case LEVEL_SELECT: {
+            s32 const num_choices = ARRAY_COUNT(level_names);
+            selection = CLAMP(0, selection + xdir,                num_choices-1);
+            selection = CLAMP(0, selection + ydir*LEVELS_PER_ROW, num_choices-1);
+            
+            if (input_pressed(PAUSE_MENU)) {
+                page = prev_page;
+                selection = prev_selection;
+                break;
+            }
+            
+            if (input_pressed(BACK)) {
+                page = prev_page;
+                selection = prev_selection;
+                break;
+            }
+            
+            if (input_pressed(CONFIRM)) {
+                
+                // @Note: Ignore invalid_level and aaa_placeholders.
+                if (selection < 4) 
+                    break;
+                
+                load_level(selection);
+                current_mode = M_GAME;
+            }
+        } break;
     }
-    
 }
 
 FUNCTION void game_update()
@@ -2290,6 +2324,8 @@ FUNCTION void draw_world()
 
 FUNCTION void draw_menus()
 {
+    // @Cleanup: Need to pull-out code and clean up!
+    
     b32 is_transparent_bg = false;
     if (page == PAUSE || 
         (page == SETTINGS && prev_page == PAUSE) || 
@@ -2303,6 +2339,9 @@ FUNCTION void draw_menus()
     f32 w = get_width(os->drawing_rect);
     f32 h = get_height(os->drawing_rect);
     f32 yadvance = 80 * (h / os->render_size.h);
+    
+    V4 active_color   = v4(1);
+    V4 inactive_color = v4(0.8f, 0.5f, 0.8f, 1.0f);
     
     // Gradient background.
     immediate_begin();
@@ -2343,6 +2382,7 @@ FUNCTION void draw_menus()
                 "CONTINUE",
                 "START NEW GAME",
                 "SETTINGS",
+                "LEVEL SELECT",
                 "CONTROLS",
                 "SAVE AND QUIT",
 #if DEVELOPER
@@ -2355,7 +2395,7 @@ FUNCTION void draw_menus()
                     continue;
                 
                 b32 highlighed = selection == i;
-                V4 color       = highlighed? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+                V4 color       = highlighed? active_color : inactive_color;
                 immediate_text(&consolas, p, 5, color, choices[i]);
                 p.y += yadvance;
             }
@@ -2374,7 +2414,7 @@ FUNCTION void draw_menus()
             
             for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
                 b32 highlighed = selection == i;
-                V4 color       = highlighed? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+                V4 color       = highlighed? active_color : inactive_color;
                 immediate_text(&consolas, p, 5, color, choices[i]);
                 p.y += yadvance;
             }
@@ -2393,7 +2433,7 @@ FUNCTION void draw_menus()
             
             for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
                 b32 highlighed = selection == i;
-                V4 color       = highlighed? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+                V4 color       = highlighed? active_color : inactive_color;
                 immediate_text(&consolas, p, 5, color, choices[i]);
                 p.y += yadvance;
                 
@@ -2435,14 +2475,14 @@ FUNCTION void draw_menus()
             text       = "YES";
             text_w     = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
-            color      = (selection == 0)? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+            color      = (selection == 0)? active_color : inactive_color;
             immediate_text(&consolas, p, 5, color, text);
             p.y       += yadvance;
             
             text       = "NO";
             text_w     = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
-            color      = (selection == 1)? v4(1) : v4(0.8f, 0.5f, 0.8f, 1.0f);
+            color      = (selection == 1)? active_color : inactive_color;
             immediate_text(&consolas, p, 5, color, text);
         } break;
         case CONTROLS: {
@@ -2467,6 +2507,34 @@ FUNCTION void draw_menus()
                 
                 if (i == ARRAY_COUNT(lines) - 2)
                     p.y += yadvance;
+            }
+        } break;
+        case LEVEL_SELECT: {
+            s32 const num_choices = ARRAY_COUNT(level_names);
+            s32 vh = 5;
+            f32 xadvance = 180 * (w / os->render_size.w);
+            f32 yadvance = 80  * (h / os->render_size.h);
+            
+            f32 x = w*0.25f;
+            f32 y = h*0.10f;
+            
+            for (s32 i = 0; i < num_choices; i++) {
+                if (i % LEVELS_PER_ROW == 0) {
+                    y += yadvance;
+                    x  = w*0.25f;
+                }
+                
+                V4 color = (selection == i)? active_color : (i < 4)? v4(1, 0, 0, 1) : inactive_color;
+                
+                char text[4];
+                string_format(text, sizeof(text), "%d", i);
+                
+                V2 p = {x, y};
+                p.x -= get_text_width(&consolas, vh, text) * 0.5f;
+                
+                immediate_text(&consolas, p, vh, color, text);
+                
+                x += xadvance;
             }
         } break;
     }

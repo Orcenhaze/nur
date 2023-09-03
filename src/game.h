@@ -135,6 +135,7 @@ enum Menu_Page
     SETTINGS,
     RESTART_CONFIRMATION,
     CONTROLS,
+    LEVEL_SELECT,
 };
 GLOBAL s32 selection;
 GLOBAL s32 prev_selection;
@@ -462,6 +463,7 @@ GLOBAL String8 level_names[] =
 };
 
 GLOBAL b32 levels_visited[ARRAY_COUNT(level_names)];
+GLOBAL s32 const LEVELS_PER_ROW = 6;
 
 enum 
 {
