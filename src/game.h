@@ -336,7 +336,8 @@ struct Player
 //
 // current_level metadata (we're storing each field independently).
 GLOBAL Arena *current_level_arena;
-GLOBAL s32 current_level_idx;
+GLOBAL s32 latest_level_idx  = 4; // Skip invalid_level and aaa_placeholders.
+GLOBAL s32 current_level_idx = 4; // Skip invalid_level and aaa_placeholders.
 GLOBAL s32 NUM_X;
 GLOBAL s32 NUM_Y;
 GLOBAL s32 SIZE_X;
@@ -395,6 +396,7 @@ GLOBAL f32 zoom_level;
 ////////////////////////////////
 // Levels
 //
+GLOBAL s32 const LEVELS_PER_ROW = 6; // For level select.
 GLOBAL String8 level_names[] = 
 {
     S8LIT("invalid_level"),
@@ -462,15 +464,12 @@ GLOBAL String8 level_names[] =
     S8LIT("loop_hard"),
 };
 
-GLOBAL b32 levels_visited[ARRAY_COUNT(level_names)];
-GLOBAL s32 const LEVELS_PER_ROW = 6;
-
 enum 
 {
     SaveFileVersion_INIT,
     SaveFileVersion_ADD_MASTER_VOLUME,
     SaveFileVersion_REMOVE_NAME_ADD_ID,
-    // @Todo: Add visited array.
+    SaveFileVersion_ADD_LATEST_LEVEL_ID,
     
     SaveFileVersion_COUNT,
 };

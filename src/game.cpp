@@ -84,6 +84,7 @@ FUNCTION void save_game()
     //save_map();
     sb_append(&sb, &latest_version, sizeof(s32));
     sb_append(&sb, &current_level_idx);
+    sb_append(&sb, &latest_level_idx);
     
     Settings s = {};
     s.fullscreen             = os->fullscreen;
@@ -301,6 +302,8 @@ get(&file, &field_name); \
             return false;
         }
     }
+    
+    RESTORE_FIELD(latest_level_idx, SaveFileVersion_ADD_LATEST_LEVEL_ID);
     
     // Load settings.
     RESTORE_FIELD(os->fullscreen, SaveFileVersion_INIT);
@@ -1061,7 +1064,7 @@ FUNCTION void load_next_level()
         if ((current_level_idx + 1) < ARRAY_COUNT(level_names))
             load_level(current_level_idx + 1);
         
-        // @Todo: Update visited array.
+        latest_level_idx++;
         
         is_teleporting = false;
     }
@@ -1695,8 +1698,8 @@ FUNCTION void update_menus()
         input_held(MOVE_LEFT)  || input_held(MOVE_DOWN)) {
         if (move_hold_timer <= 0.0f) {
             if (input_held(MOVE_RIGHT))      xdir =  1;
-            else if (input_held(MOVE_UP))    ydir = -1;
             else if (input_held(MOVE_LEFT))  xdir = -1;
+            if (input_held(MOVE_UP))         ydir = -1;
             else if (input_held(MOVE_DOWN))  ydir =  1;
             
             move_hold_timer = MOVE_HOLD_DURATION;
@@ -1711,8 +1714,9 @@ FUNCTION void update_menus()
             s32 const num_choices = 6;
 #endif
             move_selection(ydir, num_choices);
-            if (selection == 0 && !game_started) {
-                move_selection(ydir, num_choices);
+            if (!game_started) {
+                if (selection == 0 || selection == 3)
+                    move_selection(ydir, num_choices);
             }
             
             if (input_pressed(CONFIRM)) {
@@ -1853,7 +1857,7 @@ FUNCTION void update_menus()
                 master_volume = CLAMP(0, master_volume, 10);
             }
             
-            if (input_pressed(CONFIRM)) {
+            if (input_pressed(CONFIRM) || input_pressed(MOVE_LEFT) || input_pressed(MOVE_RIGHT)) {
                 switch (selection) {
                     case 1: {
                         // Toggle grid.
@@ -1943,9 +1947,9 @@ FUNCTION void update_menus()
             }
         } break;
         case LEVEL_SELECT: {
-            s32 const num_choices = ARRAY_COUNT(level_names);
-            selection = CLAMP(0, selection + xdir,                num_choices-1);
-            selection = CLAMP(0, selection + ydir*LEVELS_PER_ROW, num_choices-1);
+            s32 const num_choices = latest_level_idx + 1;
+            selection = CLAMP(4, selection + xdir,                num_choices-1);
+            selection = CLAMP(4, selection + ydir*LEVELS_PER_ROW, num_choices-1);
             
             if (input_pressed(PAUSE_MENU)) {
                 page = prev_page;
@@ -1960,7 +1964,6 @@ FUNCTION void update_menus()
             }
             
             if (input_pressed(CONFIRM)) {
-                
                 // @Note: Ignore invalid_level and aaa_placeholders.
                 if (selection < 4) 
                     break;
@@ -2324,7 +2327,9 @@ FUNCTION void draw_world()
 
 FUNCTION void draw_menus()
 {
+    // @Cleanup:
     // @Cleanup: Need to pull-out code and clean up!
+    //
     
     b32 is_transparent_bg = false;
     if (page == PAUSE || 
@@ -2391,8 +2396,10 @@ FUNCTION void draw_menus()
             };
             
             for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
-                if (!game_started && (i==0))
-                    continue;
+                if (!game_started) {
+                    if (i==0 || i==3)
+                        continue;
+                }
                 
                 b32 highlighed = selection == i;
                 V4 color       = highlighed? active_color : inactive_color;
@@ -2510,7 +2517,7 @@ FUNCTION void draw_menus()
             }
         } break;
         case LEVEL_SELECT: {
-            s32 const num_choices = ARRAY_COUNT(level_names);
+            s32 const num_choices = latest_level_idx + 1;
             s32 vh = 5;
             f32 xadvance = 180 * (w / os->render_size.w);
             f32 yadvance = 80  * (h / os->render_size.h);
@@ -2518,13 +2525,13 @@ FUNCTION void draw_menus()
             f32 x = w*0.25f;
             f32 y = h*0.10f;
             
-            for (s32 i = 0; i < num_choices; i++) {
-                if (i % LEVELS_PER_ROW == 0) {
+            for (s32 i = 4; i < num_choices; i++) {
+                if ((i-4) % LEVELS_PER_ROW == 0) {
                     y += yadvance;
                     x  = w*0.25f;
                 }
                 
-                V4 color = (selection == i)? active_color : (i < 4)? v4(1, 0, 0, 1) : inactive_color;
+                V4 color = (selection == i)? active_color : inactive_color;
                 
                 char text[4];
                 string_format(text, sizeof(text), "%d", i);
