@@ -1,4 +1,4 @@
-/* orh.h - v0.62 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.63 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.63 - smooth_step correction. Removed V2, V3, and V4 variants.
 0.62 - removed memory_copy(), memory_set() and arena_push_set(). Added alignment to arena_push().
 0.61 - added table_find_pointer() and initialize parameter for Arrays.
 0.60 - added Sound.
@@ -608,15 +609,8 @@ FUNCDEF inline Quaternion  lerp(Quaternion a, f32 t, Quaternion b);
 FUNCDEF inline Quaternion nlerp(Quaternion a, f32 t, Quaternion b);
 FUNCDEF inline Quaternion slerp(Quaternion a, f32 t, Quaternion b);
 
-FUNCDEF inline f32 smooth_step(f32 a, f32 t, f32 b);
-FUNCDEF inline V2  smooth_step(V2 a, f32 t, V2 b);
-FUNCDEF inline V3  smooth_step(V3 a, f32 t, V3 b);
-FUNCDEF inline V4  smooth_step(V4 a, f32 t, V4 b);
-
-FUNCDEF inline f32 smoother_step(f32 a, f32 t, f32 b);
-FUNCDEF inline V2  smoother_step(V2 a, f32 t, V2 b);
-FUNCDEF inline V3  smoother_step(V3 a, f32 t, V3 b);
-FUNCDEF inline V4  smoother_step(V4 a, f32 t, V4 b);
+FUNCDEF inline f32 smooth_step  (f32 edge0, f32 x, f32 edge1); // Output in range [0, 1]
+FUNCDEF inline f32 smoother_step(f32 edge0, f32 x, f32 edge1); // Output in range [0, 1]
 
 FUNCDEF f32 move_towards(f32 current, f32 target, f32 max_distance);
 FUNCDEF V2  move_towards(V2 current, V2 target, f32 max_distance);
@@ -2705,58 +2699,17 @@ Quaternion slerp(Quaternion a, f32 t, Quaternion b)
     return result;
 }
 
-f32 smooth_step(f32 a, f32 t, f32 b) 
-{ 
-    float x = CLAMP01((t - a) / (b - a));
-    return SQUARE(x)*(3.0f - 2.0f*x);
-}
-V2 smooth_step(V2 a, f32 t, V2 b)
+f32 smooth_step(f32 edge0, f32 x, f32 edge1) 
 {
-    V2 result = {};
-    result.x  = smooth_step(a.x, t, b.x);
-    result.y  = smooth_step(a.y, t, b.y);
-    return result;
+    x = CLAMP01((x - edge0) / (edge1 - edge0));
+    x = SQUARE(x)*(3.0f - 2.0f*x);
+    return x;
 }
-V3 smooth_step(V3 a, f32 t, V3 b)
+f32 smoother_step(f32 edge0, f32 x, f32 edge1) 
 {
-    V3 result = {};
-    result.xy = smooth_step(a.xy, t, b.xy);
-    result.z  = smooth_step(a.z, t, b.z);
-    return result;
-}
-V4 smooth_step(V4 a, f32 t, V4 b)
-{
-    V4 result  = {};
-    result.xyz = smooth_step(a.xyz, t, b.xyz);
-    result.w   = smooth_step(a.w, t, b.w);
-    return result;
-}
-
-f32 smoother_step(f32 a, f32 t, f32 b) 
-{
-    float x = CLAMP01((t - a) / (b - a));
-    return CUBE(x)*(x*(6.0f*x - 15.0f) + 10.0f);
-}
-V2 smoother_step(V2 a, f32 t, V2 b)
-{
-    V2 result = {};
-    result.x  = smoother_step(a.x, t, b.x);
-    result.y  = smoother_step(a.y, t, b.y);
-    return result;
-}
-V3 smoother_step(V3 a, f32 t, V3 b)
-{
-    V3 result = {};
-    result.xy = smoother_step(a.xy, t, b.xy);
-    result.z  = smoother_step(a.z, t, b.z);
-    return result;
-}
-V4 smoother_step(V4 a, f32 t, V4 b)
-{
-    V4 result  = {};
-    result.xyz = smoother_step(a.xyz, t, b.xyz);
-    result.w   = smoother_step(a.w, t, b.w);
-    return result;
+    x = CLAMP01((x - edge0) / (edge1 - edge0));
+    x = CUBE(x)*(x*(6.0f*x - 15.0f) + 10.0f);
+    return x;
 }
 
 f32 move_towards(f32 current, f32 target, f32 max_distance)
