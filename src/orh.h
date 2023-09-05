@@ -1,4 +1,4 @@
-/* orh.h - v0.63 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.64 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.64 - corrected frac() implementation.
 0.63 - smooth_step correction. Removed V2, V3, and V4 variants.
 0.62 - removed memory_copy(), memory_set() and arena_push_set(). Added alignment to arena_push().
 0.61 - added table_find_pointer() and initialize parameter for Arrays.
@@ -488,10 +489,10 @@ FUNCDEF inline f32 _arcsin(f32 x);
 FUNCDEF inline f32 _arccos(f32 x);
 FUNCDEF inline f32 _arctan(f32 x);
 FUNCDEF inline f32 _arctan2(f32 y, f32 x);
-FUNCDEF inline f32 _arcsin_turns(f32 x);          // Returns angle in turns.
-FUNCDEF inline f32 _arccos_turns(f32 x);          // Returns angle in turns.
-FUNCDEF inline f32 _arctan_turns(f32 x);          // Returns angle in turns.
-FUNCDEF inline f32 _arctan2_turns(f32 y, f32 x);  // Returns angle in turns.
+FUNCDEF inline f32 _arcsin_turns(f32 x);         // Returns angle in turns.
+FUNCDEF inline f32 _arccos_turns(f32 x);         // Returns angle in turns.
+FUNCDEF inline f32 _arctan_turns(f32 x);         // Returns angle in turns.
+FUNCDEF inline f32 _arctan2_turns(f32 y, f32 x); // Returns angle in turns.
 FUNCDEF inline f32 _round(f32 x); // Towards nearest integer.
 FUNCDEF inline f32 _floor(f32 x); // Towards negative infinity.
 FUNCDEF inline f32 _ceil(f32 x);  // Towards positive infinity.
@@ -507,7 +508,7 @@ FUNCDEF inline V3 floor(V3 v);
 FUNCDEF inline V2 ceil(V2 v);
 FUNCDEF inline V3 ceil(V3 v);
 
-FUNCDEF f32 frac(f32 x);
+FUNCDEF f32 frac(f32 x); // Output in range [0, 1]
 FUNCDEF V2  frac(V2 v);
 FUNCDEF V3  frac(V3 v);
 
@@ -2156,9 +2157,7 @@ V3 ceil(V3 v)
 
 f32 frac(f32 x)
 {
-    s32 i = (s32) x;
-    
-    f32 result = x - (f32)i;
+    f32 result = x - _floor(x);
     return result;
 }
 V2 frac(V2 v)
