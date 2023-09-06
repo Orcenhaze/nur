@@ -110,31 +110,24 @@ struct Font
 };
 GLOBAL Font consolas;
 
-//
-// Common constant buffers.
-//
-struct VS_Constants
-{
-    M4x4 object_to_proj_matrix;
-};
-
-struct PS_Constants
-{
-    V4  placeholder;
-};
-
-
 ////////////////////////////////
 // Immediate mode renderer info.
 //
-// Shader. 
-//
-GLOBAL ID3D11InputLayout  *immediate_input_layout;
-GLOBAL ID3D11Buffer       *immediate_vbo;
-GLOBAL ID3D11Buffer       *immediate_vs_cbuffer;
-GLOBAL ID3D11Buffer       *immediate_ps_cbuffer;
-GLOBAL ID3D11VertexShader *immediate_vs;
-GLOBAL ID3D11PixelShader  *immediate_ps;
+struct Immediate_VS_Constants
+{
+    M4x4 object_to_proj_matrix;
+};
+struct Immediate_PS_Constants
+{
+    V4  placeholder;
+};
+GLOBAL Immediate_PS_Constants immediate_ps_constants;
+GLOBAL ID3D11InputLayout     *immediate_input_layout;
+GLOBAL ID3D11Buffer          *immediate_vbo;
+GLOBAL ID3D11Buffer          *immediate_vs_cbuffer;
+GLOBAL ID3D11Buffer          *immediate_ps_cbuffer;
+GLOBAL ID3D11VertexShader    *immediate_vs;
+GLOBAL ID3D11PixelShader     *immediate_ps;
 
 // Vertex info.
 //
@@ -157,9 +150,7 @@ GLOBAL b32 is_using_pixel_coords;
 ////////////////////////////////
 
 ////////////////////////////////
-// Particle render info.
-//
-// Shader.
+// Particles renderer info.
 //
 struct Particle_Constants
 {
@@ -410,7 +401,7 @@ FUNCTION void create_immediate_shader()
     // Constant buffers.
     {
         D3D11_BUFFER_DESC desc = {};
-        desc.ByteWidth      = ALIGN_UP(sizeof(VS_Constants), 16);
+        desc.ByteWidth      = ALIGN_UP(sizeof(Immediate_VS_Constants), 16);
         desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
         desc.Usage          = D3D11_USAGE_DYNAMIC;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -419,7 +410,7 @@ FUNCTION void create_immediate_shader()
     }
     {
         D3D11_BUFFER_DESC desc = {};
-        desc.ByteWidth      = ALIGN_UP(sizeof(PS_Constants), 16);
+        desc.ByteWidth      = ALIGN_UP(sizeof(Immediate_PS_Constants), 16);
         desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
         desc.Usage          = D3D11_USAGE_DYNAMIC;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -613,7 +604,7 @@ FUNCTION void d3d11_init(HWND window)
         D3D11_DEPTH_STENCIL_DESC desc = {};
         desc.DepthEnable      = TRUE;
         desc.DepthWriteMask   = D3D11_DEPTH_WRITE_MASK_ALL;
-        desc.DepthFunc        = D3D11_COMPARISON_LESS_EQUAL;
+        desc.DepthFunc        = D3D11_COMPARISON_LESS_EQUAL; // @Note: Use GREATER if using reverse-z
         desc.StencilEnable    = FALSE;
         desc.StencilReadMask  = D3D11_DEFAULT_STENCIL_READ_MASK;
         desc.StencilWriteMask = D3D11_DEFAULT_STENCIL_WRITE_MASK;
@@ -742,6 +733,8 @@ FUNCTION void d3d11_clear(FLOAT r, FLOAT g, FLOAT b, FLOAT a)
     color.rgb = pow(color.rgb, 2.2f);
     
     device_context->ClearRenderTargetView(render_target_view, color.I);
+    
+    // @Note: Clear depth buffer to the "far" value (0.0f instead of 1.0f if using reverse-z perspective projection).
     device_context->ClearDepthStencilView(depth_stencil_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 }
 
@@ -788,8 +781,7 @@ FUNCTION void set_texture(Texture *texture)
 FUNCTION void set_view_to_proj()
 {
     f32 ar = (f32)os->render_size.w / (f32)os->render_size.h;
-    //view_to_proj_matrix = orthographic_2d(-ar*zoom, ar*zoom, -zoom, zoom);
-    view_to_proj_matrix = infinite_perspective(90.0f, ar, 0.1f);
+    view_to_proj_matrix = perspective(120.0f * DEGS_TO_RADS, ar, 0.01f, 10.0f);
 }
 
 FUNCTION void set_world_to_view(V3 camera_position)
@@ -854,13 +846,21 @@ FUNCTION void update_render_transform()
     else
         object_to_proj_matrix = view_to_proj_matrix.forward * world_to_view_matrix.forward * object_to_world_matrix;
     
-    VS_Constants constants;
-    constants.object_to_proj_matrix = object_to_proj_matrix;
+    // Do vs constants.
+    //
+    Immediate_VS_Constants vs_constants;
+    vs_constants.object_to_proj_matrix = object_to_proj_matrix;
     
     D3D11_MAPPED_SUBRESOURCE mapped;
     device_context->Map(immediate_vs_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    MEMORY_COPY(mapped.pData, &constants, sizeof(constants));
+    MEMORY_COPY(mapped.pData, &vs_constants, sizeof(vs_constants));
     device_context->Unmap(immediate_vs_cbuffer, 0);
+    
+    // Do ps constants.
+    //
+    device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    MEMORY_COPY(mapped.pData, &immediate_ps_constants, sizeof(immediate_ps_constants));
+    device_context->Unmap(immediate_ps_cbuffer, 0);
 }
 
 FUNCTION void immediate_end()
@@ -890,10 +890,6 @@ FUNCTION void immediate_end()
     device_context->RSSetState(rasterizer_state);
     
     // Pixel Shader.
-    PS_Constants constants {};
-    device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    MEMORY_COPY(mapped.pData, &constants, sizeof(constants));
-    device_context->Unmap(immediate_ps_cbuffer, 0);
     device_context->PSSetConstantBuffers(1, 1, &immediate_ps_cbuffer);
     device_context->PSSetSamplers(0, 1, &sampler0);
     device_context->PSSetShaderResources(0, 1, &texture0);
@@ -911,6 +907,7 @@ FUNCTION void immediate_end()
     num_immediate_vertices = 0;
     is_using_pixel_coords  = false;
     object_to_world_matrix = m4x4_identity();
+    immediate_ps_constants = {};
 }
 
 FUNCTION void immediate_begin(b32 wireframe = false)

@@ -1,4 +1,4 @@
-/* orh.h - v0.64 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.65 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.65 - fixed perspective projections to use z range [0, 1].
 0.64 - corrected frac() implementation.
 0.63 - smooth_step correction. Removed V2, V3, and V4 variants.
 0.62 - removed memory_copy(), memory_set() and arena_push_set(). Added alignment to arena_push().
@@ -642,8 +643,8 @@ FUNCDEF V3 bezier2(V3 p0, V3 p1, V3 p2, f32 t);
 FUNCDEF V4 hsv(f32 h, f32 s, f32 v);
 
 FUNCDEF M4x4_Inverse look_at(V3 pos, V3 at, V3 up);
-FUNCDEF M4x4_Inverse perspective(f32 fov, f32 aspect, f32 n, f32 f);
-FUNCDEF M4x4_Inverse infinite_perspective(f32 fov, f32 aspect, f32 n);
+FUNCDEF M4x4_Inverse perspective(f32 fov_radians, f32 aspect, f32 n, f32 f);   // Right-handed; NDC z in range [0, 1]
+FUNCDEF M4x4_Inverse infinite_perspective(f32 fov_radians, f32 aspect, f32 n); // Read notes in definition.
 FUNCDEF M4x4_Inverse orthographic_3d(f32 left, f32 right, f32 bottom, f32 top, f32 n, f32 f, b32 normalized_z);
 FUNCDEF M4x4_Inverse orthographic_2d(f32 left, f32 right, f32 bottom, f32 top);
 
@@ -2925,16 +2926,18 @@ M4x4_Inverse look_at(V3 pos, V3 at, V3 up)
     
     return result;
 }
-M4x4_Inverse perspective(f32 fov, f32 aspect, f32 n, f32 f)
+M4x4_Inverse perspective(f32 fov_radians, f32 aspect, f32 n, f32 f)
 {
+    // @Note: Right-handed; NDC z in range [0, 1] (compatible with D3D and Vulkan).
+    // For OpenGL you can call glClipControl() to switch between z range [-1, 1] and [0, 1].
+    
     ASSERT(aspect != 0);
     
-    f32 t = _tan(fov * 0.5f);
-    f32 x = 1.0f / (aspect * t);
-    f32 y = 1.0f / t;
-    f32 z = -(f + n) / (f - n);
-    f32 e = -(2.0f * f * n) / (f - n);
-    
+    f32 cotan = 1.0f / _tan(fov_radians * 0.5f);
+    f32 x = cotan / aspect;
+    f32 y = cotan;
+    f32 z = -(f)     / (f - n);
+    f32 e = -(f * n) / (f - n);
     M4x4_Inverse result =
     {
         {{ // The transform itself.
@@ -2956,34 +2959,39 @@ M4x4_Inverse perspective(f32 fov, f32 aspect, f32 n, f32 f)
     
     return result;
 }
-M4x4_Inverse infinite_perspective(f32 fov, f32 aspect, f32 n)
+M4x4_Inverse infinite_perspective(f32 fov_radians, f32 aspect, f32 n)
 {
+    // @Note: Reversed-z infinite perspective projection. 
+    //
+    // For this to work, do the following:
+    // - Make sure NDC z is in range [0, 1]. Call glClipControl() if using OpenGL.
+    // - Create a floating point depth buffer.
+    // - Flip depth comparison function to GREATER.
+    // - Clear depth buffer to value 0.0f (instead of 1.0f).
+    // - Adjust all calculations which rely on the assumption that a normalized post-projection depth of zero lies in front of the viewer
+    //
+    // @Note: There are more things to keep in mind before using infinite far plane; please read before using:
+    // https://iolite-engine.com/blog_posts/reverse_z_cheatsheet
+    
     ASSERT(aspect != 0);
     
-    f32 range  = _tan(fov * 0.5f) * n;
-    f32 left   = -range * aspect;
-    f32 rigth  =  range * aspect;
-    f32 bottom = -range;
-    f32 top    =  range;
-    
-    f32 m = (2.0f * n);
-    f32 x =  m / (rigth - left);
-    f32 y =  m / (top - bottom);
-    f32 e = -m;
+    f32 cotan = 1.0f / _tan(fov_radians * 0.5f);
+    f32 x = cotan / aspect;
+    f32 y = cotan;
     M4x4_Inverse result =
     {
         {{ // The transform itself.
                 {   x, 0.0f,  0.0f, 0.0f},
                 {0.0f,    y,  0.0f, 0.0f},
-                {0.0f, 0.0f, -1.0f,    e},
-                {0.0f, 0.0f, -1.0f, 0.0f}
+                {0.0f, 0.0f,  0.0f,    n},
+                {0.0f, 0.0f, -1.0f, 0.0f},
             }},
         
         {{ // Its inverse.
-                {1.0f/x,   0.0f,    0.0f,    0.0f},
-                {  0.0f, 1.0f/y,    0.0f,    0.0f},
-                {  0.0f,   0.0f,    0.0f,   -1.0f},
-                {  0.0f,   0.0f,  1.0f/e, -1.0f/e},
+                {1.0f/x,   0.0f,    0.0f,  0.0f},
+                {  0.0f, 1.0f/y,    0.0f,  0.0f},
+                {  0.0f,   0.0f,    0.0f, -1.0f},
+                {  0.0f,   0.0f,  1.0f/n,  0.0f},
             }},
     };
     
@@ -2991,26 +2999,21 @@ M4x4_Inverse infinite_perspective(f32 fov, f32 aspect, f32 n)
     
     return result;
 }
-M4x4_Inverse orthographic_3d(f32 left, f32 right, f32 bottom, f32 top, f32 n, f32 f, b32 normalized_z)
+M4x4_Inverse orthographic_3d(f32 left, f32 right, f32 bottom, f32 top, f32 n, f32 f)
 {
-    // @Note: normalized_z should be true for D3D11 and false for OpenGL.
+    // @Note: Right-handed; NDC z in range [0, 1] (compatible with D3D and Vulkan).
+    // For OpenGL you can call glClipControl() to switch between z range [-1, 1] and [0, 1].
+    
     ASSERT(left != right);
     ASSERT(bottom != top);
     
-    f32 tz_ = -(n)  / (f - n);
-    f32 z_  = -1.0f / (f - n);
-    if (!normalized_z) {
-        tz_ = -(f + n) / (f - n);
-        z_  = -2.0f    / (f - n);
-    }
+    f32 x  =  2.0f / (right - left);
+    f32 y  =  2.0f / (top - bottom);
+    f32 z  = -1.0f / (f - n);
     
     f32 tx = -(right + left) / (right - left);
     f32 ty = -(top + bottom) / (top - bottom);
-    f32 tz = tz_;
-    f32 x  =  2.0f / (right - left);
-    f32 y  =  2.0f / (top - bottom);
-    f32 z  = z_;
-    
+    f32 tz = -(n) / (f - n);
     M4x4_Inverse result = 
     {
         {{ // The transform itself.
@@ -3036,11 +3039,11 @@ M4x4_Inverse orthographic_2d(f32 left, f32 right, f32 bottom, f32 top)
     ASSERT(left != right);
     ASSERT(bottom != top);
     
-    f32 tx = -(right + left) / (right - left);
-    f32 ty = -(top + bottom) / (top - bottom);
     f32 x  =  2.0f / (right - left);
     f32 y  =  2.0f / (top - bottom);
     
+    f32 tx = -(right + left) / (right - left);
+    f32 ty = -(top + bottom) / (top - bottom);
     M4x4_Inverse result = 
     {
         {{ // The transform itself.
