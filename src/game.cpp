@@ -2054,16 +2054,38 @@ FUNCTION inline void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *c
 
 FUNCTION void draw_line(s32 src_x, s32 src_y, s32 dst_x, s32 dst_y, V4 *color, f32 a, f32 thickness = 0.035f)
 {
-    V4 c     = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
+    V4 col   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
     V2 start = v2((f32)src_x, (f32)src_y);
     V2 end   = v2((f32)dst_x, (f32)dst_y);
     
-    immediate_line_2d(start, end, c, thickness);
+    //immediate_line_2d(start, end, c, thickness);
+    
+    immediate_begin();
+    set_texture(0);
+    immediate_ps_constants.is_line = true;
+    immediate_ps_constants.line_p0 = world_to_ndc(start);
+    immediate_ps_constants.line_p1 = world_to_ndc(end);
+    is_using_pixel_coords = true;
+    f32 w = get_width(os->drawing_rect);
+    f32 h = get_height(os->drawing_rect);
+    immediate_rect_tl(v2(0), v2(w,h), v2(0, 1), v2(1, 0), col);
+    immediate_end();
 }
 FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a, f32 thickness = 0.035f)
 {
-    V4 c = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    immediate_line_2d(start, end, c, thickness);
+    V4 col = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
+    //immediate_line_2d(start, end, c, thickness);
+    
+    immediate_begin();
+    set_texture(0);
+    immediate_ps_constants.is_line = true;
+    immediate_ps_constants.line_p0 = world_to_ndc(start);
+    immediate_ps_constants.line_p1 = world_to_ndc(end);
+    is_using_pixel_coords = true;
+    f32 w = get_width(os->drawing_rect);
+    f32 h = get_height(os->drawing_rect);
+    immediate_rect_tl(v2(0), v2(w,h), v2(0, 1), v2(1, 0), col);
+    immediate_end();
 }
 
 FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
@@ -2230,8 +2252,8 @@ FUNCTION void draw_world()
     }
     immediate_end();
     
-    immediate_begin();
-    set_texture(0);
+    //immediate_begin();
+    //set_texture(0);
     // Draw laser beams.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
@@ -2242,7 +2264,7 @@ FUNCTION void draw_world()
             }
         }
     }
-    immediate_end();
+    //immediate_end();
     
     immediate_begin();
     set_texture(&tex);

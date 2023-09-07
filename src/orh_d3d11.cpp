@@ -119,7 +119,10 @@ struct Immediate_VS_Constants
 };
 struct Immediate_PS_Constants
 {
-    V4  placeholder;
+    V2  drawing_rect_size;
+    V2  line_p0;
+    V2  line_p1;
+    b32 is_line;
 };
 GLOBAL Immediate_PS_Constants immediate_ps_constants;
 GLOBAL ID3D11InputLayout     *immediate_input_layout;
@@ -144,6 +147,7 @@ GLOBAL Vertex_XCNU   immediate_vertices[MAX_IMMEDIATE_VERTICES];
 
 // State.
 //
+// @Note: If true: vertices we push to buffer are pixel positions relative to drawing rect.
 GLOBAL b32 is_using_pixel_coords;
 
 ////////////////////////////////
@@ -565,7 +569,7 @@ FUNCTION void d3d11_init(HWND window)
         desc.FillMode              = D3D11_FILL_SOLID;
         desc.CullMode              = D3D11_CULL_NONE;
         //desc.FrontCounterClockwise = TRUE;
-        //desc.MultisampleEnable     = TRUE;
+        desc.MultisampleEnable     = TRUE;
         device->CreateRasterizerState(&desc, &rasterizer_state_solid);
     }
     {
@@ -573,7 +577,7 @@ FUNCTION void d3d11_init(HWND window)
         desc.FillMode              = D3D11_FILL_WIREFRAME;
         desc.CullMode              = D3D11_CULL_NONE;
         //desc.FrontCounterClockwise = TRUE;
-        //desc.MultisampleEnable     = TRUE;
+        desc.MultisampleEnable     = TRUE;
         device->CreateRasterizerState(&desc, &rasterizer_state_wireframe);
     }
     rasterizer_state = rasterizer_state_solid;
@@ -602,7 +606,7 @@ FUNCTION void d3d11_init(HWND window)
     // Create depth state.
     {
         D3D11_DEPTH_STENCIL_DESC desc = {};
-        desc.DepthEnable      = TRUE;
+        desc.DepthEnable      = FALSE;
         desc.DepthWriteMask   = D3D11_DEPTH_WRITE_MASK_ALL;
         desc.DepthFunc        = D3D11_COMPARISON_LESS_EQUAL; // @Note: Use GREATER if using reverse-z
         desc.StencilEnable    = FALSE;
@@ -829,14 +833,29 @@ FUNCTION void set_object_to_world(V3 position, Quaternion orientation)
 
 FUNCTION V2 pixel_to_ndc(V2 pixel)
 {
+    // @Note: pixel relative to drawing_rect.
+    //
     f32 w = get_width(os->drawing_rect);
     f32 h = get_height(os->drawing_rect);
     
     V2 p = hadamard_div(pixel, v2(w, h));
-    p    = 2.0f*p - v2(1.0f);
+    p    = p*2 - v2(1);
     p.y *= -1;
     
     return p;
+}
+
+FUNCTION V2 world_to_ndc(V2 point)
+{
+    // Clip space is same as proj space.
+    M4x4 world_to_proj = view_to_proj_matrix.forward * world_to_view_matrix.forward;
+    V4 point_clip      = world_to_proj * v4(point.x, point.y, 0, 1);
+    
+    V2 result;
+    result.x = point_clip.x / point_clip.w;
+    result.y = point_clip.y / point_clip.w;
+    
+    return result;
 }
 
 FUNCTION void update_render_transform()
@@ -858,6 +877,9 @@ FUNCTION void update_render_transform()
     
     // Do ps constants.
     //
+    immediate_ps_constants.drawing_rect_size.x = get_width(os->drawing_rect);
+    immediate_ps_constants.drawing_rect_size.y = get_height(os->drawing_rect);
+    
     device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     MEMORY_COPY(mapped.pData, &immediate_ps_constants, sizeof(immediate_ps_constants));
     device_context->Unmap(immediate_ps_cbuffer, 0);
@@ -908,6 +930,7 @@ FUNCTION void immediate_end()
     is_using_pixel_coords  = false;
     object_to_world_matrix = m4x4_identity();
     immediate_ps_constants = {};
+    set_texture(0);
 }
 
 FUNCTION void immediate_begin(b32 wireframe = false)
@@ -1002,6 +1025,8 @@ FUNCTION void immediate_quad(V2 p0, V2 p1, V2 p2, V2 p3,
 
 FUNCTION void immediate_rect(V2 center, V2 half_size, V4 color)
 {
+    ASSERT(is_using_pixel_coords == false);
+    
     V2 p0 = center - half_size;
     V2 p2 = center + half_size;
     V2 p1 = v2(p2.x, p0.y);

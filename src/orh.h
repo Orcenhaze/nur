@@ -3846,23 +3846,23 @@ Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim)
     return result;
 }
 V3 unproject(V3 camera_position, f32 Zworld_distance_from_camera,
-             V3 mouse_ndc, M4x4_Inverse view, M4x4_Inverse proj)
+             V3 mouse_ndc, M4x4_Inverse world_to_view, M4x4_Inverse view_to_proj)
 {
     // @Note: Handmade Hero EP.373 and EP.374
     
-    V3 camera_zaxis = get_row(view.forward, 2);
+    V3 camera_zaxis = get_row(world_to_view.forward, 2);
     V3 new_p        = camera_position - Zworld_distance_from_camera*camera_zaxis;
     V4 probe_z      = v4(new_p, 1.0f);
     
     // Get probe_z in clip space.
-    probe_z = proj.forward*view.forward*probe_z;
+    probe_z = view_to_proj.forward*world_to_view.forward*probe_z;
     
     // Undo the perspective divide.
     mouse_ndc.x *= probe_z.w;
     mouse_ndc.y *= probe_z.w;
     
     V4 mouse_clip = v4(mouse_ndc.x, mouse_ndc.y, probe_z.z, probe_z.w);
-    V3 result     = (view.inverse*proj.inverse*mouse_clip).xyz;
+    V3 result     = (world_to_view.inverse*view_to_proj.inverse*mouse_clip).xyz;
     
     return result;
 }
