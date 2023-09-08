@@ -1,4 +1,4 @@
-/* orh.h - v0.65 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.66 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.66 - added unlerp() and remap().
 0.65 - fixed perspective projections to use z range [0, 1].
 0.64 - corrected frac() implementation.
 0.63 - smooth_step correction. Removed V2, V3, and V4 variants.
@@ -602,14 +603,28 @@ FUNCDEF inline V3   get_translation(M4x4 m);
 FUNCDEF inline V3   get_scale(M4x4 m);
 FUNCDEF inline M4x4 get_rotaion(M4x4 m, V3 scale);
 
+// Linear interpolation. Returns value between a and b based on fraction t.
 FUNCDEF inline f32 lerp(f32 a, f32 t, f32 b);
 FUNCDEF inline V2  lerp(V2 a, f32 t, V2 b);
 FUNCDEF inline V3  lerp(V3 a, f32 t, V3 b);
 FUNCDEF inline V4  lerp(V4 a, f32 t, V4 b);
 
-FUNCDEF inline Quaternion  lerp(Quaternion a, f32 t, Quaternion b);
-FUNCDEF inline Quaternion nlerp(Quaternion a, f32 t, Quaternion b);
-FUNCDEF inline Quaternion slerp(Quaternion a, f32 t, Quaternion b);
+// Inverse of lerp. Returns fraction t, based on a value between a and b.
+FUNCDEF f32 unlerp(f32 a, f32 value, f32 b);
+FUNCDEF f32 unlerp(V2 a, V2 v, V2 b);
+FUNCDEF f32 unlerp(V3 a, V3 v, V3 b);
+FUNCDEF f32 unlerp(V4 a, V4 v, V4 b);
+
+// Remaps value from input range to output range.
+FUNCDEF f32 remap(f32 value, f32 imin, f32 imax, f32 omin, f32 omax);
+FUNCDEF V2  remap(V2 value, V2 imin, V2 imax, V2 omin, V2 omax);
+FUNCDEF V3  remap(V3 value, V3 imin, V3 imax, V3 omin, V3 omax);
+FUNCDEF V4  remap(V4 value, V4 imin, V4 imax, V4 omin, V4 omax);
+
+FUNCDEF Quaternion   lerp(Quaternion a, f32 t, Quaternion b);
+FUNCDEF f32        unlerp(Quaternion a, Quaternion q, Quaternion b);
+FUNCDEF Quaternion  nlerp(Quaternion a, f32 t, Quaternion b);
+FUNCDEF Quaternion  slerp(Quaternion a, f32 t, Quaternion b);
 
 FUNCDEF inline f32 smooth_step  (f32 edge0, f32 x, f32 edge1); // Output in range [0, 1]
 FUNCDEF inline f32 smoother_step(f32 edge0, f32 x, f32 edge1); // Output in range [0, 1]
@@ -1753,7 +1768,7 @@ FUNCDEF b32 key_pressed(s32 key, b32 capture = false);
 FUNCDEF b32 key_held(s32 key, b32 capture = false);
 FUNCDEF b32 key_released(s32 key, b32 capture = false);
 FUNCDEF Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim);
-FUNCDEF V3    unproject(V3 camera_position, f32 Zworld_distance_from_camera, V3 mouse_ndc, M4x4_Inverse view, M4x4_Inverse proj);
+FUNCDEF V3    unproject(V3 camera_position, f32 Zworld_distance_from_camera, V3 mouse_ndc, M4x4_Inverse world_to_view, M4x4_Inverse view_to_proj);
 #endif //ORH_H
 
 
@@ -2663,11 +2678,66 @@ V4 lerp(V4 a, f32 t, V4 b)
     return result;
 }
 
+f32 unlerp(f32 a, f32 value, f32 b)
+{
+    f32 t = (value - a) / (b - a);
+    return t;
+}
+f32 unlerp(V2 a, V2 v, V2 b)
+{
+    V2 av = v-a, ab = b-a;
+    f32 t = dot(av, ab) / dot(ab, ab);
+    return t;
+}
+f32 unlerp(V3 a, V3 v, V3 b)
+{
+    V3 av = v-a, ab = b-a;
+    f32 t = dot(av, ab) / dot(ab, ab);
+    return t;
+}
+f32 unlerp(V4 a, V4 v, V4 b)
+{
+    V4 av = v-a, ab = b-a;
+    f32 t = dot(av, ab) / dot(ab, ab);
+    return t;
+}
+
+f32 remap(f32 value, f32 imin, f32 imax, f32 omin, f32 omax)
+{
+    f32 t      = unlerp(imin, value, imax);
+    f32 result = lerp(omin, t, omax);
+    return result;
+}
+V2 remap(V2 value, V2 imin, V2 imax, V2 omin, V2 omax)
+{
+    f32 t     = unlerp(imin, value, imax);
+    V2 result = lerp(omin, t, omax);
+    return result;
+}
+V3 remap(V3 value, V3 imin, V3 imax, V3 omin, V3 omax)
+{
+    f32 t     = unlerp(imin, value, imax);
+    V3 result = lerp(omin, t, omax);
+    return result;
+}
+V4 remap(V4 value, V4 imin, V4 imax, V4 omin, V4 omax)
+{
+    f32 t     = unlerp(imin, value, imax);
+    V4 result = lerp(omin, t, omax);
+    return result;
+}
+
 Quaternion lerp(Quaternion a, f32 t, Quaternion b)
 {
     Quaternion q;
     q.xyzw = lerp(a.xyzw, t, b.xyzw);
     return q;
+}
+f32 unlerp(Quaternion a, Quaternion q, Quaternion b)
+{
+    Quaternion aq = q-a, ab = b-a;
+    f32 t = dot(aq, ab) / dot(ab, ab);
+    return t;
 }
 Quaternion nlerp(Quaternion a, f32 t, Quaternion b)
 {
