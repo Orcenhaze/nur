@@ -53,15 +53,15 @@ float4 ps(PS_INPUT input) : SV_TARGET
 	if (is_line) {
 		float2 p = input.uv * 2.0 - 1.0;
 		
-		float thickness = 0.0002;
-		float d         = sdf_line(p, line_p0, line_p1) - thickness;
+		float thickness = 0.006;
+		float d         = sdf_line(p, line_p0, line_p1) + thickness;
 		
 		d = smoothstep(0.0, 0.1, d);
 		if (d >= 1.0)
 			return 0.0;
 
 		d = 0.02/d;
-		return float4(input.color.xyz*d, d);
+		return input.color*d;
 	} else {
 		float4 tex = texture0.Sample(sampler0, input.uv);
 		return input.color * tex;

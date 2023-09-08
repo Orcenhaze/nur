@@ -874,15 +874,6 @@ FUNCTION void update_render_transform()
     device_context->Map(immediate_vs_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     MEMORY_COPY(mapped.pData, &vs_constants, sizeof(vs_constants));
     device_context->Unmap(immediate_vs_cbuffer, 0);
-    
-    // Do ps constants.
-    //
-    immediate_ps_constants.drawing_rect_size.x = get_width(os->drawing_rect);
-    immediate_ps_constants.drawing_rect_size.y = get_height(os->drawing_rect);
-    
-    device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    MEMORY_COPY(mapped.pData, &immediate_ps_constants, sizeof(immediate_ps_constants));
-    device_context->Unmap(immediate_ps_cbuffer, 0);
 }
 
 FUNCTION void immediate_end()
@@ -912,6 +903,9 @@ FUNCTION void immediate_end()
     device_context->RSSetState(rasterizer_state);
     
     // Pixel Shader.
+    device_context->Map(immediate_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    MEMORY_COPY(mapped.pData, &immediate_ps_constants, sizeof(immediate_ps_constants));
+    device_context->Unmap(immediate_ps_cbuffer, 0);
     device_context->PSSetConstantBuffers(1, 1, &immediate_ps_cbuffer);
     device_context->PSSetSamplers(0, 1, &sampler0);
     device_context->PSSetShaderResources(0, 1, &texture0);
