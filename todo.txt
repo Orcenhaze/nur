@@ -11,11 +11,12 @@ Level design:
 - Design more hard levels.
 
 Art:
-- Layered cutscenes.
-- Level transition effects and shaders.
 - 128x128px tiles.
-- Shadows.
+- Layered cutscenes.
+- Background shader for main menu background, level transition effects and more.
 - Writing: plot, dialogues and monologues.
+- Sound effects and ambient sounds.
+- Shadows?
 
 
 About instrumentation:
