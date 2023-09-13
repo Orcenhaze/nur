@@ -578,7 +578,7 @@ FUNCTION void do_editor(b32 is_first_call)
         //
         ImGui::Text("Tiles: ");
         ImTextureID tex_id = tex.view;
-        ImVec2 image_size  = ImVec2(TILE_SIZE*4.0f, TILE_SIZE*4.0f);
+        ImVec2 image_size  = ImVec2(16*4.0f, 16*4.0f);
         ImVec4 tint_col    = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // No tint
         ImVec4 border_col  = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
         for (s32 i = 0; i < ARRAY_COUNT(tile_sprite); i++) {
@@ -632,7 +632,7 @@ FUNCTION void do_editor(b32 is_first_call)
         //
         ImGui::Text("Objs: ");
         ImTextureID tex_id = tex.view;
-        ImVec2 image_size  = ImVec2(TILE_SIZE*4.0f, TILE_SIZE*4.0f);
+        ImVec2 image_size  = ImVec2(16*4.0f, 16*4.0f);
         ImVec4 tint_col    = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // No tint
         ImVec4 border_col  = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
         for (s32 i = 0; i < ARRAY_COUNT(obj_sprite); i++) {
@@ -2243,6 +2243,19 @@ FUNCTION void draw_world()
     }
     immediate_end();
     
+    immediate_begin();
+    set_texture(&tex);
+    // Draw laser emitter frames.
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            if (objmap[y][x].type == T_LASER) {
+                V2s frame = tile_sprite[Tile_LASER_FRAME];
+                draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
+            }
+        }
+    }
+    immediate_end();
+    
     // Draw laser beams.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
@@ -2278,7 +2291,7 @@ FUNCTION void draw_world()
                 case T_EMPTY: continue;
                 case T_LASER: {
                     sprite.s += o.dir;
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
                 } break;
                 case T_MIRROR:
                 case T_BENDER:

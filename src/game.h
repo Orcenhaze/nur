@@ -146,7 +146,7 @@ GLOBAL Menu_Page prev_page;
 ////////////////////////////////
 // Textures
 //
-#define TILE_SIZE 16  // In pixels!
+#define TILE_SIZE 256  // In pixels!
 Texture tex;
 
 #define FONT_TILE_W 6 // In pixels!
@@ -244,12 +244,14 @@ enum
     Tile_FLOOR,
     Tile_WALL,
     Tile_OBJ_FRAME,
+    Tile_LASER_FRAME,
 };
 
 V2s tile_sprite[] = {
     v2s(0, 0),
     v2s(1, 0),
     v2s(3, 0),
+    v2s(4, 0),
 };
 
 enum 
