@@ -1157,26 +1157,24 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 reflected_d = U8_MAX;
             b32 penetrate  = true;
             
-            if (src_color == test_o.color[reflected_d])
-                break;
-            
             if (test_o.type == T_MIRROR) {
-                if (test_o.dir == ninv_d)      reflected_d = WRAP_D(ninv_d + 1);
+                if      (test_o.dir == inv_d)  reflected_d = inv_d;
+                else if (test_o.dir == ninv_d) reflected_d = WRAP_D(ninv_d + 1);
                 else if (test_o.dir == pinv_d) reflected_d = WRAP_D(pinv_d - 1);
                 
-                // Write the color.
-                if (reflected_d != U8_MAX) {
+                // Write the color if not already written AND direction is valid.
+                if ((reflected_d != U8_MAX) && (src_color != test_o.color[reflected_d])) {
                     objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
                     update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
                 }
             } else if (test_o.type == T_BENDER) {
-                if (test_o.dir == inv_d)        reflected_d = ninv_d;
+                if      (test_o.dir == inv_d)   reflected_d = ninv_d;
                 else if (test_o.dir == ninv_d)  reflected_d = WRAP_D(ninv_d + 2);
                 else if (test_o.dir == pinv_d)  reflected_d = pinv_d;
                 else if (test_o.dir == p2inv_d) reflected_d = WRAP_D(p2inv_d - 1);
                 
-                // Write the color.
-                if (reflected_d != U8_MAX) {
+                // Write the color if not already written AND direction is valid.
+                if ((reflected_d != U8_MAX) && (src_color != test_o.color[reflected_d])) {
                     objmap[test_y][test_x].color[reflected_d] = mix_colors(test_o.color[reflected_d], src_color);
                     update_beams(test_x, test_y, reflected_d, objmap[test_y][test_x].color[reflected_d]);
                 }
@@ -1200,9 +1198,8 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
                 
                 // Reflected direction.
                 //
-                if (reflected_d != U8_MAX) {
-                    if (src_color == test_o.color[reflected_d])
-                        break;
+                // Write the color if not already written AND direction is valid.
+                if ((reflected_d != U8_MAX) && (src_color != test_o.color[reflected_d])) {
                     u8 c = test_o.c == Color_WHITE? mix_colors(test_o.color[reflected_d], src_color) : test_o.c;
                     objmap[test_y][test_x].color[reflected_d] = c;
                     update_beams(test_x, test_y, reflected_d, c);
@@ -1210,10 +1207,11 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             }
         } break;
         case T_DETECTOR: {
-            if (src_color == test_o.color[src_dir])
-                break;
-            objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
-            update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
+            // Write the color if not already written.
+            if (src_color != test_o.color[src_dir]) {
+                objmap[test_y][test_x].color[src_dir] = mix_colors(test_o.color[src_dir], src_color);
+                update_beams(test_x, test_y, src_dir, objmap[test_y][test_x].color[src_dir]);
+            }
         } break;
     }
 }
@@ -2159,13 +2157,14 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             draw_line(src_x, src_y, test_x, test_y, &colors[c], 1.0f);
             
             if (test_o.type == T_MIRROR) {
-                if (test_o.dir == ninv_d)      reflected_d = WRAP_D(ninv_d + 1);
+                if      (test_o.dir == inv_d)  reflected_d = inv_d;
+                else if (test_o.dir == ninv_d) reflected_d = WRAP_D(ninv_d + 1);
                 else if (test_o.dir == pinv_d) reflected_d = WRAP_D(pinv_d - 1);
                 
                 if (reflected_d != U8_MAX)
                     draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
             } else if (test_o.type == T_BENDER) {
-                if (test_o.dir == inv_d)        reflected_d = ninv_d;
+                if      (test_o.dir == inv_d)   reflected_d = ninv_d;
                 else if (test_o.dir == ninv_d)  reflected_d = WRAP_D(ninv_d + 2);
                 else if (test_o.dir == pinv_d)  reflected_d = pinv_d;
                 else if (test_o.dir == p2inv_d) reflected_d = WRAP_D(p2inv_d - 1);
@@ -2244,11 +2243,25 @@ FUNCTION void draw_world()
     immediate_end();
     
     immediate_begin();
+    set_texture(0);
+    // Draw laser emitter frame background.
+    for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
+        for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
+            Obj o = objmap[y][x];
+            if (o.type == T_LASER) {
+                V4 c = colors[o.c] * 0.85f;
+                immediate_rect(v2((f32)x, (f32)y), v2(0.5), c);
+            }
+        }
+    }
+    immediate_end();
+    immediate_begin();
     set_texture(&tex);
     // Draw laser emitter frames.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
-            if (objmap[y][x].type == T_LASER) {
+            Obj o = objmap[y][x];
+            if (o.type == T_LASER) {
                 V2s frame = tile_sprite[Tile_LASER_FRAME];
                 draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
             }

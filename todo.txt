@@ -17,6 +17,7 @@ Art:
 - 128x128px tiles.
 - Layered cutscenes.
 - Background shader for main menu background, level transition effects and more.
+	* During levels: Cobblestone texture with distortion?
 - Writing: plot, dialogues and monologues.
 - Sound effects and ambient sounds.
 - Shadows?
