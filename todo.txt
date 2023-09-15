@@ -12,6 +12,7 @@ Level design:
 - Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.
 - If all primary colored lasers are present in same level, it's possible to make white before player is introduced to the concept.
 - Design more hard levels.
+- Levels where we don't render objs and force player to solve the puzzle blindly (maybe keep particles).
 
 Art:
 - 128x128px tiles.

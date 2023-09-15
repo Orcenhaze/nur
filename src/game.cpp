@@ -2249,7 +2249,7 @@ FUNCTION void draw_world()
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_LASER) {
-                V4 c = colors[o.c] * 0.85f;
+                V4 c = colors[o.c] * 0.65f;
                 immediate_rect(v2((f32)x, (f32)y), v2(0.5), c);
             }
         }
@@ -2257,13 +2257,25 @@ FUNCTION void draw_world()
     immediate_end();
     immediate_begin();
     set_texture(&tex);
-    // Draw laser emitter frames.
+    // Draw obj frames.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
-            if (o.type == T_LASER) {
-                V2s frame = tile_sprite[Tile_LASER_FRAME];
-                draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
+            switch (o.type) {
+                case T_LASER: {
+                    V2s frame = tile_sprite[Tile_LASER_FRAME];
+                    draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
+                } break;
+                case T_MIRROR:
+                case T_BENDER:
+                case T_SPLITTER: {
+                    V2s frame = tile_sprite[Tile_OBJ_FRAME];
+                    b32 is_pushed_obj = (pushed_obj.x == x && pushed_obj.y == y);
+                    if (is_pushed_obj)
+                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, frame.s, frame.t, 0, 1.0f);
+                    else
+                        draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
+                } break;
             }
         }
     }
@@ -2309,7 +2321,6 @@ FUNCTION void draw_world()
                 case T_MIRROR:
                 case T_BENDER:
                 case T_SPLITTER: {
-                    V2s frame = tile_sprite[Tile_OBJ_FRAME];
                     V4 c = v4(1);
                     if (o.type == T_SPLITTER) {
                         sprite.s = (sprite.s + o.dir) % 4;
@@ -2318,13 +2329,10 @@ FUNCTION void draw_world()
                         sprite.s += o.dir;
                     }
                     
-                    if (is_pushed_obj) {
-                        draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, frame.s, frame.t, 0, 1.0f);
+                    if (is_pushed_obj)
                         draw_spritef(pushed_obj_pos.x, pushed_obj_pos.y, 1, 1, sprite.s, sprite.t, &c, 1.0f);
-                    } else {
-                        draw_sprite(x, y, 1, 1, frame.s, frame.t, 0, 1.0f);
+                    else
                         draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &c, 1.0f);
-                    }
                 } break;
                 case T_DOOR:
                 case T_DOOR_OPEN: {
