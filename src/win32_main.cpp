@@ -717,6 +717,14 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             ImGui::NewFrame();
         }
 #endif
+        
+        //
+        //
+        // Wait until we won't block in rendering/present.
+        //
+        //
+        d3d11_wait_on_swapchain();
+        
         //
         //
         // Process Inputs --> Update.
@@ -725,6 +733,12 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         //u32 num_updates_this_frame = 0;
         while (accumulator >= os->dt) {
             b32 last_fullscreen = global_os.fullscreen;
+            
+            // @Todo:
+            // @Todo:
+            // @Todo: Put process inputs outside to avoid latency. Either use s32 pressed/released states,
+            // or pull key usage code outside of accum loop to avoid issues.
+            //
             win32_process_inputs(window);
             game_update();
             if (last_fullscreen != global_os.fullscreen)
@@ -760,7 +774,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         //
         //
         if ((window_size.x != 0) && (window_size.y != 0)) {
-            d3d11_wait_on_swapchain();
             d3d11_viewport(drawing_rect.min.x, 
                            drawing_rect.min.y, 
                            get_width(drawing_rect), 

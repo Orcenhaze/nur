@@ -2034,10 +2034,10 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
     // Shrink the uv rect to have padding around sprites to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 0.5f) / texture->width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 0.5f) / texture->height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 0.5f) / texture->width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 0.5f) / texture->height;
+    f32 u0 = (((s + 0) * TILE_SIZE) + 4.5f) / texture->width;
+    f32 v0 = (((t + 0) * TILE_SIZE) + 4.5f) / texture->height;
+    f32 u1 = (((s + 1) * TILE_SIZE) - 4.5f) / texture->width;
+    f32 v1 = (((t + 1) * TILE_SIZE) - 4.5f) / texture->height;
     
     if (invert_x) 
         SWAP(u0, u1, f32);
@@ -2236,7 +2236,7 @@ FUNCTION void draw_world()
                 if (final_c == o.c)
                     draw_sprite(x, y, 1.1f, 1.1f, sprite.s, sprite.t, &colors[o.c], 1.0f);
                 else
-                    draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.6f);
+                    draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.4f);
             }
         }
     }
@@ -2249,8 +2249,11 @@ FUNCTION void draw_world()
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_LASER) {
-                V4 c = colors[o.c] * 0.65f;
-                immediate_rect(v2((f32)x, (f32)y), v2(0.5), c);
+                V4 c = colors[o.c] * 0.75f;
+                immediate_rect(v2((f32)x, (f32)y), v2(0.45f), c);
+            } else if (o.type == T_DOOR) {
+                V4 c = colors[o.c] * 0.75f;
+                immediate_rect(v2((f32)x, (f32)y), v2(0.45f), c);
             }
         }
     }
@@ -2336,7 +2339,7 @@ FUNCTION void draw_world()
                 } break;
                 case T_DOOR:
                 case T_DOOR_OPEN: {
-                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                    draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);//&colors[o.c], 1.0f);
                 } break;
                 case T_TELEPORTER: {
                     draw_sprite(x, y, 1, 1, sprite.s, sprite.t, 0, 1.0f);
