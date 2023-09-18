@@ -146,7 +146,7 @@ GLOBAL Menu_Page prev_page;
 ////////////////////////////////
 // Textures
 //
-#define TILE_SIZE 256  // In pixels!
+#define TILE_SIZE 128  // In pixels!
 Texture tex;
 Texture font_tex;
 

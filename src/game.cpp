@@ -2234,9 +2234,9 @@ FUNCTION void draw_world()
                     final_c = mix_colors(final_c, o.color[i]);
                 
                 if (final_c == o.c)
-                    draw_sprite(x, y, 1.1f, 1.1f, sprite.s, sprite.t, &colors[o.c], 1.0f);
+                    draw_sprite(x, y, 1.2f, 1.2f, sprite.s, sprite.t, &colors[o.c], 1.0f);
                 else
-                    draw_sprite(x, y, 0.9f, 0.9f, sprite.s, sprite.t, &colors[o.c], 0.4f);
+                    draw_sprite(x, y, 0.8f, 0.8f, sprite.s, sprite.t, &colors[o.c], 0.4f);
             }
         }
     }
