@@ -542,7 +542,7 @@ FUNCTION void d3d11_init(HWND window)
         desc.BufferCount           = 2;
         desc.SwapEffect            = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         desc.Scaling               = DXGI_SCALING_NONE;
-        desc.Flags                 = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+        desc.Flags                 = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT|DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
         
         hr = factory->CreateSwapChainForHwnd((IUnknown*)device, window, &desc, NULL, NULL, &swap_chain);
         ASSERT_HR(hr);
@@ -667,7 +667,7 @@ FUNCTION void d3d11_resize()
     
     // Resize to new size for non-zero size.
     if ((window_width != 0) && (window_height != 0)) {
-        HRESULT hr = swap_chain->ResizeBuffers(0, window_width, window_height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
+        HRESULT hr = swap_chain->ResizeBuffers(0, window_width, window_height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT|DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING);
         ASSERT_HR(hr);
         
         //
@@ -756,11 +756,18 @@ FUNCTION HRESULT d3d11_present(b32 vsync)
     backbuffer->Release();
     texture->Release();
     
-    HRESULT hr = swap_chain->Present(vsync? 1 : 0, 0);
+    // @Note: Thanks Phillip Trudeau!
+    //
+    HRESULT hr = swap_chain->Present(vsync, !vsync? DXGI_PRESENT_ALLOW_TEARING : 0);
+    if (hr == DXGI_STATUS_MODE_CHANGED) 
+        current_window_width = current_window_height = 0; // @Hack: Resize
+    else 
+        ASSERT(hr == DXGI_STATUS_OCCLUDED || hr == S_OK);
+    
     return hr;
 }
 
-FUNCTION DWORD d3d11_wait_on_swapchain()
+FUNCTION DWORD d3d11_wait_for_swapchain()
 {
     DWORD result = WaitForSingleObjectEx(frame_latency_waitable_object,
                                          1000, // 1 second timeout (shouldn't ever occur)

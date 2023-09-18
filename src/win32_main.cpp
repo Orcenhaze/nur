@@ -368,10 +368,7 @@ FUNCTION LRESULT CALLBACK win32_wndproc(HWND window, UINT message, WPARAM wparam
     switch (message) {
         case WM_ACTIVATE:
         case WM_ACTIVATEAPP: {
-            // Clear all key states.
-            MEMORY_ZERO_ARRAY(global_os.pressed);
-            MEMORY_ZERO_ARRAY(global_os.held);
-            MEMORY_ZERO_ARRAY(global_os.released);
+            clear_key_states_all();
         } break;
         
         case WM_CLOSE: 
@@ -405,10 +402,6 @@ FUNCTION void win32_process_inputs(HWND window)
         0.0f
     };
     
-    // Clear mouse-wheel scroll.
-    //
-    global_os.mouse_scroll = {};
-    
     // Put input messages in queue + process mousewheel and such.
     //
     win32_process_pending_messages(window);
@@ -418,11 +411,6 @@ FUNCTION void win32_process_inputs(HWND window)
     if (io.WantCaptureKeyboard || io.WantCaptureMouse)
         return;
 #endif
-    
-    // Clear pressed and released states.
-    //
-    MEMORY_ZERO_ARRAY(global_os.pressed);
-    MEMORY_ZERO_ARRAY(global_os.released);
     
     // Process queued inputs.
     //
@@ -472,11 +460,6 @@ FUNCTION void win32_process_inputs(HWND window)
         pad->right_stick   = {xinput_pad.stick_right_x, xinput_pad.stick_right_y};
         pad->left_trigger  = xinput_pad.trigger_left;
         pad->right_trigger = xinput_pad.trigger_right;
-        
-        // Clear pressed and released states.
-        //
-        MEMORY_ZERO_ARRAY(pad->pressed);
-        MEMORY_ZERO_ARRAY(pad->released);
         
         // Process xinput button states and encode them the way we want.
         //
@@ -564,14 +547,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         win32_fatal_error("Window creation failed.");
     }
     
-    ShowWindow(window, show_code);
-#if DEVELOPER
-    ShowCursor(true);
-#else
-    // @Todo: Show cursor when we hover on window borders.
-    ShowCursor(false);
-#endif
-    
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
     
@@ -608,14 +583,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 #endif
         global_os.exit              = false;
         
-        // @Note: I think this value is useless when using FLIP presentation model.
-        // If user has vsync in control panel set to "use 3D application setting", we will always
-        // limit fps to refresh rate, regardless of this value. Vsync is enforced on windowed and 
-        // possibly also borderless fullscreen.
-        // If the user has vsync in control panel set to "off", we will limit the FPS ourselves
-        // using the fps_max variable.
-        // For now, let's leave vsync here set to false.
-        global_os.vsync             = false;
+        global_os.vsync             = true;
         global_os.fix_aspect_ratio  = true;
         global_os.render_size       = {1920, 1080};
         global_os.dt                = 1.0f/120.0f;
@@ -623,7 +591,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         
         // @Note: Force fps_max to primary monitor refresh rate if possible.
         s32 refresh_hz = GetDeviceCaps(GetDC(window), VREFRESH);
-        if (refresh_hz > 1)
+        if ((!global_os.vsync) && (global_os.fps_max > 0) && (refresh_hz > 1))
             global_os.fps_max = refresh_hz;
         
         global_os.time              = 0.0f;
@@ -652,6 +620,14 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         global_os.samples_to_write   = 0;
         global_os.samples_to_advance = 0;
     }
+    
+    ShowWindow(window, show_code);
+#if DEVELOPER
+    ShowCursor(true);
+#else
+    // @Todo: Show cursor when we hover on window borders.
+    ShowCursor(false);
+#endif
     
     /////////////////////////////////////////////////////
     /////////////////////////////////////////////////////
@@ -692,22 +668,51 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     while (!global_os.exit) {
         //
         //
+        // Sleep until our Present call won't block for queuing up a new frame. 
+        //
+        //
+        d3d11_wait_for_swapchain();
+        
+        //
+        //
+        // Frame timing/end.
+        //
+        //
+        // @Note: Look at Phillip Trudeau's diagram on discord.
+        LARGE_INTEGER end_counter     = win32_qpc();
+        f64 seconds_elapsed_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
+        last_counter                  = end_counter;
+        accumulator                  += seconds_elapsed_for_frame;
+        accumulator                   = CLAMP_UPPER(0.1, accumulator);
+        print("FPS: %d\n", (s32)(1.0/seconds_elapsed_for_frame));
+        
+        //
+        //
+        // Process Inputs.
+        //
+        //
+        win32_process_inputs(window);
+        
+        //
+        //
         // Update drawing region.
         //
         //
         RECT rect;
         GetClientRect(window, &rect);
         V2u window_size = {(u32)(rect.right - rect.left), (u32)(rect.bottom - rect.top)};
-        Rect2 drawing_rect;
-        if (global_os.fix_aspect_ratio) {
-            drawing_rect = aspect_ratio_fit(global_os.render_size, window_size);
-        } else {
-            drawing_rect.min = {0, 0};
-            drawing_rect.max = {(f32)window_size.x, (f32)window_size.y};
+        if (global_os.window_size != window_size) {
+            Rect2 drawing_rect;
+            if (global_os.fix_aspect_ratio) {
+                drawing_rect = aspect_ratio_fit(global_os.render_size, window_size);
+            } else {
+                drawing_rect.min = {0, 0};
+                drawing_rect.max = {(f32)window_size.x, (f32)window_size.y};
+            }
+            
+            global_os.window_size  = window_size;
+            global_os.drawing_rect = drawing_rect;
         }
-        
-        global_os.window_size  = window_size;
-        global_os.drawing_rect = drawing_rect;
         
 #if DEVELOPER
         // Start the Dear ImGui frame only if window size is non-zero.
@@ -717,36 +722,16 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             ImGui::NewFrame();
         }
 #endif
-        
-        //
-        //
-        // Wait until we won't block in rendering/present.
-        //
-        //
-        d3d11_wait_on_swapchain();
-        
-        //
-        //
-        // Process Inputs --> Update.
-        //
-        //
-        //u32 num_updates_this_frame = 0;
         while (accumulator >= os->dt) {
             b32 last_fullscreen = global_os.fullscreen;
-            
-            // @Todo:
-            // @Todo:
-            // @Todo: Put process inputs outside to avoid latency. Either use s32 pressed/released states,
-            // or pull key usage code outside of accum loop to avoid issues.
-            //
-            win32_process_inputs(window);
             game_update();
             if (last_fullscreen != global_os.fullscreen)
                 win32_toggle_fullscreen(window);
             
             accumulator -= os->dt;
             os->time    += os->dt;
-            //num_updates_this_frame++;
+            
+            clear_key_states();
         }
         
         //
@@ -774,10 +759,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         //
         //
         if ((window_size.x != 0) && (window_size.y != 0)) {
-            d3d11_viewport(drawing_rect.min.x, 
-                           drawing_rect.min.y, 
-                           get_width(drawing_rect), 
-                           get_height(drawing_rect));
+            d3d11_viewport(global_os.drawing_rect.min.x, 
+                           global_os.drawing_rect.min.y, 
+                           get_width(global_os.drawing_rect), 
+                           get_height(global_os.drawing_rect));
             //d3d11_clear(0.20f, 0.20f, 0.20f, 1.0f);
             d3d11_clear(0.0097f, 0.043f, 0.082f, 1.0f);
             game_render();
@@ -790,10 +775,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         
         //
         //
-        // Framerate limiter (If vsync is not working).
+        // Framerate limiter (if vsync is off).
         //
         //
-        if ((global_os.fps_max > 0)) {
+        if ((!global_os.vsync) && (global_os.fps_max > 0)) {
             f64 target_seconds_per_frame = 1.0/(f64)global_os.fps_max;
             f64 seconds_elapsed_so_far = win32_get_seconds_elapsed(last_counter, win32_qpc());
             if (seconds_elapsed_so_far < target_seconds_per_frame) {
@@ -817,18 +802,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                     seconds_elapsed_so_far = win32_get_seconds_elapsed(last_counter, win32_qpc());
             }
         }
-        
-        //
-        //
-        // Frame end.
-        //
-        //
-        LARGE_INTEGER end_counter     = win32_qpc();
-        f64 seconds_elapsed_for_frame = win32_get_seconds_elapsed(last_counter, end_counter);
-        last_counter                  = end_counter;
-        accumulator                  += seconds_elapsed_for_frame;
-        //print("Num updates this frame: %d\n", num_updates_this_frame);
-        //print("FPS: %d\n", (s32)(1.0/seconds_elapsed_for_frame));
     }
     
     /////////////////////////////////////////////////////
@@ -836,13 +809,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     
     //
     // Cleanup.
-    
 #if DEVELOPER
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
 #endif
-    
     wasapi_stop(&audio);
     
     return 0;

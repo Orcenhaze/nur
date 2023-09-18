@@ -1,4 +1,4 @@
-/* orh.h - v0.66 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.67 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.67 - added clear_key_states() and clear_key_states_all().
 0.66 - added unlerp() and remap().
 0.65 - fixed perspective projections to use z range [0, 1].
 0.64 - corrected frac() implementation.
@@ -84,6 +85,7 @@ CONVENTIONS:
 * When storing paths, if string name has "folder" in it, then it ends with '/' or '\\'.
 
 TODO:
+[] Use vsprintf() and sprintf() if ORH_NO_STDLIB is not used/defined. 
 [] Implement angle_from_two_vectors() that gets us angle in range (0, TAU).
 https://math.stackexchange.com/questions/878785/how-to-find-an-angle-in-range0-360-between-2-vectors
 [] Implement quaternion_from_two_vectors() that gets quaternion that rotates v1 to v2 (closest arc). 
@@ -786,6 +788,17 @@ inline b32 operator==(V2s a, V2s b)
     return result;
 }
 inline b32 operator!=(V2s a, V2s b)
+{
+    b32 result = !(a == b);
+    return result;
+}
+
+inline b32 operator==(V2u a, V2u b)
+{
+    b32 result = ((a.x == b.x) && (a.y == b.y));
+    return result;
+}
+inline b32 operator!=(V2u a, V2u b)
 {
     b32 result = !(a == b);
     return result;
@@ -1764,9 +1777,11 @@ struct OS_State
 };
 extern OS_State *os;
 
-FUNCDEF b32 key_pressed(s32 key, b32 capture = false);
-FUNCDEF b32 key_held(s32 key, b32 capture = false);
-FUNCDEF b32 key_released(s32 key, b32 capture = false);
+FUNCDEF b32   key_pressed(s32 key, b32 capture = false);
+FUNCDEF b32   key_held(s32 key, b32 capture = false);
+FUNCDEF b32   key_released(s32 key, b32 capture = false);
+FUNCDEF void  clear_key_states();
+FUNCDEF void  clear_key_states_all();
 FUNCDEF Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim);
 FUNCDEF V3    unproject(V3 camera_position, f32 Zworld_distance_from_camera, V3 mouse_ndc, M4x4_Inverse world_to_view, M4x4_Inverse view_to_proj);
 #endif //ORH_H
@@ -3873,6 +3888,46 @@ b32 key_released(s32 key, b32 capture /* = false */)
     if (result && capture)
         os->released[key] = false;
     return result;
+}
+void clear_key_states()
+{
+    // @Note: Call this in the accum loop after we update/simulate the game.
+    
+    // Clear mouse-wheel scroll.
+    os->mouse_scroll = {};
+    
+    // Clear pressed and released states of keyboard+mouse.
+    MEMORY_ZERO_ARRAY(os->pressed);
+    MEMORY_ZERO_ARRAY(os->released);
+    
+    for (s32 i = 0; i < GAMEPADS_MAX; i++) {
+        Gamepad *pad = &os->gamepads[i];
+        
+        // Clear pressed and released states of gamepad.
+        MEMORY_ZERO_ARRAY(pad->pressed);
+        MEMORY_ZERO_ARRAY(pad->released);
+    }
+}
+void clear_key_states_all()
+{
+    // @Note: Call this when app changes focus (like WM_ACTIVATE and WM_ACTIVATEAPP on windows)
+    
+    // Clear mouse-wheel scroll.
+    os->mouse_scroll = {};
+    
+    // Clear all states of keyboard+mouse.
+    MEMORY_ZERO_ARRAY(os->pressed);
+    MEMORY_ZERO_ARRAY(os->held);
+    MEMORY_ZERO_ARRAY(os->released);
+    
+    for (s32 i = 0; i < GAMEPADS_MAX; i++) {
+        Gamepad *pad = &os->gamepads[i];
+        
+        // Clear all states of gamepad.
+        MEMORY_ZERO_ARRAY(pad->pressed);
+        MEMORY_ZERO_ARRAY(pad->held);
+        MEMORY_ZERO_ARRAY(pad->released);
+    }
 }
 Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim)
 {
