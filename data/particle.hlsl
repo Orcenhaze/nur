@@ -11,7 +11,7 @@ struct PS_INPUT
 	float4 color  : COLOR;
 };
 
-cbuffer Particle_Constant : register(b0)
+cbuffer VS_Constants : register(b0)
 {
 	float4x4 object_to_proj_matrix;
 	float4   color;

@@ -1,6 +1,9 @@
 #ifndef GAME_H
 #define GAME_H
 
+#include "particles.h"
+#include "background.h"
+
 // @Cleanup: Should probably move stuff to their own files.
 //
 
@@ -149,53 +152,6 @@ GLOBAL Menu_Page prev_page;
 #define TILE_SIZE 128  // In pixels!
 Texture tex;
 Texture font_tex;
-
-////////////////////////////////
-////////////////////////////////
-// Particles
-//
-
-enum Emitter_Texture_Slot
-{
-    SLOT0,
-    SLOT1,
-    SLOT2,
-    SLOT3,
-    
-    SLOT_COUNT
-};
-
-enum Particle_Type
-{
-    ParticleType_NONE,
-    
-    ParticleType_ROTATE,
-    ParticleType_WALK,
-};
-
-struct Particle
-{
-    V2  position;
-    V2  velocity;
-    V4  color;
-    f32 scale;
-    f32 life;
-    s32 type;
-    
-    // @Note: Emitters can store multiple textures and this tells us which texture to render for this particle.
-    Emitter_Texture_Slot slot;
-};
-
-struct Particle_Emitter
-{
-    Array<Particle> particles;
-    s32 amount;
-    
-    // @Cleanup: Maybe there's a better way to do this..?
-    Texture texture[SLOT_COUNT];
-    
-    // @Todo: Add own Random_PCG.
-};
 
 ////////////////////////////////
 ////////////////////////////////

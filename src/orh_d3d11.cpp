@@ -153,25 +153,6 @@ GLOBAL b32 is_using_pixel_coords;
 ////////////////////////////////
 ////////////////////////////////
 
-////////////////////////////////
-// Particles renderer info.
-//
-struct Particle_Constants
-{
-    M4x4 object_to_proj_matrix;
-    V4   color;
-    V2   offset;
-    f32  scale;
-};
-GLOBAL ID3D11InputLayout  *particle_input_layout;
-GLOBAL ID3D11Buffer       *particle_vbo;
-GLOBAL ID3D11Buffer       *particle_vs_cbuffer;
-GLOBAL ID3D11VertexShader *particle_vs;
-GLOBAL ID3D11PixelShader  *particle_ps;
-
-////////////////////////////////
-////////////////////////////////
-
 FUNCTION void d3d11_load_texture(Texture *texture, s32 w, s32 h, u8 *color_data)
 {
     if (!color_data)
@@ -427,60 +408,6 @@ FUNCTION void create_immediate_shader()
     free_scratch(scratch);
 }
 
-FUNCTION void create_particle_shader()
-{
-    // Shader input layout.
-    D3D11_INPUT_ELEMENT_DESC layout_desc[] = 
-    {
-        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 0,          D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, sizeof(V2), D3D11_INPUT_PER_VERTEX_DATA, 0},
-    };
-    
-    f32 unit_cube[] =
-    {
-        // Vertex origin in bottom-left. 
-        // UV origin is top-left.
-        
-        // POSITION    TEXCOORD
-        -0.5f, -0.5f,  0.0f,  1.0f,
-        0.5f,  -0.5f,  1.0f,  1.0f,
-        0.5f,   0.5f,  1.0f,  0.0f,
-        
-        -0.5f, -0.5f,  0.0f,  1.0f,
-        0.5f,   0.5f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.0f,  0.0f,
-    };
-    
-    //
-    // Vertex buffer.
-    {
-        D3D11_BUFFER_DESC desc = {};
-        desc.ByteWidth      = sizeof(unit_cube);
-        desc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
-        desc.Usage          = D3D11_USAGE_IMMUTABLE;
-        
-        D3D11_SUBRESOURCE_DATA data = { unit_cube }; 
-        device->CreateBuffer(&desc, &data, &particle_vbo);
-    }
-    
-    //
-    // Constant buffers.
-    {
-        D3D11_BUFFER_DESC desc = {};
-        desc.ByteWidth      = ALIGN_UP(sizeof(Particle_Constants), 16);
-        desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-        desc.Usage          = D3D11_USAGE_DYNAMIC;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-        
-        device->CreateBuffer(&desc, 0, &particle_vs_cbuffer);
-    }
-    
-    Arena_Temp scratch = get_scratch(0, 0);
-    String8 hlsl_path  = sprint(scratch.arena, "%Sparticle.hlsl", os->data_folder);
-    d3d11_compile_shader(hlsl_path, layout_desc, ARRAYSIZE(layout_desc), &particle_input_layout, &particle_vs, &particle_ps);
-    free_scratch(scratch);
-}
-
 FUNCTION void d3d11_init(HWND window)
 {
     // @Note: Kudos Martins:
@@ -647,7 +574,6 @@ FUNCTION void d3d11_init(HWND window)
     // Shaders.
     {    
         create_immediate_shader();
-        create_particle_shader();
     }
 }
 
