@@ -980,6 +980,18 @@ FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv_min, V2 uv_max, V4 c
     immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
 }
 
+FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv0, V2 uv1, V2 uv2, V2 uv3, V4 color)
+{
+    // CCW starting bottom-left.
+    
+    V2 p0 = center - half_size;
+    V2 p2 = center + half_size;
+    V2 p1 = v2(p2.x, p0.y);
+    V2 p3 = v2(p0.x, p2.y);
+    
+    immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
+}
+
 FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 color)
 {
     // @Note: We provide top left position, so we need to be careful with winding order.

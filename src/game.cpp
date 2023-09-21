@@ -1205,6 +1205,8 @@ FUNCTION void update_world()
         }
     }
     
+    // @Cleanup:
+    // @Cleanup:
     // Update player sprite.
     s32 base_s = pdir == Dir_N? 4 : 0;
     if (pdir == Dir_S)
@@ -1864,7 +1866,7 @@ FUNCTION void game_update()
     set_world_to_view(v3(camera_pos, zoom_level));
 }
 
-FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 invert_x = false)
+FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 is_player = false)
 {
     Texture *texture = &tex;
     
@@ -1876,10 +1878,38 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
     f32 u1 = (((s + 1) * TILE_SIZE) - 4.5f) / texture->width;
     f32 v1 = (((t + 1) * TILE_SIZE) - 4.5f) / texture->height;
     
-    if (invert_x) 
-        SWAP(u0, u1, f32);
+    V2 uv_min = { u0, v0 };
+    V2 uv_max = { u1, v1 };
     
-    immediate_rect(v2(x, y), v2(w*0.5f, h*0.5f), v2(u0, v0), v2(u1, v1), c);
+    if (is_player) {
+        V2 uv_top_left     = uv_min;
+        V2 uv_top_right    = { uv_max.x, uv_min.y };
+        V2 uv_bottom_left  = { uv_min.x, uv_max.y };
+        V2 uv_bottom_right = uv_max;
+        
+        // @Cleanup: 
+        //
+        if (pdir == Dir_W) {
+            // Mirror.
+            SWAP(uv_top_left,     uv_bottom_right, V2);
+            SWAP(uv_bottom_left,  uv_top_right,    V2);
+        } else if (pdir == Dir_N) {
+            // Rotate the sprite 90 degrees ccw.
+            SWAP(uv_top_left,     uv_bottom_left,  V2);
+            SWAP(uv_top_right,    uv_top_left,     V2);
+            SWAP(uv_bottom_right, uv_top_right,    V2);
+        } else if (pdir == Dir_S) {
+            // Rotate the sprite 90 degrees cw.
+            SWAP(uv_top_left,     uv_top_right,    V2);
+            SWAP(uv_bottom_left,  uv_top_left,     V2);
+            SWAP(uv_bottom_right, uv_bottom_left,  V2);
+        }
+        
+        immediate_rect(v2(x, y), v2(w*0.5f, h*0.5f), uv_bottom_left, uv_bottom_right, uv_top_right, uv_top_left, c);
+        return;
+    }
+    
+    immediate_rect(v2(x, y), v2(w*0.5f, h*0.5f), uv_min, uv_max, c);
 }
 
 FUNCTION inline void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
@@ -2053,8 +2083,7 @@ FUNCTION void draw_world()
         immediate_begin();
         set_texture(0);
         // Draw grid.
-        //immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(1, 1, 1, 0.7f), 0.01f);
-        immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(0.24f, 0.3f, 0.46f, 0.85f), 0.04f);
+        immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(0.2f, 0.2f, 0.2f, 0.3f), 0.04f);
         immediate_end();
     }
     
@@ -2064,16 +2093,20 @@ FUNCTION void draw_world()
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
+            V2s bg     = tile_sprite[Tile_DETECTOR_BACKGROUND];
             V2s sprite = obj_sprite[o.type];
             if (o.type == T_DETECTOR) {
                 u8 final_c = Color_WHITE;
                 for (s32 i = 0; i < 8; i++)
                     final_c = mix_colors(final_c, o.color[i]);
                 
-                if (final_c == o.c)
-                    draw_sprite(x, y, 1.2f, 1.2f, sprite.s, sprite.t, &colors[o.c], 1.0f);
-                else
-                    draw_sprite(x, y, 0.8f, 0.8f, sprite.s, sprite.t, &colors[o.c], 0.4f);
+                if (final_c == o.c) {
+                    draw_sprite(x, y, 1.2f, 1.2f, bg.s, bg.t, &colors[o.c], 1.0f);
+                    draw_sprite(x, y, 1.2f, 1.2f, sprite.s, sprite.t, 0, 1.0f);
+                } else {
+                    draw_sprite(x, y, 0.8f, 0.8f, bg.s, bg.t, &colors[o.c], 0.4f);
+                    draw_sprite(x, y, 0.8f, 0.8f, sprite.s, sprite.t, 0, 1.0f);
+                }
             }
         }
     }
@@ -2081,13 +2114,13 @@ FUNCTION void draw_world()
     
     immediate_begin();
     set_texture(0);
-    // Draw laser emitter frame background.
+    // Draw frame backgrounds.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_LASER) {
                 V4 c = colors[o.c] * 0.75f;
-                immediate_rect(v2((f32)x, (f32)y), v2(0.45f), c);
+                immediate_rect(v2((f32)x, (f32)y), v2(0.35f), c);
             } else if (o.type == T_DOOR) {
                 V4 c = colors[o.c] * 0.75f;
                 immediate_rect(v2((f32)x, (f32)y), v2(0.45f), c);
@@ -2186,13 +2219,15 @@ FUNCTION void draw_world()
     }
     immediate_end();
     
+    // @Cleanup:
+    // @Cleanup:
     immediate_begin();
     set_texture(&tex);
     // Draw player.
     s32 c        = dead? Color_RED : Color_WHITE;
     f32 alpha    = (pcolor != Color_WHITE) && !dead? 0.8f : 1.0f;
     b32 invert_x = pdir == Dir_W;
-    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, invert_x);
+    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, 0, 5, &colors[c], alpha, true);
     immediate_end();
     
     
