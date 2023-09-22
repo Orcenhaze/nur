@@ -1878,6 +1878,8 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
     f32 u1 = (((s + 1) * TILE_SIZE) - 4.5f) / texture->width;
     f32 v1 = (((t + 1) * TILE_SIZE) - 4.5f) / texture->height;
     
+    V2 p      = v2(x, y);
+    V2 sz     = v2(w*0.5f, h*0.5f);
     V2 uv_min = { u0, v0 };
     V2 uv_max = { u1, v1 };
     
@@ -1887,29 +1889,23 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
         V2 uv_bottom_left  = { uv_min.x, uv_max.y };
         V2 uv_bottom_right = uv_max;
         
-        // @Cleanup: 
-        //
         if (pdir == Dir_W) {
             // Mirror.
-            SWAP(uv_top_left,     uv_bottom_right, V2);
-            SWAP(uv_bottom_left,  uv_top_right,    V2);
+            immediate_rect(p, sz, uv_top_right, uv_top_left, uv_bottom_left, uv_bottom_right, c);
         } else if (pdir == Dir_N) {
             // Rotate the sprite 90 degrees ccw.
-            SWAP(uv_top_left,     uv_bottom_left,  V2);
-            SWAP(uv_top_right,    uv_top_left,     V2);
-            SWAP(uv_bottom_right, uv_top_right,    V2);
+            immediate_rect(p, sz, uv_top_left, uv_bottom_left, uv_bottom_right, uv_top_right, c);
         } else if (pdir == Dir_S) {
             // Rotate the sprite 90 degrees cw.
-            SWAP(uv_top_left,     uv_top_right,    V2);
-            SWAP(uv_bottom_left,  uv_top_left,     V2);
-            SWAP(uv_bottom_right, uv_bottom_left,  V2);
+            immediate_rect(p, sz, uv_bottom_right, uv_top_right, uv_top_left, uv_bottom_left, c);
+        } else {
+            immediate_rect(p, sz, uv_bottom_left, uv_bottom_right, uv_top_right, uv_top_left, c);
         }
         
-        immediate_rect(v2(x, y), v2(w*0.5f, h*0.5f), uv_bottom_left, uv_bottom_right, uv_top_right, uv_top_left, c);
         return;
     }
     
-    immediate_rect(v2(x, y), v2(w*0.5f, h*0.5f), uv_min, uv_max, c);
+    immediate_rect(p, sz, uv_min, uv_max, c);
 }
 
 FUNCTION inline void draw_sprite(s32 x, s32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a)
@@ -2226,7 +2222,6 @@ FUNCTION void draw_world()
     // Draw player.
     s32 c        = dead? Color_RED : Color_WHITE;
     f32 alpha    = (pcolor != Color_WHITE) && !dead? 0.8f : 1.0f;
-    b32 invert_x = pdir == Dir_W;
     draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, 0, 5, &colors[c], alpha, true);
     immediate_end();
     
