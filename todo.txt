@@ -15,12 +15,7 @@ Level design:
 - Levels where we don't render objs and force player to solve the puzzle blindly (maybe keep particles).
 
 Art:
-- High resolution tiles.
-	* Be consistent with level of detail each sprite has.
-	* Adjust colors so that objs are distinct yet work well together.
 - Layered cutscenes.
-- Background shader for main menu background, level transition effects and more.
-	* During levels: Cobblestone texture with distortion?
 - Writing: plot, dialogues and monologues.
 - Sound effects and ambient sounds.
 - Shadows?
