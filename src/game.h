@@ -198,7 +198,7 @@ enum
     Tile_WALL,
     Tile_OBJ_FRAME,
     Tile_LASER_FRAME,
-    Tile_DETECTOR_BACKGROUND
+    Tile_DETECTOR_BACKGROUND,
 };
 
 V2s tile_sprite[] = {

@@ -118,7 +118,7 @@ FUNCTION void obj_emitter_respawn_particle(Particle *p, s32 type, Emitter_Textur
         p->life     = 1.0f;
         p->scale    = random_rangef(&game->rng, 0.15f, 0.25f);
     } else if (type == ParticleType_WALK) {
-        p->position = offset + v2(0.0f, -0.25f);
+        p->position = offset + v2(0);
         p->color    = v4(1.0f);
         p->velocity = -fdirs[pdir] * 1.5f;
         p->life     = 0.75f;

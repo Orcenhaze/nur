@@ -763,8 +763,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                            global_os.drawing_rect.min.y, 
                            get_width(global_os.drawing_rect), 
                            get_height(global_os.drawing_rect));
-            //d3d11_clear(0.20f, 0.20f, 0.20f, 1.0f);
-            d3d11_clear(0.0097f, 0.043f, 0.082f, 1.0f);
+            d3d11_clear(0.37f, 0.32f, 0.31f, 1.0f);
             game_render();
 #if DEVELOPER
             ImGui::Render();

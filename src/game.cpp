@@ -742,6 +742,8 @@ FUNCTION void game_init()
     array_init(&unique_draw_beams_calls);
     
     {
+        // @Todo: Put particle textures inside the atlas!
+        //
         Arena_Temp scratch = get_scratch(0, 0);
         d3d11_load_texture(&tex, sprint(scratch.arena, "%Ssprites.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT0], sprint(scratch.arena, "%Sobj_particle.png", os->data_folder));
@@ -1205,19 +1207,14 @@ FUNCTION void update_world()
         }
     }
     
-    // @Cleanup:
-    // @Cleanup:
     // Update player sprite.
-    s32 base_s = pdir == Dir_N? 4 : 0;
-    if (pdir == Dir_S)
-        psprite.t = 6;
-    else
-        psprite.t = 5;
+    s32 base_s = 0;
+    psprite.t  = 5;
     if (player_is_at_rest()) {
         animation_timer = 0;
         psprite.s = base_s;
     } else if (animation_timer <= 0) {
-        psprite.s = base_s + ((psprite.s + 1) % NUM_ANIMATION_FRAMES);
+        psprite.s       = base_s + ((psprite.s + 1) % NUM_ANIMATION_FRAMES);
         animation_timer = ANIMATION_FRAME_DURATION;
     }  else {
         animation_timer = CLAMP_LOWER(animation_timer - os->dt, 0);
@@ -1873,10 +1870,10 @@ FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, 
     // Shrink the uv rect to have padding around sprites to avoid texture bleeding.
     //
     V4 c   = color? v4(color->rgb, color->a * a) : v4(1, 1, 1, a);
-    f32 u0 = (((s + 0) * TILE_SIZE) + 4.5f) / texture->width;
-    f32 v0 = (((t + 0) * TILE_SIZE) + 4.5f) / texture->height;
-    f32 u1 = (((s + 1) * TILE_SIZE) - 4.5f) / texture->width;
-    f32 v1 = (((t + 1) * TILE_SIZE) - 4.5f) / texture->height;
+    f32 u0 = (((s + 0) * TILE_SIZE) + 2.5f) / texture->width;
+    f32 v0 = (((t + 0) * TILE_SIZE) + 2.5f) / texture->height;
+    f32 u1 = (((s + 1) * TILE_SIZE) - 2.5f) / texture->width;
+    f32 v1 = (((t + 1) * TILE_SIZE) - 2.5f) / texture->height;
     
     V2 p      = v2(x, y);
     V2 sz     = v2(w*0.5f, h*0.5f);
@@ -2079,7 +2076,7 @@ FUNCTION void draw_world()
         immediate_begin();
         set_texture(0);
         // Draw grid.
-        immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(0.2f, 0.2f, 0.2f, 0.3f), 0.04f);
+        immediate_grid(v2(-0.5f), NUM_X*SIZE_X, NUM_Y*SIZE_Y, 1, v4(0.35f), 0.04f);
         immediate_end();
     }
     
@@ -2100,7 +2097,7 @@ FUNCTION void draw_world()
                     draw_sprite(x, y, 1.2f, 1.2f, bg.s, bg.t, &colors[o.c], 1.0f);
                     draw_sprite(x, y, 1.2f, 1.2f, sprite.s, sprite.t, 0, 1.0f);
                 } else {
-                    draw_sprite(x, y, 0.8f, 0.8f, bg.s, bg.t, &colors[o.c], 0.4f);
+                    draw_sprite(x, y, 0.8f, 0.8f, bg.s, bg.t, &colors[o.c], 1.0f);
                     draw_sprite(x, y, 0.8f, 0.8f, sprite.s, sprite.t, 0, 1.0f);
                 }
             }
@@ -2115,10 +2112,10 @@ FUNCTION void draw_world()
         for (s32 x = 0; x < NUM_X*SIZE_X; x++) {
             Obj o = objmap[y][x];
             if (o.type == T_LASER) {
-                V4 c = colors[o.c] * 0.75f;
+                V4 c = colors[o.c];
                 immediate_rect(v2((f32)x, (f32)y), v2(0.35f), c);
             } else if (o.type == T_DOOR) {
-                V4 c = colors[o.c] * 0.75f;
+                V4 c = colors[o.c];
                 immediate_rect(v2((f32)x, (f32)y), v2(0.45f), c);
             }
         }
@@ -2215,14 +2212,12 @@ FUNCTION void draw_world()
     }
     immediate_end();
     
-    // @Cleanup:
-    // @Cleanup:
     immediate_begin();
     set_texture(&tex);
     // Draw player.
     s32 c        = dead? Color_RED : Color_WHITE;
     f32 alpha    = (pcolor != Color_WHITE) && !dead? 0.8f : 1.0f;
-    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, 0, 5, &colors[c], alpha, true);
+    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, true);
     immediate_end();
     
     
@@ -2261,7 +2256,7 @@ FUNCTION void draw_menus()
     f32 h = get_height(os->drawing_rect);
     f32 yadvance = 80 * (h / os->render_size.h);
     
-    V4 active_color   = v4(0.425f, 0.671f, 0.475f, 1.0f);
+    V4 active_color   = v4(0.839, 0.639, 0.212, 1.0f);
     V4 inactive_color = v4(1);
     
     background_draw();
@@ -2359,14 +2354,14 @@ FUNCTION void draw_menus()
             char *text = "ARE YOU SURE YOU WANT TO RESTART?";
             f32 text_w = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
-            V4 color   = v4(0.8f, 0.7f, 0.8f, 1.0f);
+            V4 color   = v4(1);
             immediate_text(&consolas, p, 5, color, text);
             p.y       += yadvance;
             
             text       = "YOU CAN DISABLE THIS PROMPT IN SETTINGS";
             text_w     = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
-            color      = v4(0.8f, 0.6f, 0.8f, 1.0f);
+            color      = v4(1);
             immediate_text(&consolas, p, 5, color, text);
             p.y       += yadvance;
             
@@ -2398,9 +2393,9 @@ FUNCTION void draw_menus()
             };
             
             for (s32 i = 0; i < ARRAY_COUNT(lines); i++) {
-                V4 color = v4(0.9f, 0.6f, 0.9f, 1.0f);
+                V4 color = inactive_color;
                 if (i == ARRAY_COUNT(lines) - 1)
-                    color = v4(1);
+                    color = active_color;
                 immediate_text(&consolas, p, 5, color, lines[i]);
                 p.y += yadvance;
                 

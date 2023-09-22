@@ -16,7 +16,6 @@ struct PS_INPUT
 cbuffer PS_Constants : register(b0)
 {
 	float time;
-	float value;
 }
 
 PS_INPUT vs(VS_INPUT input)
@@ -82,12 +81,21 @@ float3 polar_to_xyz(float2 xy)
     return normalize(float3(x,y,z));
 }
 
+float3 palette(float t) {
+    float3 a = float3( 0.208, 0.248, 0.298);
+    float3 b = float3( 0.068, 0.028, -0.022);
+    float3 c = float3(0.028, 0.338, 1.188);
+    float3 d = float3(0.000, 0.333, 0.667);
+
+    return a + b*cos(6.28318*(c*t+d));
+}
+
 float4 ps(PS_INPUT input) : SV_TARGET
 {
 	float2 p = input.uv;
-    
+
 	float waves  = getwaves5d(float4(polar_to_xyz(p), 1.0), 17.0, time/5.2);
-    float3 color = float3(value, 0.15, 1.0-value) * waves;
+    float3 color = palette(time/90.0) * waves;
 
     return float4(color, 1.0);
 }

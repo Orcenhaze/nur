@@ -7,7 +7,6 @@
 struct Background_PS_Constants
 {
     f32 time;
-    f32 value; 
 };
 GLOBAL ID3D11InputLayout  *background_input_layout;
 GLOBAL ID3D11Buffer       *background_vbo;

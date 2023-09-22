@@ -75,9 +75,7 @@ FUNCTION void background_draw()
     device_context->RSSetState(rasterizer_state);
     
     // Pixel Shader.
-    f32 duration = 210;
-    f32 value    = ping_pong((f32)os->time/duration, 0.8f);
-    Background_PS_Constants constants = { (f32)os->time, value };
+    Background_PS_Constants constants = { (f32)os->time };
     D3D11_MAPPED_SUBRESOURCE mapped;
     device_context->Map(background_ps_cbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
     MEMORY_COPY(mapped.pData, &constants, sizeof(constants));
