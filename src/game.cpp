@@ -761,9 +761,9 @@ FUNCTION void game_init()
         Sound_Manager *m   = &game->sound_manager;
         
         String8 names[] = {
-            S8LIT("menu_move"), S8LIT("menu_confirm"), S8LIT("menu_back"),
+            S8LIT("menu_move"), S8LIT("menu_press"),
             S8LIT("move"),      S8LIT("object_push"),  S8LIT("rotate"),    S8LIT("undo"), 
-            S8LIT("death"),     S8LIT("laser_beam"), 
+            S8LIT("death"),
             S8LIT("teleport"), 
             S8LIT("rain"), 
         };
@@ -1055,80 +1055,81 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
     }
 }
 
-FUNCTION b32 is_obj_collides(u8 type)
+FUNCTION b32 player_collides(s32 x, s32 y)
 {
-    switch (type) {
-        case T_LASER:
-        case T_MIRROR:
-        case T_BENDER:
-        case T_SPLITTER:
-        case T_DETECTOR: 
-        case T_DOOR:
-        case T_DOOR_OPEN: return true;
-        default: return false;
-    }
+    // Return whether players collide with whatever's on [x,y].
+    
+    // @Todo: Add player pos? Multiple players should collide with one another.
+    b32 result = ((is_outside_map(x, y))             ||
+                  (tilemap[y][x]     == Tile_WALL)   ||
+                  (objmap[y][x].type == T_LASER)     ||
+                  (objmap[y][x].type == T_DOOR));
+    return result;
 }
 
-FUNCTION void move_player(s32 dir_x, s32 dir_y)
+FUNCTION b32 obj_collides(s32 x, s32 y)
 {
-    if (!dir_x && !dir_y) return;
+    // Return whether objs collide with whatever's on [x,y].
+    
+    // @Todo: Add player pos? Multiple players should collide with one another.
+    b32 result = ((is_outside_map(x, y))              ||
+                  (tilemap[y][x]     == Tile_WALL)    ||
+                  (objmap[y][x].type == T_LASER)      ||
+                  (objmap[y][x].type == T_MIRROR)     ||
+                  (objmap[y][x].type == T_BENDER)     ||
+                  (objmap[y][x].type == T_SPLITTER)   ||
+                  (objmap[y][x].type == T_DETECTOR)   ||
+                  (objmap[y][x].type == T_DOOR)       ||
+                  (objmap[y][x].type == T_DOOR_OPEN)  ||
+                  (objmap[y][x].type == T_TELEPORTER));
+    return result;
+}
+
+FUNCTION b32 move_obj(s32 x, s32 y, s32 dir_x, s32 dir_y)
+{
+    if (!dir_x && !dir_y) return false;
+    
+    // Potentially move the obj that is currently on [x,y] to [x+dir_x, y+dir_y].
+    s32 newx = x + dir_x; 
+    s32 newy = y + dir_y;
+    if (obj_collides(newx, newy))
+        return false;
+    
+    // Commit move.
+    undo_push_obj_move(&undo_handler, x, y, newx, newy);
+    SWAP(objmap[y][x], objmap[newy][newx], Obj);
+    pushed_obj     = v2((f32)newx, (f32)newy);
+    pushed_obj_pos = v2((f32)x, (f32)y);
+    return true;
+}
+
+FUNCTION b32 move_player(s32 dir_x, s32 dir_y)
+{
+    if (!dir_x && !dir_y) return false;
     u8 old_dir = pdir;
     pdir       = dir_x? dir_x<0? (u8)Dir_W : (u8)Dir_E : dir_y<0? (u8)Dir_S : (u8)Dir_N;
     
-    // @Cleanup:
-    // @Cleanup:
-    // @Cleanup:
-    s32 tempx = px + dir_x; 
-    s32 tempy = py + dir_y;
-    if (is_outside_map(tempx, tempy))
-        return;
+    s32 newx = px + dir_x; 
+    s32 newy = py + dir_y;
+    if (player_collides(newx, newy))
+        return false;
     
-    if (tilemap[tempy][tempx] == Tile_WALL) {
-        return;
+    // Push obj.
+    b32 pushable = ((objmap[newy][newx].type == T_MIRROR)   ||
+                    (objmap[newy][newx].type == T_BENDER)   ||
+                    (objmap[newy][newx].type == T_SPLITTER));
+    if (pushable) {
+        if (move_obj(newx, newy, dir_x, dir_y))
+            play_sound(&game->sound_manager, S8LIT("object_push"));
+        else
+            return false;
     }
     
-    if (objmap[tempy][tempx].type == T_LASER) {
-        return;
-    }
-    if (objmap[tempy][tempx].type == T_DOOR) {
-        return;
-    }
-    
-    if (objmap[tempy][tempx].type != T_DETECTOR &&
-        objmap[tempy][tempx].type != T_DOOR_OPEN) {
-        b32 collides = is_obj_collides(objmap[tempy][tempx].type);
-        if (collides) {
-            s32 nx = tempx + dirs[pdir].x;
-            s32 ny = tempy + dirs[pdir].y;
-            if (is_outside_map(nx, ny))
-                return;
-            if (tilemap[ny][nx] == Tile_WALL)
-                return;
-            
-            b32 next_collides = is_obj_collides(objmap[ny][nx].type);
-            if (next_collides) {
-                return;
-            }
-            
-#if 1
-            pushed_obj     = v2((f32)nx, (f32)ny);
-            pushed_obj_pos = v2((f32)tempx, (f32)tempy);
-#else
-            pushed_obj_pos = pushed_obj = v2((f32)nx, (f32)ny);
-#endif
-            undo_push_obj_move(&undo_handler, tempx, tempy, nx, ny);
-            SWAP(objmap[tempy][tempx], objmap[ny][nx], Obj);
-        }
-    }
-    
+    // Commit move.
     undo_push_player_move(&undo_handler, px, py, old_dir);
-    
-#if 1
-    set_player_position(tempx, tempy, pdir);
-#else
-    set_player_position(tempx, tempy, pdir, true);
-#endif
+    set_player_position(newx, newy, pdir);
     obj_emitter_emit(5, ParticleType_WALK, SLOT3, ppos);
+    return true;
 }
 
 FUNCTION void update_world()
@@ -1140,6 +1141,7 @@ FUNCTION void update_world()
         current_mode = M_MENUS;
         page         = PAUSE;
         selection    = 0;
+        play_sound(&game->sound_manager, S8LIT("menu_press"));
     }
     
     if (input_pressed(RESTART_LEVEL)) {
@@ -1149,6 +1151,7 @@ FUNCTION void update_world()
             current_mode = M_MENUS;
             page         = RESTART_CONFIRMATION;
             selection    = 1;
+            play_sound(&game->sound_manager, S8LIT("menu_press"));
         }
     }
     
@@ -1168,7 +1171,8 @@ FUNCTION void update_world()
     
     if (input_held(UNDO)) {
         if (undo_hold_timer <= 0) {
-            undo_next(&undo_handler);
+            if (undo_next(&undo_handler))
+                play_sound(&game->sound_manager, S8LIT("undo"));
             undo_hold_timer  = UNDO_HOLD_DURATION * undo_speed_scale;
             undo_speed_scale = CLAMP_LOWER(undo_speed_scale - 3.5f*os->dt, 0.3f);
             
@@ -1288,7 +1292,8 @@ FUNCTION void update_world()
                 queued_moves[i] = queued_moves[i+1];
             queued_moves_count--;
             
-            move_player(queued_move.x, queued_move.y);
+            if (move_player(queued_move.x, queued_move.y))
+                play_sound(&game->sound_manager, S8LIT("move"));
         }
         
         // Rotate objs around player.
@@ -1307,12 +1312,14 @@ FUNCTION void update_world()
                         // Perform rotation.
                         if (input_pressed(ROTATE_CCW)) {
                             undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
+                            play_sound(&game->sound_manager, S8LIT("rotate"));
                             if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CW))
                                 objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir - 1);
                             else
                                 objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
                         } else if (input_pressed(ROTATE_CW)) {
                             undo_push_obj_rotate(&undo_handler, dx, dy, objmap[dy][dx].dir);
+                            play_sound(&game->sound_manager, S8LIT("rotate"));
                             if (is_set(objmap[dy][dx].flags, ObjFlags_ONLY_ROTATE_CCW))
                                 objmap[dy][dx].dir = WRAP_D(objmap[dy][dx].dir + 1);
                             else
@@ -1371,8 +1378,11 @@ FUNCTION void update_world()
         }
     }
     
-    if (pcolor == Color_RED || pcolor == Color_MAGENTA || pcolor == Color_YELLOW)
+    if (pcolor == Color_RED || pcolor == Color_MAGENTA || pcolor == Color_YELLOW) {
+        if (!dead)
+            play_sound(&game->sound_manager, S8LIT("death"));
         dead = true;
+    }
     else
         dead = false;
     
@@ -1537,8 +1547,12 @@ FUNCTION void update_menus()
             else if (input_held(MOVE_DOWN))  ydir =  1;
             
             move_hold_timer = MOVE_HOLD_DURATION;
+            play_sound(&game->sound_manager, S8LIT("menu_move"));
         }
     }
+    
+    if (input_pressed(PAUSE_MENU) || input_pressed(BACK) || input_pressed(CONFIRM))
+        play_sound(&game->sound_manager, S8LIT("menu_press"));
     
     switch (page) {
         case MAIN_MENU: {

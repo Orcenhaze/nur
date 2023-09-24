@@ -196,6 +196,7 @@ enum
 {
     Tile_FLOOR,
     Tile_WALL,
+    
     Tile_OBJ_FRAME,
     Tile_LASER_FRAME,
     Tile_DETECTOR_BACKGROUND,
@@ -204,6 +205,7 @@ enum
 V2s tile_sprite[] = {
     v2s(0, 0),
     v2s(1, 0),
+    
     v2s(3, 0),
     v2s(4, 0),
     v2s(5, 0),

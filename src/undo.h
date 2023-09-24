@@ -144,15 +144,17 @@ FUNCTION void undo_perform_action(Undo_Action action)
     }
 }
 
-FUNCTION void undo_next(Undo_Handler *handler)
+FUNCTION b32 undo_next(Undo_Handler *handler)
 {
     if (handler->records.count <= 0)
-        return;
+        return false;
     
     Undo_Record record = array_pop_back(&handler->records);
     for (s32 i = 0; i < record.actions_count; i++) {
         undo_perform_action(record.actions[i]);
     }
+    
+    return true;
 }
 
 #endif //UNDO_H

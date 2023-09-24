@@ -1,13 +1,14 @@
 
 Features:
 - Displaying layered cutscenes (HH E.221).
-- Simple package manager.
+* Simple package manager.
 - Simple instrumentation.
 
 Improvements:
-- Store save.dat file in AppData or Saved Games folder on Windows.
+* Store save.dat file in AppData or Saved Games folder on Windows.
+* Draw quad outline around button selection in UIs to avoid confusion.
 
-Level design:
+* Level design:
 - Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
 - Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.
 - If all primary colored lasers are present in same level, it's possible to make white before player is introduced to the concept.
@@ -17,7 +18,7 @@ Level design:
 Art:
 - Layered cutscenes.
 - Writing: plot, dialogues and monologues.
-- Sound effects and ambient sounds.
+* Sound effects and ambient sounds.
 - Shadows?
 
 

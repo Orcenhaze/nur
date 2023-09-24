@@ -165,8 +165,8 @@ static DWORD CALLBACK wasapi__audio_thread(LPVOID arg)
 		audio->ringbuffer_lock_offset = read_offset + use_size;
         
 		// will always submit required amount of samples, but if there's not enough to use, then submit silence
-		UINT32 submit_count = use_samples ? use_samples : max_output_samples;
-		DWORD flags = use_samples ? 0 : AUDCLNT_BUFFERFLAGS_SILENT;
+		UINT32 submit_count = use_samples? use_samples : max_output_samples;
+		DWORD flags         = use_samples? 0           : AUDCLNT_BUFFERFLAGS_SILENT;
         
 		// remember how many samples are submitted
 		audio->buffer_used += submit_count;
