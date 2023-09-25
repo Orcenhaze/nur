@@ -147,7 +147,7 @@ GLOBAL Vertex_XCNU   immediate_vertices[MAX_IMMEDIATE_VERTICES];
 
 // State.
 //
-// @Note: If true: vertices we push to buffer are pixel positions relative to drawing rect.
+// @Note: If true: vertices we push to buffer are pixel positions relative to drawing rect and Y grows down.
 GLOBAL b32 is_using_pixel_coords;
 
 ////////////////////////////////
@@ -226,6 +226,7 @@ FUNCTION void d3d11_load_font(Font *font, String8 full_path, s32 ascii_start, s3
     
     font->full_path = full_path;
     String8 file    = os->read_entire_file(full_path);
+    ASSERT(file.data);
     defer(os->free_file_memory(file.data));
     
     stbtt_InitFont(&font->info, file.data, 0);
@@ -299,7 +300,7 @@ FUNCTION s32 find_font_size_index(Font *font, s32 size)
     return result;
 }
 
-FUNCTION f32 get_text_width(Font *font, s32 vh, char *format, ...)
+FUNCTION f32 get_text_width(Font *font, s32 vh, char *format, va_list arg_list)
 {
     // @Note: Gets width of text in pixels.
     //
@@ -307,10 +308,7 @@ FUNCTION f32 get_text_width(Font *font, s32 vh, char *format, ...)
     //
     
     char text[256];
-    va_list arg_list;
-    va_start(arg_list, format);
     u64 text_length = string_format_list(text, sizeof(text), format, arg_list);
-    va_end(arg_list);
     
     // Calculate font size based on vh and get corresponding index of that size.
     s32 size = (s32)(get_height(os->drawing_rect) * vh * 0.01f);
@@ -323,6 +321,46 @@ FUNCTION f32 get_text_width(Font *font, s32 vh, char *format, ...)
         result             += d.xadvance;
     }
     
+    return result;
+}
+FUNCTION f32 get_text_width(Font *font, s32 vh, char *format, ...)
+{
+    va_list arg_list;
+    va_start(arg_list, format);
+    f32 result = get_text_width(font, vh, format, arg_list);
+    va_end(arg_list);
+    return result;
+}
+
+FUNCTION f32 get_text_height(Font *font, s32 vh, char *format, va_list arg_list)
+{
+    // @Note: Gets height of text in pixels.
+    //
+    // @Note: vh is percentage [0-100] relative to drawing_rect height.
+    //
+    
+    char text[256];
+    u64 text_length = string_format_list(text, sizeof(text), format, arg_list);
+    
+    // Calculate font size based on vh and get corresponding index of that size.
+    s32 size = (s32)(get_height(os->drawing_rect) * vh * 0.01f);
+    size     = find_font_size_index(font, size);
+    
+    f32 result = 0;
+    for (s32 i = 0; i < text_length; i++) {
+        s32 char_index      = text[i] - font->first;
+        stbtt_packedchar d  = font->char_data[size][char_index];
+        result              = MAX(result, (f32)(d.y1 - d.y0));
+    }
+    
+    return result;
+}
+FUNCTION f32 get_text_height(Font *font, s32 vh, char *format, ...)
+{
+    va_list arg_list;
+    va_start(arg_list, format);
+    f32 result = get_text_height(font, vh, format, arg_list);
+    va_end(arg_list);
     return result;
 }
 
@@ -857,7 +895,7 @@ FUNCTION void immediate_end()
     is_using_pixel_coords  = false;
     object_to_world_matrix = m4x4_identity();
     immediate_ps_constants = {};
-    set_texture(0);
+    //set_texture(0);
 }
 
 FUNCTION void immediate_begin(b32 wireframe = false)
@@ -995,6 +1033,7 @@ FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv0, V2 uv1, V2 uv2, V2
 FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V4 color)
 {
     // @Note: We provide top left position, so we need to be careful with winding order.
+    ASSERT(is_using_pixel_coords != false);
     
     // CCW starting bottom-left.
     
@@ -1009,6 +1048,7 @@ FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V4 color)
 FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 color)
 {
     // @Note: We provide top left position, so we need to be careful with winding order.
+    ASSERT(is_using_pixel_coords != false);
     
     // CCW starting bottom-left.
     
@@ -1026,7 +1066,7 @@ FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 c
     immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, color);
 }
 
-FUNCTION void immediate_text(Font *font, V2 top_left, s32 vh, V4 color, char *format, ...)
+FUNCTION void immediate_text(Font *font, V2 baseline, s32 vh, V4 color, char *format, va_list arg_list)
 {
     // @Note: vh is percentage [0-100] relative to drawing_rect height.
     //
@@ -1034,16 +1074,13 @@ FUNCTION void immediate_text(Font *font, V2 top_left, s32 vh, V4 color, char *fo
     // is_using_pixel_coords = true;
     
     char text[256];
-    va_list arg_list;
-    va_start(arg_list, format);
     u64 text_length = string_format_list(text, sizeof(text), format, arg_list);
-    va_end(arg_list);
     
     // Calculate size based on vh and get corresponding index of that size.
     s32 size = (s32)(get_height(os->drawing_rect) * vh * 0.01f);
     size     = find_font_size_index(font, size);
-    f32 x    = top_left.x;
-    f32 y    = top_left.y; 
+    f32 x    = baseline.x;
+    f32 y    = baseline.y; 
     for (s32 i = 0; i < text_length; i++) {
         s32 char_index      = text[i] - font->first;
         stbtt_packedchar d  = font->char_data[size][char_index];
@@ -1057,6 +1094,13 @@ FUNCTION void immediate_text(Font *font, V2 top_left, s32 vh, V4 color, char *fo
         
         x += d.xadvance;
     }
+}
+FUNCTION void immediate_text(Font *font, V2 baseline, s32 vh, V4 color, char *format, ...)
+{
+    va_list arg_list;
+    va_start(arg_list, format);
+    immediate_text(font, baseline, vh, color, format, arg_list);
+    va_end(arg_list);
 }
 
 FUNCTION void immediate_line_2d(V2 p0, V2 p1, V4 color, f32 thickness = 0.1f)

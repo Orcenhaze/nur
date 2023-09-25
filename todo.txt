@@ -5,8 +5,8 @@ Features:
 - Simple instrumentation.
 
 Improvements:
+- Create separate input array for per-frame inputs and pull out UI code to update_and_render every frame.
 * Store save.dat file in AppData or Saved Games folder on Windows.
-* Draw quad outline around button selection in UIs to avoid confusion.
 
 * Level design:
 - Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
@@ -18,7 +18,6 @@ Improvements:
 Art:
 - Layered cutscenes.
 - Writing: plot, dialogues and monologues.
-* Sound effects and ambient sounds.
 - Shadows?
 
 

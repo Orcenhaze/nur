@@ -14,4 +14,6 @@ GLOBAL ID3D11Buffer       *background_ps_cbuffer;
 GLOBAL ID3D11VertexShader *background_vs;
 GLOBAL ID3D11PixelShader  *background_ps;
 
+Texture background_tex;
+
 #endif //BACKGROUND_H

@@ -56,6 +56,9 @@ FUNCTION void create_background_shader()
 FUNCTION void background_init()
 {
     create_background_shader();
+    Arena_Temp scratch = get_scratch(0, 0);
+    d3d11_load_texture(&background_tex, sprint(scratch.arena, "%Smenu_background.png", os->data_folder));
+    free_scratch(scratch);
 }
 
 FUNCTION void background_draw()
@@ -82,6 +85,7 @@ FUNCTION void background_draw()
     device_context->Unmap(background_ps_cbuffer, 0);
     device_context->PSSetConstantBuffers(0, 1, &background_ps_cbuffer);
     device_context->PSSetSamplers(0, 1, &sampler0);
+    device_context->PSSetShaderResources(0, 1, &background_tex.view);
     device_context->PSSetShader(background_ps, 0, 0);
     
     // Output Merger.

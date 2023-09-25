@@ -401,9 +401,11 @@ FUNCTION b32 save_level(s32 level_idx)
         }
     }
     
-    Arena_Temp scratch = get_scratch(0, 0);
-    Arena *a           = scratch.arena;
-    String8 path       = sprint(a, "%Slevels/%S.nlf", os->data_folder, level_names[level_idx]);
+    Arena_Temp scratch  = get_scratch(0, 0);
+    Arena *a            = scratch.arena;
+    // @Note: Save in our original data folder.
+    String8 data_folder = sprint(a, "%S../data/", os->exe_parent_folder); 
+    String8 path        = sprint(a, "%Slevels/%S.nlf", data_folder, level_names[level_idx]);
     b32 result = os->write_entire_file(path, sb_to_string(&sb, a));
     free_scratch(scratch);
     
@@ -561,7 +563,8 @@ FUNCTION void do_editor(b32 is_first_call)
         
         // Save level.
         if (ImGui::Button("Save level")) {
-            ASSERT(game->loaded_level.idx == selected_level_idx);
+            if (!(selected_level_idx >= 0 && selected_level_idx <= 3))
+                ASSERT(game->loaded_level.idx == selected_level_idx);
             
             if (save_level(selected_level_idx)) {
                 ImGui::SameLine(); 
@@ -764,6 +767,7 @@ FUNCTION void game_init()
             S8LIT("menu_move"), S8LIT("menu_press"),
             S8LIT("move"),      S8LIT("object_push"),  S8LIT("rotate"),    S8LIT("undo"), 
             S8LIT("death"),
+            S8LIT("door_open"), S8LIT("door_close"),
             S8LIT("teleport"), 
             S8LIT("rain"), 
         };
@@ -1187,6 +1191,7 @@ FUNCTION void update_world()
         if (o.type == T_TELEPORTER) {
             teleport_transition_timer = LEVEL_TRANSITION_DURATION;
             is_teleporting            = true;
+            play_sound(&game->sound_manager, S8LIT("teleport"));
         }
     }
     if (is_teleporting) {
@@ -1406,14 +1411,20 @@ FUNCTION void update_world()
                             if (final_c == detector.c) {
                                 // Potentially open door.
                                 objmap[dy][dx].color[1] += 1;
-                                if (objmap[dy][dx].color[1] >= objmap[dy][dx].color[0])
+                                if (objmap[dy][dx].color[1] >= objmap[dy][dx].color[0]) {
+                                    if (objmap[dy][dx].type == T_DOOR)
+                                        play_sound(&game->sound_manager, S8LIT("door_open"));
                                     objmap[dy][dx].type = T_DOOR_OPEN;
-                                else
-                                    objmap[dy][dx].type = T_DOOR;
+                                }
+                                //else
+                                //objmap[dy][dx].type = T_DOOR;
                             } else {
                                 // Close door.
-                                if (objmap[dy][dx].color[1] < objmap[dy][dx].color[0])
+                                if (objmap[dy][dx].color[1] < objmap[dy][dx].color[0]) {
+                                    if (objmap[dy][dx].type == T_DOOR_OPEN)
+                                        play_sound(&game->sound_manager, S8LIT("door_close"));
                                     objmap[dy][dx].type = T_DOOR;
+                                }
                             }
                         }
                     }
@@ -1444,7 +1455,11 @@ FUNCTION void update_editor()
     }
     
     if(shift_held) {
-        zoom_level += -0.45f*os->mouse_scroll.y;
+        zoom_level += -0.1f*os->mouse_scroll.y;
+        
+        if (key_held(Key_SHIFT))
+            zoom_level += -0.45f*os->mouse_scroll.y;
+        
         zoom_level  = CLAMP_LOWER(zoom_level, 0.01f);
         set_world_to_view(v3(camera_pos, zoom_level));
         
@@ -1528,6 +1543,9 @@ FUNCTION void update_menus()
 {
     // @Cleanup:
     // @Cleanup: Pull-out commonalities like pressing BACK input and such.
+    //
+    // @Todo:
+    // @Todo: Update and draw in same place, read Wassimulator's blog. Need per-frame input first!
     //
     
     if (input_pressed(MOVE_RIGHT) || input_pressed(MOVE_UP) || 
@@ -2248,23 +2266,58 @@ FUNCTION void draw_world()
 #endif
 }
 
+FUNCTION void draw_text(Font *font, V2 baseline, s32 vh, V4 color, char *format, ...)
+{
+    // @Important:
+    // @Todo: Remove this poop code and move all UI stuff to happen per-frame.
+    // 
+    va_list arg_list;
+    va_start(arg_list, format);
+    immediate_begin();
+    set_texture(&consolas.atlas);
+    is_using_pixel_coords = true;
+    immediate_text(font, baseline, vh, color, format, arg_list);
+    immediate_end();
+    va_end(arg_list);
+}
+
+FUNCTION void draw_text_highlighted(Font *font, V2 baseline, s32 vh, V4 color, b32 highlighted, char *format, ...)
+{
+    // @Important:
+    // @Todo: Remove this poop code and move all UI stuff to happen per-frame.
+    // 
+    va_list arg_list;
+    va_start(arg_list, format);
+    
+    if (highlighted) {
+        f32 s  = get_height(os->drawing_rect) / os->render_size.h;
+        f32 tw = get_text_width(font, vh, format, arg_list);
+        f32 th = get_text_height(font, vh, format, arg_list);
+        V2 pad = v2(5.0f, -5.0f) * s;
+        immediate_begin();
+        set_texture(0);
+        is_using_pixel_coords = true;
+        immediate_rect_tl(baseline - pad, v2(tw, 10.0f*s) + pad, color*0.85f);
+        immediate_end();
+    }
+    
+    immediate_begin();
+    set_texture(&consolas.atlas);
+    is_using_pixel_coords = true;
+    immediate_text(font, baseline, vh, color, format, arg_list);
+    immediate_end();
+    
+    va_end(arg_list);
+}
+
 FUNCTION void draw_menus()
 {
     // @Cleanup:
     // @Cleanup: Need to pull-out code and clean up!
     //
-    
-#if 0
-    b32 is_transparent_bg = false;
-    if ((page == PAUSE) || 
-        (page == SETTINGS && prev_page == PAUSE) || 
-        (page == CONTROLS && prev_page == PAUSE) || 
-        (page == RESTART_CONFIRMATION))
-        is_transparent_bg = true;
-    
-    if (is_transparent_bg)
-        draw_world();
-#endif
+    // @Todo:
+    // @Todo: Update and draw in same place, read Wassimulator's blog. Need per-frame input first!
+    //
     
     f32 w = get_width(os->drawing_rect);
     f32 h = get_height(os->drawing_rect);
@@ -2273,13 +2326,26 @@ FUNCTION void draw_menus()
     V4 active_color   = v4(0.839, 0.639, 0.212, 1.0f);
     V4 inactive_color = v4(1);
     
-    background_draw();
+    b32 is_transparent_bg = false;
+    if ((page == PAUSE) || 
+        (page == SETTINGS && prev_page == PAUSE) || 
+        (page == CONTROLS && prev_page == PAUSE) || 
+        (page == RESTART_CONFIRMATION))
+        is_transparent_bg = true;
+    
+    if (is_transparent_bg) {
+        draw_world();
+        immediate_begin();
+        set_texture(0);
+        is_using_pixel_coords = true;
+        immediate_rect_tl(v2(0), v2(w, h), v4(0.4f));
+        immediate_end();
+    } else {
+        background_draw();
+    }
     
     // Menu text.
-    immediate_begin();
-    set_texture(&consolas.atlas);
-    is_using_pixel_coords = true;
-    
+    //
     switch (page) {
         case MAIN_MENU: {
             V2 p = v2(0.1f*w, 0.3333f*h);
@@ -2304,7 +2370,7 @@ FUNCTION void draw_menus()
                 
                 b32 highlighed = selection == i;
                 V4 color       = highlighed? active_color : inactive_color;
-                immediate_text(&consolas, p, 5, color, choices[i]);
+                draw_text_highlighted(&consolas, p, 5, color, highlighed, choices[i]);
                 p.y += yadvance;
             }
         } break;
@@ -2323,7 +2389,7 @@ FUNCTION void draw_menus()
             for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
                 b32 highlighed = selection == i;
                 V4 color       = highlighed? active_color : inactive_color;
-                immediate_text(&consolas, p, 5, color, choices[i]);
+                draw_text_highlighted(&consolas, p, 5, color, highlighed, choices[i]);
                 p.y += yadvance;
             }
         } break;
@@ -2342,7 +2408,7 @@ FUNCTION void draw_menus()
             for (s32 i = 0; i < ARRAY_COUNT(choices); i++) {
                 b32 highlighed = selection == i;
                 V4 color       = highlighed? active_color : inactive_color;
-                immediate_text(&consolas, p, 5, color, choices[i]);
+                draw_text_highlighted(&consolas, p, 5, color, highlighed, choices[i]);
                 p.y += yadvance;
                 
                 if (i == ARRAY_COUNT(choices) - 2)
@@ -2351,13 +2417,13 @@ FUNCTION void draw_menus()
             
             // Mark setting state (T = true, F = false).
             p = v2(0.5f*w, 0.3333f*h);
-            immediate_text(&consolas, p, 5, v4(1), "%d", master_volume);
+            draw_text(&consolas, p, 5, v4(1), "%d", master_volume);
             p.y += yadvance;
-            immediate_text(&consolas, p, 5, draw_grid? v4(0,1,0,1) : v4(1,0,0,1), draw_grid? "T" : "F");
+            draw_text(&consolas, p, 5, draw_grid? v4(0,1,0,1) : v4(1,0,0,1), draw_grid? "T" : "F");
             p.y += yadvance;
-            immediate_text(&consolas, p, 5, os->fullscreen? v4(0,1,0,1) : v4(1,0,0,1), os->fullscreen? "T" : "F");
+            draw_text(&consolas, p, 5, os->fullscreen? v4(0,1,0,1) : v4(1,0,0,1), os->fullscreen? "T" : "F");
             p.y += yadvance;
-            immediate_text(&consolas, p, 5, prompt_user_on_restart? v4(0,1,0,1) : v4(1,0,0,1), prompt_user_on_restart? "T" : "F");
+            draw_text(&consolas, p, 5, prompt_user_on_restart? v4(0,1,0,1) : v4(1,0,0,1), prompt_user_on_restart? "T" : "F");
         } break;
         case RESTART_CONFIRMATION: {
             if (prompt_user_on_restart == false)
@@ -2369,14 +2435,14 @@ FUNCTION void draw_menus()
             f32 text_w = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
             V4 color   = v4(1);
-            immediate_text(&consolas, p, 5, color, text);
+            draw_text(&consolas, p, 5, color, text);
             p.y       += yadvance;
             
             text       = "YOU CAN DISABLE THIS PROMPT IN SETTINGS";
             text_w     = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
             color      = v4(1);
-            immediate_text(&consolas, p, 5, color, text);
+            draw_text(&consolas, p, 5, color, text);
             p.y       += yadvance;
             
             p = v2(0, h*0.5f);
@@ -2384,14 +2450,14 @@ FUNCTION void draw_menus()
             text_w     = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
             color      = (selection == 0)? active_color : inactive_color;
-            immediate_text(&consolas, p, 5, color, text);
+            draw_text_highlighted(&consolas, p, 5, color, (selection == 0), text);
             p.y       += yadvance;
             
             text       = "NO";
             text_w     = get_text_width(&consolas, 5, text);
             p.x        = w/2 - text_w*0.5f;
             color      = (selection == 1)? active_color : inactive_color;
-            immediate_text(&consolas, p, 5, color, text);
+            draw_text_highlighted(&consolas, p, 5, color, (selection == 1), text);
         } break;
         case CONTROLS: {
             V2 p = v2(0.1f*w, 0.3333f*h);
@@ -2408,9 +2474,11 @@ FUNCTION void draw_menus()
             
             for (s32 i = 0; i < ARRAY_COUNT(lines); i++) {
                 V4 color = inactive_color;
-                if (i == ARRAY_COUNT(lines) - 1)
+                
+                b32 highlighed = i == ARRAY_COUNT(lines) - 1;
+                if (highlighed)
                     color = active_color;
-                immediate_text(&consolas, p, 5, color, lines[i]);
+                draw_text_highlighted(&consolas, p, 5, color, highlighed, lines[i]);
                 p.y += yadvance;
                 
                 if (i == ARRAY_COUNT(lines) - 2)
@@ -2440,14 +2508,12 @@ FUNCTION void draw_menus()
                 V2 p = {x, y};
                 p.x -= get_text_width(&consolas, vh, text) * 0.5f;
                 
-                immediate_text(&consolas, p, vh, color, text);
+                draw_text(&consolas, p, vh, color, text);
                 
                 x += xadvance;
             }
         } break;
     }
-    
-    immediate_end();
 }
 
 FUNCTION void game_fill_sound_buffer()

@@ -18,6 +18,9 @@ cbuffer PS_Constants : register(b0)
 	float time;
 }
 
+sampler sampler0 : register(s0);
+Texture2D<float4> texture0 : register(t0); 
+
 PS_INPUT vs(VS_INPUT input)
 {
 	PS_INPUT output;
@@ -94,8 +97,15 @@ float4 ps(PS_INPUT input) : SV_TARGET
 {
 	float2 p = input.uv;
 
-	float waves  = getwaves5d(float4(polar_to_xyz(p), 1.0), 17.0, time/5.2);
-    float3 color = palette(time/90.0) * waves;
+	// Fix aspect ratio (from 16:9 to 1:1).
+	p.x *= 1.777778;
 
-    return float4(color, 1.0);
+	// Slide towards bottom right.
+	p += time/65.0;
+
+	float waves  = getwaves5d(float4(polar_to_xyz(input.uv), 1.0), 17.0, time/5.2);
+    float3 color = 0.8 * waves;
+	float3 tex   = texture0.Sample(sampler0, p).rgb;
+	
+    return float4(color*tex, 1.0);
 }
