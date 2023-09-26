@@ -18,6 +18,7 @@ Improvements:
 Art:
 - Layered cutscenes.
 - Writing: plot, dialogues and monologues.
+* Better sound effects.
 - Shadows?
 
 
