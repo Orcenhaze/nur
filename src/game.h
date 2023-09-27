@@ -355,6 +355,11 @@ GLOBAL f32 zoom_level;
 ////////////////////////////////
 // Levels
 //
+
+// @Todo:
+// @Todo:
+// @Todo: Make editing these easy, I don't want to worry about id and name mismatch....
+//
 GLOBAL s32 const LEVELS_PER_ROW = 6; // For level select.
 GLOBAL String8 level_names[] = 
 {
@@ -365,62 +370,39 @@ GLOBAL String8 level_names[] =
     
     S8LIT("mirror_intro"),
     S8LIT("red_intro"),
+    S8LIT("block_the_source"),
+    S8LIT("sokobaning"),
+    S8LIT("mirror_first_challenge"),
     S8LIT("splitter_intro"),
     S8LIT("teach_rotation"),
-    S8LIT("block_the_source"),
-    S8LIT("mirror_first_challenge"),
     
     S8LIT("primary_mixing_intro"),
-    S8LIT("trapped_mirror_intro"),
+    S8LIT("splitter_first_challenge"),
+    S8LIT("make_way"),
     
     S8LIT("bender_intro"),
-    S8LIT("tie"),
     S8LIT("mirror_bender_relationship1"),
-    S8LIT("mirror_bender_relationship2"),
-    
-    S8LIT("bender_red"),
-    S8LIT("bender_locked_red"),
-    S8LIT("bender_locked_red_double"),
-    
-    S8LIT("push"),
-    S8LIT("make_way"),
-    S8LIT("sneaky_corner"),
-    S8LIT("sneaky_corner_hard"),
-    S8LIT("splitter_first_challenge"),
-    
-    S8LIT("bender_splitter_triangle"),
     S8LIT("bender_splitter_relationship"),
-    S8LIT("tie_cyan"),
-    S8LIT("tie_hard"),
     
     S8LIT("connected_rooms"),
     
     S8LIT("splitter_locked1"),
-    S8LIT("splitter_locked2"),
-    S8LIT("splitter_locked3"),
-    
-    S8LIT("secondary_mixing_intro"),
-    S8LIT("secondary_mixing_easy"),
     
     S8LIT("crossing_red_intro1"),
-    S8LIT("make_white_beam"),
-    S8LIT("crossing_red_intro2"),
-    S8LIT("crossing_red_medium"),
     S8LIT("crossing_magenta"),
+    S8LIT("crossing_red_medium"),
     
-    S8LIT("sokobaning"),
+    S8LIT("tie_cyan"),
+    
     S8LIT("stack"),
-    S8LIT("stack2"),
     S8LIT("stack_hard"),
     
     S8LIT("colored_splitter_intro"),
     S8LIT("colored_splitter_primary_mixing"),
     S8LIT("colored_splitter_crossing_red"),
     
-    S8LIT("chain_small"),
     S8LIT("chain_big"),
     S8LIT("loop_medium"),
-    S8LIT("loop_hard"),
 };
 
 enum 

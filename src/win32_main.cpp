@@ -232,8 +232,12 @@ FUNCTION void win32_build_paths()
     }
     MEMORY_COPY(global_exe_parent_folder, global_exe_full_path, one_past_slash - global_exe_full_path);
     
+#if DEVELOPER
+    string_format(global_data_folder, sizeof(global_data_folder), "%s../data/", global_exe_parent_folder);
+#else
     // @Note: We will copy the data folder when building the game and put it next to .exe.
     string_format(global_data_folder, sizeof(global_data_folder), "%sdata/", global_exe_parent_folder);
+#endif
 }
 
 FUNCTION void win32_process_pending_messages(HWND window)

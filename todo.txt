@@ -7,13 +7,14 @@ Features:
 Improvements:
 - Create separate input array for per-frame inputs and pull out UI code to update_and_render every frame.
 * Store save.dat file in AppData or Saved Games folder on Windows.
+* Thank you screen.
+* Background art + audio.
 
 * Level design:
 - Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
-- Fix bender_red and bender_locked_red. If we explain rules well, we don't need to duplicate.
-- If all primary colored lasers are present in same level, it's possible to make white before player is introduced to the concept.
 - Design more hard levels.
 - Levels where we don't render objs and force player to solve the puzzle blindly (maybe keep particles).
+- Connected levels...
 
 Art:
 - Layered cutscenes.

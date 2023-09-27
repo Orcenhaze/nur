@@ -203,9 +203,12 @@ get(&file, &field_name, size); \
     
 #if DEVELOPER
     if (level_names[lev->idx] != level_name) {
+        String8 got = level_names[lev->idx];
+        if (lev->idx >= ARRAY_COUNT(level_names))
+            got = S8LIT("name_out_of_bounds");
         print("\nName mismatch!\n"
               "expected %S but got %S\n"
-              "Save the game again to solve the issue!\n\n", level_name, level_names[lev->idx]);
+              "Save the game again to solve the issue!\n\n", level_name, got);
     }
 #endif
     
@@ -403,9 +406,7 @@ FUNCTION b32 save_level(s32 level_idx)
     
     Arena_Temp scratch  = get_scratch(0, 0);
     Arena *a            = scratch.arena;
-    // @Note: Save in our original data folder.
-    String8 data_folder = sprint(a, "%S../data/", os->exe_parent_folder); 
-    String8 path        = sprint(a, "%Slevels/%S.nlf", data_folder, level_names[level_idx]);
+    String8 path        = sprint(a, "%Slevels/%S.nlf", os->data_folder, level_names[level_idx]);
     b32 result = os->write_entire_file(path, sb_to_string(&sb, a));
     free_scratch(scratch);
     
@@ -563,12 +564,31 @@ FUNCTION void do_editor(b32 is_first_call)
         
         // Save level.
         if (ImGui::Button("Save level")) {
-            if (!(selected_level_idx >= 0 && selected_level_idx <= 3))
-                ASSERT(game->loaded_level.idx == selected_level_idx);
+            ASSERT(game->loaded_level.idx == selected_level_idx);
             
             if (save_level(selected_level_idx)) {
                 ImGui::SameLine(); 
                 ImGui::Text("Saved!");
+            }
+        }
+        
+        // Resave all levels.
+        ImGui::SameLine(0, ImGui::GetFrameHeight()); 
+        if (ImGui::Button("Resave All")) {
+            for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
+                if (i >= 0 && i <= 3)
+                    continue;
+                
+                if (load_level(i)) {
+                    if (save_level(i)) {
+                        ImGui::SameLine(); 
+                        ImGui::Text("Saved all!");
+                    } else {
+                        print("Couldn't save level %S\n", level_names[i]);
+                    }
+                } else {
+                    print("Couldn't load level %S\n", level_names[i]);
+                }
             }
         }
     }
