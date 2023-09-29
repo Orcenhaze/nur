@@ -151,7 +151,6 @@ GLOBAL Menu_Page prev_page;
 //
 #define TILE_SIZE 128  // In pixels!
 Texture tex;
-Texture font_tex;
 
 ////////////////////////////////
 ////////////////////////////////
@@ -322,7 +321,7 @@ GLOBAL f32 PLAYER_ANIMATION_SPEED = 8.0f;
 #define ANIMATION_FRAME_DURATION ((1.0f / PLAYER_ANIMATION_SPEED) / NUM_ANIMATION_FRAMES)
 GLOBAL f32 animation_timer;
 GLOBAL s32 px; GLOBAL s32 py; GLOBAL u8 pdir; GLOBAL V2 ppos; GLOBAL V2s psprite; GLOBAL u8 pcolor;
-GLOBAL b32 dead;
+GLOBAL b32 dead; GLOBAL f32 dead_timer;
 
 // Movement
 #define MOVE_HOLD_DURATION 0.20f
@@ -367,6 +366,8 @@ GLOBAL String8 level_names[] =
     S8LIT("aaa_placeholder1"),
     S8LIT("aaa_placeholder2"),
     S8LIT("aaa_placeholder3"),
+    
+    S8LIT("intro"),
     
     S8LIT("mirror_intro"),
     S8LIT("red_intro"),
@@ -496,6 +497,14 @@ struct Game_State
     V2 mouse_world;
     
     Random_PCG rng;
+    
+    // Info textures.
+    Texture tex_info_intro;
+    Texture tex_info_reset;
+    Texture tex_info_mixing;
+    
+    b32 thank_you;
+    f32 thank_you_duration;
     
 #if DEVELOPER
     // @Note: We want to select using one key (left mouse), so we will store the type is one variable 

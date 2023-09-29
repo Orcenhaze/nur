@@ -1,6 +1,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+//#include <shlobj_core.h> // For SHGetKnownFolderPath 
 #include "win32_wasapi.h"
 #include "win32_xinput.h"
 
@@ -41,6 +42,7 @@ GLOBAL HANDLE   global_waitable_timer;
 GLOBAL char     global_exe_full_path[256];
 GLOBAL char     global_exe_parent_folder[256];
 GLOBAL char     global_data_folder[256];
+//GLOBAL char     global_saved_games_folder[256];
 
 FUNCTION void win32_fatal_error(char *message)
 {
@@ -237,6 +239,20 @@ FUNCTION void win32_build_paths()
 #else
     // @Note: We will copy the data folder when building the game and put it next to .exe.
     string_format(global_data_folder, sizeof(global_data_folder), "%sdata/", global_exe_parent_folder);
+#endif
+    
+#if 0
+    // Store saved games folder.
+    PWSTR wide_path;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_SavedGames, 0, 0, &wide_path))) {
+        // Convert the wide character path to a ascii/ansi
+        int size = WideCharToMultiByte(CP_ACP, 0, wide_path, -1, 0, 0, 0, 0);
+        if (size > 0)
+            WideCharToMultiByte(CP_ACP, 0, wide_path, -1, global_saved_games_folder, size, 0, 0);
+        
+        // Remember to free the allocated memory for the wide character path
+        CoTaskMemFree(wide_path);
+    }
 #endif
 }
 

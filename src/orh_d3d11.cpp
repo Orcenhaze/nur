@@ -274,8 +274,8 @@ FUNCTION void d3d11_load_font(Font *font, String8 full_path, s32 ascii_start, s3
     
     d3d11_load_texture(&font->atlas, w, h, pixels_rgba);
     
-#if DEVELOPER
-    String8 target = sprint(scratch.arena, "%Sarial_atlas.png", os->data_folder);
+#if 0
+    String8 target = sprint(scratch.arena, "%Sfont_atlas.png", os->data_folder);
     stbi_write_png((char*)target.data, w, h, 4, pixels_rgba, 0);
 #endif
 }

@@ -1,27 +1,26 @@
 
+Notes:
+Move HLSL to src.
+Credits. Solaf, Sean.
+Only xbox controller.
+Color Mixing rules.
+
 Features:
 - Displaying layered cutscenes (HH E.221).
-* Simple package manager.
+- Simple package manager.
 - Simple instrumentation.
 
 Improvements:
-- Create separate input array for per-frame inputs and pull out UI code to update_and_render every frame.
-* Store save.dat file in AppData or Saved Games folder on Windows.
-* Thank you screen.
-* Background art + audio.
+- Create separate inputs array for per-frame inputs and pull out UI code to update_and_render every frame.
 
-* Level design:
-- Explain mirrors, benders and splitters in terms of horizontal/vertical and diagonal reflection.
+Level design:
 - Design more hard levels.
-- Levels where we don't render objs and force player to solve the puzzle blindly (maybe keep particles).
-- Connected levels...
+- Levels where we don't render objs and force player to solve the puzzle blindly (keep particles).
+- Connected levels.
 
 Art:
 - Layered cutscenes.
 - Writing: plot, dialogues and monologues.
-* Better sound effects.
-- Shadows?
-
 
 About instrumentation:
 Implement simple CYCLE_COUNT_SCOPE() macro for instrumentation using _rdtsc().

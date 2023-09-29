@@ -144,6 +144,7 @@ FUNCTION void reload_map()
     
     // Set default state.
     dead                      = false;
+    dead_timer                = 0.0f;
     is_teleporting            = false;
     teleport_transition_timer = 0;
     queued_moves_count        = 0;
@@ -764,6 +765,7 @@ FUNCTION void game_init()
     
     array_init(&unique_draw_beams_calls);
     
+    // Load textures.
     {
         // @Todo: Put particle textures inside the atlas!
         //
@@ -773,6 +775,12 @@ FUNCTION void game_init()
         d3d11_load_texture(&game->obj_emitter.texture[SLOT1], sprint(scratch.arena, "%Sobj_particle_ccw.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT2], sprint(scratch.arena, "%Sobj_particle_cw.png", os->data_folder));
         d3d11_load_texture(&game->obj_emitter.texture[SLOT3], sprint(scratch.arena, "%Swalk_particle.png", os->data_folder));
+        
+        // Info textures.
+        d3d11_load_texture(&game->tex_info_intro, sprint(scratch.arena, "%Sinfo_intro.png", os->data_folder));
+        d3d11_load_texture(&game->tex_info_reset, sprint(scratch.arena, "%Sinfo_reset.png", os->data_folder));
+        d3d11_load_texture(&game->tex_info_mixing, sprint(scratch.arena, "%Sinfo_mixing.png", os->data_folder));
+        
         free_scratch(scratch);
     }
     
@@ -922,14 +930,20 @@ FUNCTION void load_next_level()
     
     // Transition animation complete; load the level and stop calling this function.
     if (teleport_transition_timer <= 0) {
+        is_teleporting = false;
         
         // current level idx will be updated when calling load_level.
         if ((current_level_idx + 1) < ARRAY_COUNT(level_names))
             load_level(current_level_idx + 1);
+        else {
+            // Finished the last level! Show thank you page!
+            load_level(S8LIT("intro"));
+            game->thank_you          = true;
+            game->thank_you_duration = 5.0f;
+        }
         
-        latest_level_idx++;
-        
-        is_teleporting = false;
+        if (((current_level_idx - 1) == latest_level_idx))
+            latest_level_idx++;
     }
 }
 
@@ -1202,6 +1216,7 @@ FUNCTION void update_world()
             
             // @Hardcoded:
             dead = false;
+            dead_timer = 0.0f;
         }
     }
     
@@ -1253,6 +1268,9 @@ FUNCTION void update_world()
     ////////////////////////////////
     // Player movement!
     //
+    if (dead)
+        dead_timer += os->dt;
+    
     if (!dead) {
         if (input_pressed(MOVE_RIGHT)) {
             move_hold_timer = 0.0f;
@@ -1614,7 +1632,7 @@ FUNCTION void update_menus()
                     } break;
                     case 1: { 
                         // New Game.
-                        if (load_level(S8LIT("mirror_intro"))) {
+                        if (load_level(S8LIT("intro"))) {
                             game_started = true;
                             current_mode = M_GAME;
                         }
@@ -1901,6 +1919,20 @@ FUNCTION void game_update()
         print("Animation speed: %f\n", PLAYER_ANIMATION_SPEED);
     }
 #endif
+    
+    // Update thank you page timer.
+    if (game->thank_you) {
+        game->thank_you_duration -= os->dt;
+        if (game->thank_you_duration <= 0.0f) {
+            game->thank_you = false;
+            
+            // Reset last level.
+            load_level(current_level_idx);
+            current_mode = M_MENUS;
+        }
+        
+        return;
+    }
     
     switch (current_mode) {
 #if DEVELOPER
@@ -2275,6 +2307,35 @@ FUNCTION void draw_world()
     
     obj_emitter_draw_particles();
     
+    // Draw info/guides.
+    {
+        String8 current_level_name = level_names[game->loaded_level.idx];
+        if (current_level_name == S8LIT("intro")) {
+            f32 s = 0.20f * get_width(os->drawing_rect);
+            immediate_begin();
+            set_texture(&game->tex_info_intro);
+            is_using_pixel_coords = true;
+            immediate_rect_tl(v2(0), v2(s), v2(0), v2(1), v4(1));
+            immediate_end();
+        } else if (current_level_name == S8LIT("primary_mixing_intro")) {
+            f32 s = 0.18f * get_width(os->drawing_rect);
+            immediate_begin();
+            set_texture(&game->tex_info_mixing);
+            is_using_pixel_coords = true;
+            immediate_rect_tl(v2(0), v2(s), v2(0), v2(1), v4(1));
+            immediate_end();
+        }
+        
+        if (dead && (dead_timer >= 2.5f)) {
+            f32 s = 0.15f * get_width(os->drawing_rect);
+            immediate_begin();
+            set_texture(&game->tex_info_reset);
+            is_using_pixel_coords = true;
+            immediate_rect_tl(v2(0, 0.5f*get_height(os->drawing_rect)), v2(s), v2(0), v2(1), v4(1));
+            immediate_end();
+        }
+    }
+    
 #if DEVELOPER
     // Draw debugging stuff.
     if(current_mode == M_EDITOR)
@@ -2483,7 +2544,7 @@ FUNCTION void draw_menus()
             V2 p = v2(0.1f*w, 0.3333f*h);
             char *lines[] = 
             {
-                "WASD/ARROW                MOVE",
+                "WASD/ARROWS               MOVE",
                 "Q E                       ROTATE MIRRORS",
                 "Z                         UNDO",
                 "R                         RESTART LEVEL",
@@ -2523,7 +2584,7 @@ FUNCTION void draw_menus()
                 V4 color = (selection == i)? active_color : inactive_color;
                 
                 char text[4];
-                string_format(text, sizeof(text), "%d", i);
+                string_format(text, sizeof(text), "%d", i-4);
                 
                 V2 p = {x, y};
                 p.x -= get_text_width(&consolas, vh, text) * 0.5f;
@@ -2559,5 +2620,36 @@ FUNCTION void game_render()
         case M_GAME: draw_world(); break;
         case M_MENUS:
         default: draw_menus(); break;
+    }
+    
+    // Thank you page when winning!
+    {
+        if (game->thank_you) {
+            f32 w = get_width(os->drawing_rect);
+            f32 h = get_height(os->drawing_rect);
+            f32 yadvance = 80 * (h / os->render_size.h);
+            
+            // Black screen.
+            immediate_begin();
+            set_texture(0);
+            is_using_pixel_coords = true;
+            immediate_rect_tl(v2(0), v2(w, h), v4(0, 0, 0, 1));
+            immediate_end();
+            
+            // Draw message.
+            V2 p   = v2(0, h*0.5f);
+            s32 vh = 5;
+            char *message[] = {
+                "Well done!",
+                "Thanks for playing ^^"
+            };
+            for (s32 i = 0; i < ARRAY_COUNT(message); i++) {
+                f32 text_w = get_text_width(&consolas, vh, message[i]);
+                p.x        = w/2 - text_w*0.5f;
+                V4 color   = v4(1);
+                draw_text(&consolas, p, vh, color, message[i]);
+                p.y       += yadvance;
+            }
+        }
     }
 }
