@@ -1,3 +1,4 @@
+S8LIT(R"(
 // Thanks to afl_ext
 // 5D wave noise: https://www.shadertoy.com/view/lscyD7
 
@@ -109,3 +110,4 @@ float4 ps(PS_INPUT input) : SV_TARGET
 	
     return float4(color*tex, 1.0);
 }
+)");

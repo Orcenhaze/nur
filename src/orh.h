@@ -1732,6 +1732,7 @@ struct OS_State
     
     // User Input.
     // Keyboard and mouse stuff.
+    // @Todo: Make another copy of input arrays for per-frame usage (as opposed to only per-tick).
     Array<Queued_Input> inputs_to_process;
     b32 pressed [Key_COUNT];
     b32 held    [Key_COUNT];

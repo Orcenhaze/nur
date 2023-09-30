@@ -47,10 +47,9 @@ FUNCTION void create_particle_shader()
         device->CreateBuffer(&desc, 0, &particle_vs_cbuffer);
     }
     
-    Arena_Temp scratch = get_scratch(0, 0);
-    String8 hlsl_path  = sprint(scratch.arena, "%Sparticle.hlsl", os->data_folder);
-    d3d11_compile_shader(hlsl_path, layout_desc, ARRAYSIZE(layout_desc), &particle_input_layout, &particle_vs, &particle_ps);
-    free_scratch(scratch);
+    String8 hlsl =
+#include "particle.hlsl"
+    d3d11_compile_shader(hlsl, layout_desc, ARRAYSIZE(layout_desc), &particle_input_layout, &particle_vs, &particle_ps);
 }
 
 FUNCTION void obj_emitter_init(s32 amount)

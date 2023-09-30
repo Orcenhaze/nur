@@ -364,9 +364,9 @@ FUNCTION f32 get_text_height(Font *font, s32 vh, char *format, ...)
     return result;
 }
 
-FUNCTION void d3d11_compile_shader(String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC element_desc[], UINT element_count, ID3D11InputLayout **input_layout_out, ID3D11VertexShader **vs_out, ID3D11PixelShader **ps_out)
+FUNCTION void d3d11_compile_shader(String8 hlsl, D3D11_INPUT_ELEMENT_DESC element_desc[], UINT element_count, ID3D11InputLayout **input_layout_out, ID3D11VertexShader **vs_out, ID3D11PixelShader **ps_out)
 {
-    String8 file = os->read_entire_file(hlsl_path);
+    //String8 file = os->read_entire_file(hlsl_path);
     
     UINT flags = D3DCOMPILE_PACK_MATRIX_ROW_MAJOR | D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_WARNINGS_ARE_ERRORS;
 #if defined(_DEBUG)
@@ -376,14 +376,14 @@ FUNCTION void d3d11_compile_shader(String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC e
 #endif
     
     ID3DBlob *vs_blob = 0, *ps_blob = 0, *error_blob = 0;
-    HRESULT hr = D3DCompile(file.data, file.count, 0, 0, 0, "vs", "vs_5_0", flags, 0, &vs_blob, &error_blob);
+    HRESULT hr = D3DCompile(hlsl.data, hlsl.count, 0, 0, 0, "vs", "vs_5_0", flags, 0, &vs_blob, &error_blob);
     if (FAILED(hr))  {
         const char *message = (const char *) error_blob->GetBufferPointer();
         OutputDebugStringA(message);
         ASSERT(!"Failed to compile vertex shader!");
     }
     
-    hr = D3DCompile(file.data, file.count, 0, 0, 0, "ps", "ps_5_0", flags, 0, &ps_blob, &error_blob);
+    hr = D3DCompile(hlsl.data, hlsl.count, 0, 0, 0, "ps", "ps_5_0", flags, 0, &ps_blob, &error_blob);
     if (FAILED(hr))  {
         const char *message = (const char *) error_blob->GetBufferPointer();
         OutputDebugStringA(message);
@@ -395,7 +395,7 @@ FUNCTION void d3d11_compile_shader(String8 hlsl_path, D3D11_INPUT_ELEMENT_DESC e
     device->CreateInputLayout(element_desc, element_count, vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), input_layout_out);
     
     vs_blob->Release(); ps_blob->Release();
-    os->free_file_memory(file.data);
+    //os->free_file_memory(file.data);
 }
 
 FUNCTION void create_immediate_shader()
@@ -440,10 +440,9 @@ FUNCTION void create_immediate_shader()
         device->CreateBuffer(&desc, 0, &immediate_ps_cbuffer);
     }
     
-    Arena_Temp scratch = get_scratch(0, 0);
-    String8 hlsl_path  = sprint(scratch.arena, "%Simmediate.hlsl", os->data_folder);
-    d3d11_compile_shader(hlsl_path, layout_desc, ARRAYSIZE(layout_desc), &immediate_input_layout, &immediate_vs, &immediate_ps);
-    free_scratch(scratch);
+    String8 hlsl =
+#include "immediate.hlsl"
+    d3d11_compile_shader(hlsl, layout_desc, ARRAYSIZE(layout_desc), &immediate_input_layout, &immediate_vs, &immediate_ps);
 }
 
 FUNCTION void d3d11_init(HWND window)

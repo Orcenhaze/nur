@@ -47,10 +47,9 @@ FUNCTION void create_background_shader()
         device->CreateBuffer(&desc, 0, &background_ps_cbuffer);
     }
     
-    Arena_Temp scratch = get_scratch(0, 0);
-    String8 hlsl_path  = sprint(scratch.arena, "%Sbackground.hlsl", os->data_folder);
-    d3d11_compile_shader(hlsl_path, layout_desc, ARRAYSIZE(layout_desc), &background_input_layout, &background_vs, &background_ps);
-    free_scratch(scratch);
+    String8 hlsl = 
+#include "background.hlsl"
+    d3d11_compile_shader(hlsl, layout_desc, ARRAYSIZE(layout_desc), &background_input_layout, &background_vs, &background_ps);
 }
 
 FUNCTION void background_init()

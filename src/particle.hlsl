@@ -1,3 +1,4 @@
+S8LIT(R"(
 struct VS_INPUT
 {
 	float2 pos    : POSITION;
@@ -36,3 +37,4 @@ float4 ps(PS_INPUT input) : SV_TARGET
 	float4 tex = texture0.Sample(sampler0, input.uv);
 	return input.color * tex;
 }
+)");

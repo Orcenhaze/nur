@@ -1,10 +1,4 @@
 
-Notes:
-Move HLSL to src.
-Credits. Solaf, Sean.
-Only xbox controller.
-Color Mixing rules.
-
 Features:
 - Displaying layered cutscenes (HH E.221).
 - Simple package manager.

@@ -1,3 +1,4 @@
+S8LIT(R"(
 struct VS_INPUT
 {
 	float3 pos    : POSITION;
@@ -67,3 +68,4 @@ float4 ps(PS_INPUT input) : SV_TARGET
 		return input.color * tex;
 	}
 }
+)");
