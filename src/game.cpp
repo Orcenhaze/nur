@@ -2311,7 +2311,7 @@ FUNCTION void draw_world()
     {
         String8 current_level_name = level_names[game->loaded_level.idx];
         if (current_level_name == S8LIT("intro")) {
-            f32 s = 0.20f * get_width(os->drawing_rect);
+            f32 s = 0.15f * get_width(os->drawing_rect);
             immediate_begin();
             set_texture(&game->tex_info_intro);
             is_using_pixel_coords = true;
@@ -2429,6 +2429,12 @@ FUNCTION void draw_menus()
     //
     switch (page) {
         case MAIN_MENU: {
+            // Draw title.
+            s32 title_vh = 20;
+            f32 title_w  = get_text_width(&consolas, title_vh, "%S", TITLE);
+            V2  title_p  = v2(0.5f*w - 0.5f*title_w, 0.15f*h);
+            draw_text(&consolas, title_p, title_vh, v4(1), "%S", TITLE);
+            
             V2 p = v2(0.1f*w, 0.3333f*h);
             char *choices[] = 
             {
@@ -2451,6 +2457,8 @@ FUNCTION void draw_menus()
                 
                 b32 highlighed = selection == i;
                 V4 color       = highlighed? active_color : inactive_color;
+                
+                p.x  = 0.5f*w - 0.5f*get_text_width(&consolas, 5, choices[i]);
                 draw_text_highlighted(&consolas, p, 5, color, highlighed, choices[i]);
                 p.y += yadvance;
             }
@@ -2641,7 +2649,8 @@ FUNCTION void game_render()
             s32 vh = 5;
             char *message[] = {
                 "Well done!",
-                "Thanks for playing ^^"
+                "Thanks for playing ^^",
+                "Feel free to give feedback on your experience"
             };
             for (s32 i = 0; i < ARRAY_COUNT(message); i++) {
                 f32 text_w = get_text_width(&consolas, vh, message[i]);

@@ -1,6 +1,8 @@
 #ifndef GAME_H
 #define GAME_H
 
+#define TITLE S8LIT("MINURA")
+
 #include "particles.h"
 #include "background.h"
 
