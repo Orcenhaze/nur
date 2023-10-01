@@ -821,6 +821,13 @@ FUNCTION void game_init()
     set_world_to_view(v3(camera_pos, zoom_level));
     
     undo_handler_init(&undo_handler);
+    
+    for (s32 i = 0; i < ARRAY_COUNT(level_names); i++) {
+        if (level_names[i] == S8LIT("primary_mixing_intro")) {
+            game->idx_mixing_intro = i;
+            break;
+        }
+    }
 }
 
 #if DEVELOPER
@@ -2480,6 +2487,17 @@ FUNCTION void draw_menus()
                 V4 color       = highlighed? active_color : inactive_color;
                 draw_text_highlighted(&consolas, p, 5, color, highlighed, choices[i]);
                 p.y += yadvance;
+            }
+            
+            // If we introduced mixing to player. Draw info in pause menu.
+            if (latest_level_idx > game->idx_mixing_intro) {
+                f32 s = 0.18f * get_width(os->drawing_rect);
+                V2 tl = v2(0.8f*w, 0.1f*h);
+                immediate_begin();
+                set_texture(&game->tex_info_mixing);
+                is_using_pixel_coords = true;
+                immediate_rect_tl(tl, v2(s), v2(0), v2(1), v4(1));
+                immediate_end();
             }
         } break;
         case SETTINGS: {

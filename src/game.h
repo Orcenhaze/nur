@@ -508,6 +508,9 @@ struct Game_State
     b32 thank_you;
     f32 thank_you_duration;
     
+    // Misc.
+    s32 idx_mixing_intro; // To know when to draw info in PAUSE menu.
+    
 #if DEVELOPER
     // @Note: We want to select using one key (left mouse), so we will store the type is one variable 
     // and set a boolean to say which one it is.
