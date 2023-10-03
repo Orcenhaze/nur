@@ -250,7 +250,7 @@ static void wasapi_start(Wasapi_Audio* audio, size_t sample_rate, size_t channel
 		// but it can be 128 samples (2.66 msec @ 48khz) if driver is properly installed
 		// see bullet-point instructions here: https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio#measurement-tools
 		UINT32 default_period_samples, fundamental_period_samples, min_period_samples, max_period_samples;
-		HR(client3->GetSharedModeEnginePeriod(wfx, &default_period_samples, &fundamental_period_samples, &min_period_samples, &max_period_samples));
+		client3->GetSharedModeEnginePeriod(wfx, &default_period_samples, &fundamental_period_samples, &min_period_samples, &max_period_samples);
         
 		const DWORD flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
 		if (SUCCEEDED(client3->InitializeSharedAudioStream(flags, min_period_samples, wfx, NULL)))

@@ -38,7 +38,7 @@ REM Debug build
 cl /Od /MTd /DDEVELOPER=1 /Fenur_dev.exe %CF% ..\src\win32_main.cpp /link /MANIFEST:EMBED /MANIFESTINPUT:../src/nur.manifest /entry:WinMainCRTStartup /subsystem:windows %LF%
 
 REM Release build
-cl /O2 /MT  /DDEVELOPER=0 /Fenur.exe %CF% ..\src\win32_main.cpp /link /MANIFEST:EMBED /MANIFESTINPUT:../src/nur.manifest /entry:WinMainCRTStartup /subsystem:windows %LF%
+cl /O2 /MT  /DDEVELOPER=0 /DNDEBUG /Fenur.exe %CF% ..\src\win32_main.cpp /link /MANIFEST:EMBED /MANIFESTINPUT:../src/nur.manifest /entry:WinMainCRTStartup /subsystem:windows %LF%
 
 REM Delete intermediates
 del *.obj *.res >NUL

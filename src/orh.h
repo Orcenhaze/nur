@@ -267,7 +267,7 @@ typedef double             f64;
 #define F64_MAX            1.7976931348623157e+308
 
 #ifndef TRUE
-#define TRUE 1
+#define TRUE  1
 #define FALSE 0
 #endif
 
@@ -285,7 +285,7 @@ typedef double             f64;
 #define DOWHILE(s)         do{s}while(0)
 #define SWAP(a, b, Type)   DOWHILE(Type _t = a; a = b; b = _t;)
 
-#if defined(_DEBUG)
+#if DEVELOPER
 #    if COMPILER_CL
 #        define ASSERT(expr) DOWHILE(if (!(expr)) __debugbreak();)
 #    else
@@ -295,7 +295,7 @@ typedef double             f64;
 #        define ASSERT_HR(hr) ASSERT(SUCCEEDED(hr))
 #    endif
 #else
-#    define ASSERT(expr)   (void)(expr)
+#    define ASSERT(expr)      (void)(expr)
 #    define ASSERT_HR(expr)   (void)(expr)
 #endif
 
