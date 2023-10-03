@@ -1,4 +1,6 @@
 
+Fix crash in audio??
+
 Features:
 - Displaying layered cutscenes (HH E.221).
 - Simple package manager.

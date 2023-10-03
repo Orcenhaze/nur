@@ -64,7 +64,7 @@ FUNCTION b32 input_pressed(Game_Input input)
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
         s32 key = binds[input].keyboard[i];
         if (key_pressed(key))
-            return true;
+            return TRUE;
     }
     
     // Check gamepad buttons.
@@ -72,11 +72,11 @@ FUNCTION b32 input_pressed(Game_Input input)
         for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
             s32 button = binds[input].gamepad[i];
             if (os->gamepads[0].pressed[button])
-                return true;
+                return TRUE;
         }
     }
     
-    return false;
+    return FALSE;
 }
 
 FUNCTION b32 input_held(Game_Input input)
@@ -85,7 +85,7 @@ FUNCTION b32 input_held(Game_Input input)
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
         s32 key = binds[input].keyboard[i];
         if (key_held(key))
-            return true;
+            return TRUE;
     }
     
     // Check gamepad buttons.
@@ -93,11 +93,11 @@ FUNCTION b32 input_held(Game_Input input)
         for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
             s32 button = binds[input].gamepad[i];
             if (os->gamepads[0].held[button])
-                return true;
+                return TRUE;
         }
     }
     
-    return false;
+    return FALSE;
 }
 
 FUNCTION b32 input_released(Game_Input input)
@@ -106,7 +106,7 @@ FUNCTION b32 input_released(Game_Input input)
     for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
         s32 key = binds[input].keyboard[i];
         if (key_released(key))
-            return true;
+            return TRUE;
     }
     
     // Check gamepad buttons.
@@ -114,18 +114,18 @@ FUNCTION b32 input_released(Game_Input input)
         for (s32 i = 0; i < MAX_BINDS_PER_INPUT; i++) {
             s32 button = binds[input].gamepad[i];
             if (os->gamepads[0].released[button])
-                return true;
+                return TRUE;
         }
     }
     
-    return false;
+    return FALSE;
 }
 
 ////////////////////////////////
 ////////////////////////////////
 // Menu
 //
-GLOBAL b32 game_started = false;
+GLOBAL b32 game_started = FALSE;
 enum
 {
     M_MENUS,
@@ -344,8 +344,8 @@ GLOBAL b32 is_teleporting;
 
 // Settings.
 // Fullscreen from global os->fullscreen.
-GLOBAL b32 draw_grid = true;
-GLOBAL b32 prompt_user_on_restart = true;
+GLOBAL b32 draw_grid = TRUE;
+GLOBAL b32 prompt_user_on_restart = TRUE;
 GLOBAL s32 master_volume = 7;
 
 // Other state.
@@ -373,11 +373,11 @@ GLOBAL String8 level_names[] =
     
     S8LIT("mirror_intro"),
     S8LIT("red_intro"),
+    S8LIT("splitter_intro"),
+    S8LIT("teach_rotation"),
     S8LIT("block_the_source"),
     S8LIT("sokobaning"),
     S8LIT("mirror_first_challenge"),
-    S8LIT("splitter_intro"),
-    S8LIT("teach_rotation"),
     
     S8LIT("primary_mixing_intro"),
     S8LIT("splitter_first_challenge"),

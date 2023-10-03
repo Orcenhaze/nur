@@ -114,7 +114,7 @@ static XInput_Gamepad xinput_get_gamepad_state(DWORD gamepad_index)
     if(XInputGetStateProc(gamepad_index, &controller_state) != ERROR_SUCCESS)
         return result;
     
-    result.connected = true;
+    result.connected = TRUE;
     
     result.button_states[XInputButton_DPAD_UP]        |= !!(pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
     result.button_states[XInputButton_DPAD_DOWN]      |= !!(pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);

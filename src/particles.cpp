@@ -109,7 +109,7 @@ FUNCTION void obj_emitter_respawn_particle(Particle *p, s32 type, Emitter_Textur
     p->slot = slot;
     
     if (type == ParticleType_ROTATE) {
-        V2 random   = random_range_v2(&game->rng, v2(-0.45f), v2(0.45f));
+        V2 random   = random_range_v2(&game->rng, v2(-0.35f), v2(0.55f));
         f32 r_col   = random_rangef(&game->rng, 0.5f, 1.0f);
         p->position = offset + random;
         p->color    = v4(r_col, r_col, r_col, 1.0f);

@@ -283,12 +283,12 @@ FUNCTION void d3d11_load_font(Font *font, String8 full_path, s32 ascii_start, s3
 FUNCTION s32 find_font_size_index(Font *font, s32 size)
 {
     s32 result = 0;
-    b32 found  = false;
+    b32 found  = FALSE;
     
     while (!found) {
         for (s32 i = 0; i < font->sizes_count; i++) {
             if (font->sizes[i] == size) {
-                found  = true;
+                found  = TRUE;
                 result = i;
             }
         }
@@ -734,7 +734,7 @@ FUNCTION DWORD d3d11_wait_for_swapchain()
 {
     DWORD result = WaitForSingleObjectEx(frame_latency_waitable_object,
                                          1000, // 1 second timeout (shouldn't ever occur)
-                                         true);
+                                         TRUE);
     return result;
 }
 
@@ -891,13 +891,13 @@ FUNCTION void immediate_end()
     
     // Reset state.
     num_immediate_vertices = 0;
-    is_using_pixel_coords  = false;
+    is_using_pixel_coords  = FALSE;
     object_to_world_matrix = m4x4_identity();
     immediate_ps_constants = {};
     //set_texture(0);
 }
 
-FUNCTION void immediate_begin(b32 wireframe = false)
+FUNCTION void immediate_begin(b32 wireframe = FALSE)
 {
     if (wireframe) rasterizer_state = rasterizer_state_wireframe;
     else           rasterizer_state = rasterizer_state_solid;
@@ -989,7 +989,7 @@ FUNCTION void immediate_quad(V2 p0, V2 p1, V2 p2, V2 p3,
 
 FUNCTION void immediate_rect(V2 center, V2 half_size, V4 color)
 {
-    ASSERT(is_using_pixel_coords == false);
+    ASSERT(is_using_pixel_coords == FALSE);
     
     V2 p0 = center - half_size;
     V2 p2 = center + half_size;
@@ -1032,7 +1032,7 @@ FUNCTION void immediate_rect(V2 center, V2 half_size, V2 uv0, V2 uv1, V2 uv2, V2
 FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V4 color)
 {
     // @Note: We provide top left position, so we need to be careful with winding order.
-    ASSERT(is_using_pixel_coords != false);
+    ASSERT(is_using_pixel_coords != FALSE);
     
     // CCW starting bottom-left.
     
@@ -1047,7 +1047,7 @@ FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V4 color)
 FUNCTION void immediate_rect_tl(V2 top_left, V2 size, V2 uv_min, V2 uv_max, V4 color)
 {
     // @Note: We provide top left position, so we need to be careful with winding order.
-    ASSERT(is_using_pixel_coords != false);
+    ASSERT(is_using_pixel_coords != FALSE);
     
     // CCW starting bottom-left.
     
@@ -1070,7 +1070,7 @@ FUNCTION void immediate_text(Font *font, V2 baseline, s32 vh, V4 color, char *fo
     // @Note: vh is percentage [0-100] relative to drawing_rect height.
     //
     
-    // is_using_pixel_coords = true;
+    // is_using_pixel_coords = TRUE;
     
     char text[256];
     u64 text_length = string_format_list(text, sizeof(text), format, arg_list);

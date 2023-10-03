@@ -24,7 +24,7 @@ patterns = {
 };
 blacklist_patterns = {
     ".*",
-    "build"
+    "build/"
 };
 load_paths_base = {
     { ".", .relative = true, .recursive = true, },

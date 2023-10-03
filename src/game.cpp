@@ -18,7 +18,7 @@ FUNCTION void set_default_zoom()
     set_view_to_proj();
 }
 
-FUNCTION void update_camera(b32 teleport = false)
+FUNCTION void update_camera(b32 teleport = FALSE)
 {
     camera = v2((f32)rx + 0.5f*(SIZE_X-1), (f32)ry + 0.5f*(SIZE_Y-1));
     if (teleport)
@@ -37,7 +37,7 @@ FUNCTION b32 pushed_obj_is_at_rest()
     return result;
 }
 
-FUNCTION void set_player_position(s32 x, s32 y, u8 dir, b32 teleport = false)
+FUNCTION void set_player_position(s32 x, s32 y, u8 dir, b32 teleport = FALSE)
 {
     s32 room_x = SIZE_X*(x/SIZE_X);
     s32 room_y = SIZE_Y*(y/SIZE_Y);
@@ -115,7 +115,7 @@ FUNCTION void reload_map()
     SIZE_X            = lev->size_x;
     SIZE_Y            = lev->size_y;
     Player player     = lev->player;
-    set_player_position(player.x, player.y, player.dir, true);
+    set_player_position(player.x, player.y, player.dir, TRUE);
     
     s32 num_rows = lev->num_y*lev->size_y;
     s32 num_cols = lev->num_x*lev->size_x;
@@ -143,13 +143,13 @@ FUNCTION void reload_map()
     }
     
     // Set default state.
-    dead                      = false;
+    dead                      = FALSE;
     dead_timer                = 0.0f;
-    is_teleporting            = false;
+    is_teleporting            = FALSE;
     teleport_transition_timer = 0;
     queued_moves_count        = 0;
     set_default_zoom();
-    update_camera(true);
+    update_camera(TRUE);
     undo_handler_reset(&undo_handler);
 }
 
@@ -181,7 +181,7 @@ get(&file, &field_name, size); \
     free_scratch(scratch);
     if (!file.data) {
         print("Couldn't load level: %S\n", level_name);
-        return false;
+        return FALSE;
     }
     defer(os->free_file_memory(file.data));
     
@@ -255,7 +255,7 @@ get(&file, &field_name, size); \
     
     reload_map();
     
-    return true;
+    return TRUE;
 }
 FUNCTION b32 load_level(s32 idx)
 {
@@ -281,7 +281,7 @@ get(&file, &field_name); \
     free_scratch(scratch);
     if (!file.data) {
         print("Save file not present!\n");
-        return false;
+        return FALSE;
     }
     defer(os->free_file_memory(file.data));
     
@@ -296,7 +296,7 @@ get(&file, &field_name); \
         
         String8 name = string(file.data, name_length);
         if (!load_level(name) || (name != level_names[game->loaded_level.idx])) {
-            return false;
+            return FALSE;
         }
         
         advance(&file, name_length);
@@ -306,7 +306,7 @@ get(&file, &field_name); \
         get(&file, &level_idx);
         if (!load_level(level_idx) || (level_idx != game->loaded_level.idx)) {
             ASSERT(0);
-            return false;
+            return FALSE;
         }
     }
     
@@ -318,8 +318,8 @@ get(&file, &field_name); \
     RESTORE_FIELD(prompt_user_on_restart, SaveFileVersion_INIT);
     RESTORE_FIELD(master_volume, SaveFileVersion_ADD_MASTER_VOLUME);
     
-    game_started = true;
-    return true;
+    game_started = TRUE;
+    return TRUE;
 }
 
 #if DEVELOPER
@@ -369,7 +369,7 @@ FUNCTION b32 save_level(s32 level_idx)
 {
     if (level_idx == 0) {
         print("Can't save invalid level!\n");
-        return false;
+        return FALSE;
     }
     
     String_Builder sb = sb_init();
@@ -416,10 +416,10 @@ FUNCTION b32 save_level(s32 level_idx)
 
 FUNCTION b32 mouse_over_ui()
 {
-    b32 result = false;
+    b32 result = FALSE;
     
     ImGuiIO& io = ImGui::GetIO();
-    if(io.WantCaptureMouse) result = true;
+    if(io.WantCaptureMouse) result = TRUE;
     
     return result;
 }
@@ -431,7 +431,7 @@ FUNCTION void resize_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
     SIZE_X = size_x;
     SIZE_Y = size_y;
     set_default_zoom();
-    update_camera(true);
+    update_camera(TRUE);
     
     arena_reset(current_level_arena);
 	
@@ -458,7 +458,7 @@ FUNCTION void make_empty_level()
         }
     }
     // Initial player and room position.
-    set_player_position(0, 0, Dir_E, true);
+    set_player_position(0, 0, Dir_E, TRUE);
 }
 
 FUNCTION void expand_current_level(s32 num_x, s32 num_y, s32 size_x, s32 size_y)
@@ -547,11 +547,11 @@ FUNCTION void do_editor(b32 is_first_call)
         
         
         // Expand level size.
-        b32 do_expand = false;
-        if (ImGui::InputInt("NUM_X", &num_x)) do_expand = true;
-        if (ImGui::InputInt("NUM_Y", &num_y)) do_expand = true;;
-        if (ImGui::InputInt("SIZE_X", &size_x)) do_expand = true;
-        if (ImGui::InputInt("SIZE_Y", &size_y)) do_expand = true;
+        b32 do_expand = FALSE;
+        if (ImGui::InputInt("NUM_X", &num_x)) do_expand = TRUE;
+        if (ImGui::InputInt("NUM_Y", &num_y)) do_expand = TRUE;;
+        if (ImGui::InputInt("SIZE_X", &size_x)) do_expand = TRUE;
+        if (ImGui::InputInt("SIZE_Y", &size_y)) do_expand = TRUE;
         num_x = CLAMP_LOWER(num_x, 0); 
         num_y = CLAMP_LOWER(num_y, 0); 
         size_x = CLAMP_LOWER(size_x, 0); 
@@ -625,7 +625,7 @@ FUNCTION void do_editor(b32 is_first_call)
             ImGui::Image(tex_id, image_size, uv_min, uv_max, tint_col, border_col);
             if (ImGui::IsItemHovered() && pressed_left) {
                 game->selected_tile_or_obj = (u8)i;
-                game->is_tile_selected = true;
+                game->is_tile_selected = TRUE;
             }
             
             ImGui::SameLine(0, 0.5f);
@@ -682,7 +682,7 @@ FUNCTION void do_editor(b32 is_first_call)
             ImGui::Image(tex_id, image_size, uv_min, uv_max, tint_col, border_col);
             if (ImGui::IsItemHovered() && pressed_left) {
                 game->selected_tile_or_obj = (u8)i;
-                game->is_tile_selected = false;
+                game->is_tile_selected = FALSE;
             }
             
             ImGui::SameLine(0, 0.5f);
@@ -801,7 +801,7 @@ FUNCTION void game_init()
         };
         
         for (s32 i = 0; i < ARRAY_COUNT(names); i++) {
-            add_sound(m, sprint(a, "%Ssounds/%S.ogg", os->data_folder, names[i]), names[i], 1.0f, false);
+            add_sound(m, sprint(a, "%Ssounds/%S.ogg", os->data_folder, names[i]), names[i], 1.0f, FALSE);
         }
         
         free_scratch(scratch);
@@ -817,7 +817,7 @@ FUNCTION void game_init()
         selection = 1;
     
     set_default_zoom();
-    update_camera(true);
+    update_camera(TRUE);
     set_world_to_view(v3(camera_pos, zoom_level));
     
     undo_handler_init(&undo_handler);
@@ -937,7 +937,7 @@ FUNCTION void load_next_level()
     
     // Transition animation complete; load the level and stop calling this function.
     if (teleport_transition_timer <= 0) {
-        is_teleporting = false;
+        is_teleporting = FALSE;
         
         // current level idx will be updated when calling load_level.
         if ((current_level_idx + 1) < ARRAY_COUNT(level_names))
@@ -945,7 +945,7 @@ FUNCTION void load_next_level()
         else {
             // Finished the last level! Show thank you page!
             load_level(S8LIT("intro"));
-            game->thank_you          = true;
+            game->thank_you          = TRUE;
             game->thank_you_duration = 5.0f;
         }
         
@@ -1039,7 +1039,7 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 pinv_d      = WRAP_D(inv_d - 1 );
             u8 p2inv_d     = WRAP_D(inv_d - 2);
             u8 reflected_d = U8_MAX;
-            b32 penetrate  = true;
+            b32 penetrate  = TRUE;
             
             if (test_o.type == T_MIRROR) {
                 if      (test_o.dir == inv_d)  reflected_d = inv_d;
@@ -1064,13 +1064,13 @@ FUNCTION void update_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
                 }
             } else {
                 if (test_o.dir == inv_d || test_o.dir == src_dir)
-                    penetrate = true;
+                    penetrate = TRUE;
                 else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
                     reflected_d = WRAP_D(ninv_d + 1);
                 else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
                     reflected_d = WRAP_D(pinv_d - 1);
                 else 
-                    penetrate = false;
+                    penetrate = FALSE;
                 
                 // Source direction.
                 //
@@ -1132,32 +1132,32 @@ FUNCTION b32 obj_collides(s32 x, s32 y)
 
 FUNCTION b32 move_obj(s32 x, s32 y, s32 dir_x, s32 dir_y)
 {
-    if (!dir_x && !dir_y) return false;
+    if (!dir_x && !dir_y) return FALSE;
     
     // Potentially move the obj that is currently on [x,y] to [x+dir_x, y+dir_y].
     s32 newx = x + dir_x; 
     s32 newy = y + dir_y;
     if (obj_collides(newx, newy))
-        return false;
+        return FALSE;
     
     // Commit move.
     undo_push_obj_move(&undo_handler, x, y, newx, newy);
     SWAP(objmap[y][x], objmap[newy][newx], Obj);
     pushed_obj     = v2((f32)newx, (f32)newy);
     pushed_obj_pos = v2((f32)x, (f32)y);
-    return true;
+    return TRUE;
 }
 
 FUNCTION b32 move_player(s32 dir_x, s32 dir_y)
 {
-    if (!dir_x && !dir_y) return false;
+    if (!dir_x && !dir_y) return FALSE;
     u8 old_dir = pdir;
     pdir       = dir_x? dir_x<0? (u8)Dir_W : (u8)Dir_E : dir_y<0? (u8)Dir_S : (u8)Dir_N;
     
     s32 newx = px + dir_x; 
     s32 newy = py + dir_y;
     if (player_collides(newx, newy))
-        return false;
+        return FALSE;
     
     // Push obj.
     b32 pushable = ((objmap[newy][newx].type == T_MIRROR)   ||
@@ -1167,14 +1167,14 @@ FUNCTION b32 move_player(s32 dir_x, s32 dir_y)
         if (move_obj(newx, newy, dir_x, dir_y))
             play_sound(&game->sound_manager, S8LIT("object_push"));
         else
-            return false;
+            return FALSE;
     }
     
     // Commit move.
     undo_push_player_move(&undo_handler, px, py, old_dir);
     set_player_position(newx, newy, pdir);
     obj_emitter_emit(5, ParticleType_WALK, SLOT3, ppos);
-    return true;
+    return TRUE;
 }
 
 FUNCTION void update_world()
@@ -1190,7 +1190,7 @@ FUNCTION void update_world()
     }
     
     if (input_pressed(RESTART_LEVEL)) {
-        if (prompt_user_on_restart == false) {
+        if (prompt_user_on_restart == FALSE) {
             load_level(game->loaded_level.idx);
         } else {
             current_mode = M_MENUS;
@@ -1222,7 +1222,7 @@ FUNCTION void update_world()
             undo_speed_scale = CLAMP_LOWER(undo_speed_scale - 3.5f*os->dt, 0.3f);
             
             // @Hardcoded:
-            dead = false;
+            dead = FALSE;
             dead_timer = 0.0f;
         }
     }
@@ -1232,7 +1232,7 @@ FUNCTION void update_world()
         Obj o = objmap[py][px];
         if (o.type == T_TELEPORTER) {
             teleport_transition_timer = LEVEL_TRANSITION_DURATION;
-            is_teleporting            = true;
+            is_teleporting            = TRUE;
             play_sound(&game->sound_manager, S8LIT("teleport"));
         }
     }
@@ -1296,27 +1296,27 @@ FUNCTION void update_world()
         move_hold_timer = MAX(0, move_hold_timer - os->dt);
         
         V2s move_dir = {};
-        b32 move_input_held = false; 
+        b32 move_input_held = FALSE; 
         if (input_held(MOVE_RIGHT) && last_pressed == MOVE_RIGHT) {
-            move_input_held = true;
+            move_input_held = TRUE;
             if (move_hold_timer <= 0) {
                 move_dir.x = 1;
                 move_hold_timer = MOVE_HOLD_DURATION;
             }
         } else if (input_held(MOVE_UP) && last_pressed == MOVE_UP) {
-            move_input_held = true;
+            move_input_held = TRUE;
             if (move_hold_timer <= 0) {
                 move_dir.y = 1;
                 move_hold_timer = MOVE_HOLD_DURATION;
             }
         } else if (input_held(MOVE_LEFT) && last_pressed == MOVE_LEFT) {
-            move_input_held = true;
+            move_input_held = TRUE;
             if (move_hold_timer <= 0) {
                 move_dir.x = -1;
                 move_hold_timer = MOVE_HOLD_DURATION;
             }
         } else if (input_held(MOVE_DOWN) && last_pressed == MOVE_DOWN) {
-            move_input_held = true;
+            move_input_held = TRUE;
             if (move_hold_timer <= 0) {
                 move_dir.y = -1;
                 move_hold_timer = MOVE_HOLD_DURATION;
@@ -1431,10 +1431,10 @@ FUNCTION void update_world()
     if (pcolor == Color_RED || pcolor == Color_MAGENTA || pcolor == Color_YELLOW) {
         if (!dead)
             play_sound(&game->sound_manager, S8LIT("death"));
-        dead = true;
+        dead = TRUE;
     }
     else
-        dead = false;
+        dead = FALSE;
     
     // Update doors and detectors.
     for (s32 y = 0; y < NUM_Y*SIZE_Y; y++) {
@@ -1561,7 +1561,7 @@ FUNCTION void update_editor()
         //
         if (key_held(Key_MMIDDLE)) {
             V2 cam = camera;
-            set_player_position(mx, my, pdir, true);
+            set_player_position(mx, my, pdir, TRUE);
             camera = cam;
             undo_handler_reset(&undo_handler);
         }
@@ -1634,13 +1634,13 @@ FUNCTION void update_menus()
                 switch (selection) {
                     case 0: { 
                         // Continue.
-                        game_started = true;
+                        game_started = TRUE;
                         current_mode = M_GAME;
                     } break;
                     case 1: { 
                         // New Game.
                         if (load_level(S8LIT("intro"))) {
-                            game_started = true;
+                            game_started = TRUE;
                             current_mode = M_GAME;
                         }
                     } break;
@@ -1670,7 +1670,7 @@ FUNCTION void update_menus()
                         //if (dead)
                         //undo_next(&undo_handler);
                         save_game();
-                        os->exit = true;
+                        os->exit = TRUE;
                     } break;
 #if DEVELOPER
                     case 6: { 
@@ -1731,7 +1731,7 @@ FUNCTION void update_menus()
                         //if (dead)
                         //undo_next(&undo_handler);
                         save_game();
-                        os->exit = true;
+                        os->exit = TRUE;
                     } break;
                 }
             }
@@ -1792,7 +1792,7 @@ FUNCTION void update_menus()
             
         } break;
         case RESTART_CONFIRMATION: {
-            if (prompt_user_on_restart == false) {
+            if (prompt_user_on_restart == FALSE) {
                 load_level(game->loaded_level.idx);
                 current_mode = M_GAME;
                 break;
@@ -1896,7 +1896,7 @@ FUNCTION void game_update()
                                     view_to_proj_matrix).xy;
     
     if (key_held(Key_ALT) && key_pressed(Key_ENTER)) {
-        key_pressed(Key_ENTER, true);
+        key_pressed(Key_ENTER, TRUE);
         os->fullscreen = !os->fullscreen;
     }
     
@@ -1914,7 +1914,7 @@ FUNCTION void game_update()
         
         if (current_mode == M_GAME) {
             set_default_zoom();
-            update_camera(true);
+            update_camera(TRUE);
         }
     }
     if (key_pressed(Key_F5)) {
@@ -1931,7 +1931,7 @@ FUNCTION void game_update()
     if (game->thank_you) {
         game->thank_you_duration -= os->dt;
         if (game->thank_you_duration <= 0.0f) {
-            game->thank_you = false;
+            game->thank_you = FALSE;
             
             // Reset last level.
             load_level(current_level_idx);
@@ -1954,7 +1954,7 @@ FUNCTION void game_update()
     set_world_to_view(v3(camera_pos, zoom_level));
 }
 
-FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 is_player = false)
+FUNCTION void draw_spritef(f32 x, f32 y, f32 w, f32 h, s32 s, s32 t, V4 *color, f32 a, b32 is_player = FALSE)
 {
     Texture *texture = &tex;
     
@@ -2007,10 +2007,10 @@ FUNCTION void draw_line(V2 start, V2 end, V4 *color, f32 a)
     
     immediate_begin();
     set_texture(0);
-    immediate_ps_constants.is_line = true;
+    immediate_ps_constants.is_line = TRUE;
     immediate_ps_constants.line_p0 = world_to_ndc(start);
     immediate_ps_constants.line_p1 = world_to_ndc(end);
-    is_using_pixel_coords = true;
+    is_using_pixel_coords = TRUE;
     
     f32 w = get_width(os->drawing_rect);
     f32 h = get_height(os->drawing_rect);
@@ -2101,7 +2101,7 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
             u8 pinv_d      = WRAP_D(inv_d - 1);
             u8 p2inv_d     = WRAP_D(inv_d - 2);
             u8 reflected_d = U8_MAX;
-            b32 penetrate  = true;
+            b32 penetrate  = TRUE;
             
             u8 c = mix_colors(test_o.color[inv_d], src_color);
             
@@ -2124,13 +2124,13 @@ FUNCTION void draw_beams(s32 src_x, s32 src_y, u8 src_dir, u8 src_color)
                     draw_beams(test_x, test_y, reflected_d, test_o.color[reflected_d]);
             } else {
                 if (test_o.dir == inv_d || test_o.dir == src_dir)
-                    penetrate = true;
+                    penetrate = TRUE;
                 else if (test_o.dir == ninv_d || test_o.dir == WRAP_D(src_dir + 1))
                     reflected_d = WRAP_D(ninv_d + 1);
                 else if (test_o.dir == pinv_d || test_o.dir == WRAP_D(src_dir - 1))
                     reflected_d = WRAP_D(pinv_d - 1);
                 else
-                    penetrate = false;
+                    penetrate = FALSE;
                 
                 if (penetrate)
                     draw_beams(test_x, test_y, src_dir, test_o.color[src_dir]);
@@ -2308,7 +2308,7 @@ FUNCTION void draw_world()
     // Draw player.
     s32 c        = dead? Color_RED : Color_WHITE;
     f32 alpha    = (pcolor != Color_WHITE) && !dead? 0.8f : 1.0f;
-    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, true);
+    draw_spritef(ppos.x, ppos.y, 0.85f, 0.85f, psprite.s, psprite.t, &colors[c], alpha, TRUE);
     immediate_end();
     
     
@@ -2318,17 +2318,25 @@ FUNCTION void draw_world()
     {
         String8 current_level_name = level_names[game->loaded_level.idx];
         if (current_level_name == S8LIT("intro")) {
+            // Draw controls.
             f32 s = 0.15f * get_width(os->drawing_rect);
             immediate_begin();
             set_texture(&game->tex_info_intro);
-            is_using_pixel_coords = true;
+            is_using_pixel_coords = TRUE;
             immediate_rect_tl(v2(0), v2(s), v2(0), v2(1), v4(1));
+            immediate_end();
+            
+            // Draw undo and restart info.
+            immediate_begin();
+            set_texture(&game->tex_info_reset);
+            is_using_pixel_coords = TRUE;
+            immediate_rect_tl(v2(0, 0.5f*get_height(os->drawing_rect)), v2(s), v2(0), v2(1), v4(1));
             immediate_end();
         } else if (current_level_name == S8LIT("primary_mixing_intro")) {
             f32 s = 0.18f * get_width(os->drawing_rect);
             immediate_begin();
             set_texture(&game->tex_info_mixing);
-            is_using_pixel_coords = true;
+            is_using_pixel_coords = TRUE;
             immediate_rect_tl(v2(0), v2(s), v2(0), v2(1), v4(1));
             immediate_end();
         }
@@ -2337,7 +2345,7 @@ FUNCTION void draw_world()
             f32 s = 0.15f * get_width(os->drawing_rect);
             immediate_begin();
             set_texture(&game->tex_info_reset);
-            is_using_pixel_coords = true;
+            is_using_pixel_coords = TRUE;
             immediate_rect_tl(v2(0, 0.5f*get_height(os->drawing_rect)), v2(s), v2(0), v2(1), v4(1));
             immediate_end();
         }
@@ -2347,7 +2355,7 @@ FUNCTION void draw_world()
     // Draw debugging stuff.
     if(current_mode == M_EDITOR)
     {
-        bool show_demo_window = true;
+        bool show_demo_window = TRUE;
         //ImGui::ShowDemoWindow(&show_demo_window);
         do_editor(key_pressed(Key_F1));
     }
@@ -2363,7 +2371,7 @@ FUNCTION void draw_text(Font *font, V2 baseline, s32 vh, V4 color, char *format,
     va_start(arg_list, format);
     immediate_begin();
     set_texture(&consolas.atlas);
-    is_using_pixel_coords = true;
+    is_using_pixel_coords = TRUE;
     immediate_text(font, baseline, vh, color, format, arg_list);
     immediate_end();
     va_end(arg_list);
@@ -2384,14 +2392,14 @@ FUNCTION void draw_text_highlighted(Font *font, V2 baseline, s32 vh, V4 color, b
         V2 pad = v2(5.0f, -5.0f) * s;
         immediate_begin();
         set_texture(0);
-        is_using_pixel_coords = true;
+        is_using_pixel_coords = TRUE;
         immediate_rect_tl(baseline - pad, v2(tw, 10.0f*s) + pad, color*0.85f);
         immediate_end();
     }
     
     immediate_begin();
     set_texture(&consolas.atlas);
-    is_using_pixel_coords = true;
+    is_using_pixel_coords = TRUE;
     immediate_text(font, baseline, vh, color, format, arg_list);
     immediate_end();
     
@@ -2414,18 +2422,18 @@ FUNCTION void draw_menus()
     V4 active_color   = v4(0.839, 0.639, 0.212, 1.0f);
     V4 inactive_color = v4(1);
     
-    b32 is_transparent_bg = false;
+    b32 is_transparent_bg = FALSE;
     if ((page == PAUSE) || 
         (page == SETTINGS && prev_page == PAUSE) || 
         (page == CONTROLS && prev_page == PAUSE) || 
         (page == RESTART_CONFIRMATION))
-        is_transparent_bg = true;
+        is_transparent_bg = TRUE;
     
     if (is_transparent_bg) {
         draw_world();
         immediate_begin();
         set_texture(0);
-        is_using_pixel_coords = true;
+        is_using_pixel_coords = TRUE;
         immediate_rect_tl(v2(0), v2(w, h), v4(0.4f));
         immediate_end();
     } else {
@@ -2495,7 +2503,7 @@ FUNCTION void draw_menus()
                 V2 tl = v2(0.8f*w, 0.1f*h);
                 immediate_begin();
                 set_texture(&game->tex_info_mixing);
-                is_using_pixel_coords = true;
+                is_using_pixel_coords = TRUE;
                 immediate_rect_tl(tl, v2(s), v2(0), v2(1), v4(1));
                 immediate_end();
             }
@@ -2522,7 +2530,7 @@ FUNCTION void draw_menus()
                     p.y += yadvance;
             }
             
-            // Mark setting state (T = true, F = false).
+            // Mark setting state (T = TRUE, F = FALSE).
             p = v2(0.5f*w, 0.3333f*h);
             draw_text(&consolas, p, 5, v4(1), "%d", master_volume);
             p.y += yadvance;
@@ -2533,7 +2541,7 @@ FUNCTION void draw_menus()
             draw_text(&consolas, p, 5, prompt_user_on_restart? v4(0,1,0,1) : v4(1,0,0,1), prompt_user_on_restart? "T" : "F");
         } break;
         case RESTART_CONFIRMATION: {
-            if (prompt_user_on_restart == false)
+            if (prompt_user_on_restart == FALSE)
                 break;
             
             V2 p = v2(0, h*0.25f);
@@ -2658,7 +2666,7 @@ FUNCTION void game_render()
             // Black screen.
             immediate_begin();
             set_texture(0);
-            is_using_pixel_coords = true;
+            is_using_pixel_coords = TRUE;
             immediate_rect_tl(v2(0), v2(w, h), v4(0, 0, 0, 1));
             immediate_end();
             

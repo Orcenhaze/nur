@@ -130,7 +130,7 @@ FUNCTION void undo_perform_action(Undo_Action action)
         case ActionType_NONE: return;
         case ActionType_PLAYER_MOVE: {
             Player_Move c = action.player_move;
-            set_player_position(c.x, c.y, c.dir, true);
+            set_player_position(c.x, c.y, c.dir, TRUE);
         } break;
         case ActionType_OBJ_MOVE: {
             Obj_Move c = action.obj_move;
@@ -147,14 +147,14 @@ FUNCTION void undo_perform_action(Undo_Action action)
 FUNCTION b32 undo_next(Undo_Handler *handler)
 {
     if (handler->records.count <= 0)
-        return false;
+        return FALSE;
     
     Undo_Record record = array_pop_back(&handler->records);
     for (s32 i = 0; i < record.actions_count; i++) {
         undo_perform_action(record.actions[i]);
     }
     
-    return true;
+    return TRUE;
 }
 
 #endif //UNDO_H

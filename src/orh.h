@@ -1,4 +1,4 @@
-/* orh.h - v0.67 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.68 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.68 - added TRUE and FALSE macros.
 0.67 - added clear_key_states() and clear_key_states_all().
 0.66 - added unlerp() and remap().
 0.65 - fixed perspective projections to use z range [0, 1].
@@ -264,6 +265,11 @@ typedef double             f64;
 #define F32_MAX            3.40282347e+38F
 #define F64_MIN            2.2250738585072014e-308
 #define F64_MAX            1.7976931348623157e+308
+
+#ifndef TRUE
+#define TRUE 1
+#define FALSE 0
+#endif
 
 #if COMPILER_CL
 #    define threadvar __declspec(thread)
@@ -1226,12 +1232,12 @@ struct Array
 };
 
 template<typename T>
-void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize = false)
+void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize = FALSE)
 {
     array->arena     = arena_init();
     array->data      = 0;
     array->count     = 0;
-    array->is_static = false;
+    array->is_static = FALSE;
     array_reserve(array, capacity);
     
     if (initialize) {
@@ -1242,12 +1248,12 @@ void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize =
 }
 
 template<typename T>
-void array_init_static(Array<T> *array, s64 capacity, b32 initialize = false)
+void array_init_static(Array<T> *array, s64 capacity, b32 initialize = FALSE)
 {
     array->arena     = arena_init(capacity * sizeof(T));
     array->data      = 0;
     array->count     = 0;
-    array->is_static = true;
+    array->is_static = TRUE;
     array_reserve(array, capacity);
     
     if (initialize) {
@@ -1285,7 +1291,7 @@ void array_copy(Array<T> *dst, Array<T> src)
 template<typename T>
 void array_expand(Array<T> *array)
 {
-    ASSERT(array->is_static == false);
+    ASSERT(array->is_static == FALSE);
     
     s64 new_size = array->capacity * 2;
     if (new_size < ARRAY_SIZE_MIN) new_size = ARRAY_SIZE_MIN;
@@ -1418,10 +1424,10 @@ void table_init(Table<K, V> *table, s64 size = 0)
     table->count    = 0;
     table->capacity = size;
     
-    array_init(&table->keys,           size, true);
-    array_init(&table->values,         size, true);
-    array_init(&table->occupancy_mask, size, true);
-    array_init(&table->hashes,         size, true);
+    array_init(&table->keys,           size, TRUE);
+    array_init(&table->values,         size, TRUE);
+    array_init(&table->occupancy_mask, size, TRUE);
+    array_init(&table->hashes,         size, TRUE);
 }
 
 template<typename K, typename V>
@@ -1498,7 +1504,7 @@ V* table_add(Table<K, V> *table, K key, V value)
     table->count++;
     table->keys[index]           = key;
     table->values[index]         = value;
-    table->occupancy_mask[index] = true;
+    table->occupancy_mask[index] = TRUE;
     table->hashes[index]         = hash;
     
     return &table->values[index];
@@ -1778,9 +1784,9 @@ struct OS_State
 };
 extern OS_State *os;
 
-FUNCDEF b32   key_pressed(s32 key, b32 capture = false);
-FUNCDEF b32   key_held(s32 key, b32 capture = false);
-FUNCDEF b32   key_released(s32 key, b32 capture = false);
+FUNCDEF b32   key_pressed(s32 key, b32 capture = FALSE);
+FUNCDEF b32   key_held(s32 key, b32 capture = FALSE);
+FUNCDEF b32   key_released(s32 key, b32 capture = FALSE);
 FUNCDEF void  clear_key_states();
 FUNCDEF void  clear_key_states_all();
 FUNCDEF Rect2 aspect_ratio_fit(V2u render_dim, V2u window_dim);
@@ -3348,10 +3354,10 @@ Arena_Temp get_scratch(Arena **conflict_array, s32 count)
     // Get non-conflicting arena.
     Arena_Temp result = {};
     for (s32 i = 0; i < ARENA_SCRATCH_COUNT; i++) {
-        b32 is_used = false;
+        b32 is_used = FALSE;
         for (s32 j = 0; j < count; j++) {
             if (scratch_pool[i] == conflict_array[j]) {
-                is_used = true;
+                is_used = TRUE;
                 break;
             }
         }
@@ -3413,12 +3419,12 @@ b32 string_empty(String8 s)
 }
 b32 string_match(String8 a, String8 b)
 {
-    if (a.count != b.count) return false;
+    if (a.count != b.count) return FALSE;
     for(u64 i = 0; i < a.count; i++)
     {
-        if (a.data[i] != b.data[i]) return false;
+        if (a.data[i] != b.data[i]) return FALSE;
     }
-    return true;
+    return TRUE;
 }
 
 /////////////////////////////////////////
@@ -3578,7 +3584,7 @@ u64 string_format_list(char *dest_start, u64 dest_count, const char *format, va_
         if (*at == '%') {
             at++;
             
-            b32 use_precision = false;
+            b32 use_precision = FALSE;
             u32 precision     = 0;
             
             // Handle precision specifier.
@@ -3586,7 +3592,7 @@ u64 string_format_list(char *dest_start, u64 dest_count, const char *format, va_
                 at++;
                 
                 if (is_numeric(*at)) {
-                    use_precision = true;
+                    use_precision = TRUE;
                     precision     = (u32) ascii_to_u64(&at); // at is advanced inside the function.
                 } else ASSERT(!"Invalid precision specifier!");
             }
@@ -3869,25 +3875,25 @@ void sound_mix(Sound *sound, f32 volume, f32 *samples_out, u32 samples_to_write)
 //
 OS_State *os = 0;
 
-b32 key_pressed(s32 key, b32 capture /* = false */)
+b32 key_pressed(s32 key, b32 capture /* = FALSE */)
 {
     b32 result = os->pressed[key];
     if (result && capture)
-        os->pressed[key] = false;
+        os->pressed[key] = FALSE;
     return result;
 }
-b32 key_held(s32 key, b32 capture /* = false */)
+b32 key_held(s32 key, b32 capture /* = FALSE */)
 {
     b32 result = os->held[key];
     if (result && capture)
-        os->pressed[key] = false;
+        os->pressed[key] = FALSE;
     return result;
 }
-b32 key_released(s32 key, b32 capture /* = false */)
+b32 key_released(s32 key, b32 capture /* = FALSE */)
 {
     b32 result = os->released[key];
     if (result && capture)
-        os->released[key] = false;
+        os->released[key] = FALSE;
     return result;
 }
 void clear_key_states()

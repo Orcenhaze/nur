@@ -150,7 +150,7 @@ FUNCTION String8 win32_read_entire_file(String8 full_path)
 
 FUNCTION b32 win32_write_entire_file(String8 full_path, String8 data)
 {
-    b32 result = false;
+    b32 result = FALSE;
     
     HANDLE file_handle = CreateFile((char*)full_path.data, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (file_handle == INVALID_HANDLE_VALUE) {
@@ -159,7 +159,7 @@ FUNCTION b32 win32_write_entire_file(String8 full_path, String8 data)
     
     DWORD bytes_written;
     if (WriteFile(file_handle, data.data, (DWORD)data.count, &bytes_written, 0) && (bytes_written == data.count)) {
-        result = true;
+        result = TRUE;
     } else {
         print("OS Error: write_entire_file() WriteFile() failed!\n");
     }
@@ -296,7 +296,7 @@ FUNCTION void win32_process_pending_messages(HWND window)
                     
                     if((vkcode == VK_F4) && alt_down)
                     {
-                        global_os.exit = true;
+                        global_os.exit = TRUE;
                         return;
                     }
                     
@@ -380,7 +380,7 @@ FUNCTION LRESULT CALLBACK win32_wndproc(HWND window, UINT message, WPARAM wparam
 {
 #if DEVELOPER
     if (ImGui_ImplWin32_WndProcHandler(window, message, wparam, lparam))
-        return true;
+        return TRUE;
 #endif
     
     LRESULT result = 0;
@@ -394,7 +394,7 @@ FUNCTION LRESULT CALLBACK win32_wndproc(HWND window, UINT message, WPARAM wparam
         case WM_CLOSE: 
         case WM_DESTROY:
         case WM_QUIT: {
-            global_os.exit = true;
+            global_os.exit = TRUE;
         } break;
         
         default: {
@@ -437,30 +437,30 @@ FUNCTION void win32_process_inputs(HWND window)
     for (s32 i = 0; i < global_os.inputs_to_process.count; i++) {
         Queued_Input input = global_os.inputs_to_process[i];
         if (input.down) {
-            // Defer DOWN event because UP was true, break to preserve order.
+            // Defer DOWN event because UP was TRUE, break to preserve order.
             if (global_os.released[input.key])
                 break;
-            // Defer DOWN event because DOWN is already true, break to preserve order.
+            // Defer DOWN event because DOWN is already TRUE, break to preserve order.
             else if (global_os.pressed[input.key])
                 break;
             else {
                 if (!global_os.held[input.key])
-                    global_os.pressed[input.key] = true;
+                    global_os.pressed[input.key] = TRUE;
                 
-                global_os.held[input.key] = true;
+                global_os.held[input.key] = TRUE;
                 array_ordered_remove_by_index(&global_os.inputs_to_process, i);
                 i--;
             }
         } else {
-            // Defer UP event because DOWN was true, break to preserve order.
+            // Defer UP event because DOWN was TRUE, break to preserve order.
             if (global_os.pressed[input.key])
                 break;
-            // Defer UP event because UP is already true, break to preserve order.
+            // Defer UP event because UP is already TRUE, break to preserve order.
             else if (global_os.released[input.key])
                 break;
             else {
-                global_os.released[input.key] = true;
-                global_os.held[input.key] = false;
+                global_os.released[input.key] = TRUE;
+                global_os.held[input.key] = FALSE;
                 array_ordered_remove_by_index(&global_os.inputs_to_process, i);
                 i--;
             }
@@ -488,14 +488,14 @@ FUNCTION void win32_process_inputs(HWND window)
             b32 down   = xinput_pad.button_states[button];
             if (down) {
                 if (!pad->held[button])
-                    pad->pressed[button] = true;
+                    pad->pressed[button] = TRUE;
                 
-                pad->held[button] = true;
+                pad->held[button] = TRUE;
             } else {
                 if (pad->held[button])
-                    pad->released[button] = true;
+                    pad->released[button] = TRUE;
                 
-                pad->held[button] = false;
+                pad->held[button] = FALSE;
             }
             
 #if 0
@@ -596,15 +596,15 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         
         // Options.
 #if DEVELOPER
-        global_os.fullscreen        = false;
+        global_os.fullscreen        = FALSE;
 #else
-        global_os.fullscreen        = true;
+        global_os.fullscreen        = TRUE;
         win32_toggle_fullscreen(window);
 #endif
-        global_os.exit              = false;
+        global_os.exit              = FALSE;
         
-        global_os.vsync             = true;
-        global_os.fix_aspect_ratio  = true;
+        global_os.vsync             = TRUE;
+        global_os.fix_aspect_ratio  = TRUE;
         global_os.render_size       = {1920, 1080};
         global_os.dt                = 1.0f/120.0f;
         global_os.fps_max           = 120;
@@ -643,10 +643,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     
     ShowWindow(window, show_code);
 #if DEVELOPER
-    ShowCursor(true);
+    ShowCursor(TRUE);
 #else
     // @Todo: Show cursor when we hover on window borders.
-    ShowCursor(false);
+    ShowCursor(FALSE);
 #endif
     
     /////////////////////////////////////////////////////
