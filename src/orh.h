@@ -1,4 +1,4 @@
-/* orh.h - v0.68 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
+/* orh.h - v0.69 - C++ utility library. Includes types, math, string, memory arena, and other stuff.
 
 In _one_ C++ file, #define ORH_IMPLEMENTATION before including this header to create the
  implementation. 
@@ -9,6 +9,7 @@ Like this:
 #include "orh.h"
 
 REVISION HISTORY:
+0.69 - added array_resize() for if we want to allocate memory upfront and fill data using indexing.
 0.68 - added TRUE and FALSE macros.
 0.67 - added clear_key_states() and clear_key_states_all().
 0.66 - added unlerp() and remap().
@@ -1214,6 +1215,7 @@ void sb_append(String_Builder *builder, T *data)
 //
 // Dynamic Array
 //
+// @Todo: Extract to separate file.
 #define ARRAY_SIZE_MIN 32
 template<typename T>
 struct Array
@@ -1222,6 +1224,9 @@ struct Array
     T     *data;
     s64    count;
     s64    capacity;
+    
+    // @Remove:
+    // @Todo: Static arrays should be separate data structure...
     b32    is_static;
     
     inline T& operator[](s32 index)
@@ -1234,9 +1239,13 @@ struct Array
 template<typename T>
 void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize = FALSE)
 {
+    // @Improvement: This should be init and reserve or something... 
+    // Init should be separate because we might want to use array_resize() instead.
+    
     array->arena     = arena_init();
     array->data      = 0;
     array->count     = 0;
+    array->capacity  = 0;
     array->is_static = FALSE;
     array_reserve(array, capacity);
     
@@ -1250,9 +1259,12 @@ void array_init(Array<T> *array, s64 capacity = ARRAY_SIZE_MIN, b32 initialize =
 template<typename T>
 void array_init_static(Array<T> *array, s64 capacity, b32 initialize = FALSE)
 {
+    // @Remove:
+    // @Todo: Static arrays should be separate data structure...
     array->arena     = arena_init(capacity * sizeof(T));
     array->data      = 0;
     array->count     = 0;
+    array->capacity  = 0;
     array->is_static = TRUE;
     array_reserve(array, capacity);
     
@@ -1272,10 +1284,21 @@ void array_free(Array<T> *array)
 template<typename T>
 void array_reserve(Array<T> *array, s64 desired_items)
 {
+    if (desired_items <= array->capacity) 
+        return;
+    
     array->capacity = desired_items;
     
     arena_reset(array->arena);
     array->data = PUSH_ARRAY_ZERO(array->arena, T, desired_items);
+}
+
+template<typename T>
+void array_resize(Array<T> *array, s64 size)
+{
+    // @Note: Use this function to reserve size upfront and fill items using array[index];
+    array_reserve(array, size);
+    count = size;
 }
 
 template<typename T>
